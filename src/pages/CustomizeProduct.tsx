@@ -56,6 +56,62 @@ const productMaterials: Record<string, string[]> = {
 
 const views = ['front', 'back', 'side']
 
+type LayoutMode = 'center' | 'tile' | 'corner' | 'free'
+
+const blendModeLabels: Record<string, string> = {
+  normal: '正常',
+  overlay: '叠加',
+  multiply: '正片叠底',
+  screen: '滤色',
+}
+
+const layoutPresets: Record<LayoutMode, {
+  name: string
+  icon: string
+  scale: number
+  rotation: number
+  positionX: number
+  positionY: number
+  blendMode: string
+}> = {
+  center: {
+    name: '居中放大',
+    icon: '◎',
+    scale: 120,
+    rotation: 0,
+    positionX: 50,
+    positionY: 50,
+    blendMode: 'screen',
+  },
+  tile: {
+    name: '重复平铺',
+    icon: '◆',
+    scale: 50,
+    rotation: 0,
+    positionX: 50,
+    positionY: 50,
+    blendMode: 'screen',
+  },
+  corner: {
+    name: '角落点缀',
+    icon: '◇',
+    scale: 25,
+    rotation: 0,
+    positionX: 15,
+    positionY: 85,
+    blendMode: 'screen',
+  },
+  free: {
+    name: '自由模式',
+    icon: '✦',
+    scale: 100,
+    rotation: 0,
+    positionX: 50,
+    positionY: 50,
+    blendMode: 'screen',
+  },
+}
+
 const getInitialProduct = () => {
   const savedProduct = localStorage.getItem('selected_product_id')
   if (savedProduct && products.find(p => p.id === savedProduct)) {
@@ -125,6 +181,28 @@ export default function CustomizeProduct() {
   const [currentView, setCurrentView] = useState('front')
   const [blendMode, setBlendMode] = useState(getInitialParams(getInitialProduct()).blendMode)
   const [selectedCategory, setSelectedCategory] = useState(getInitialCategory())
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('free')
+  const [showCompare, setShowCompare] = useState(false)
+  const [showToast, setShowToast] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+
+  const showToastMessage = (message: string) => {
+    setToastMessage(message)
+    setShowToast(true)
+    setTimeout(() => setShowToast(false), 2000)
+  }
+
+  const handleLayoutChange = (mode: LayoutMode) => {
+    setLayoutMode(mode)
+    const preset = layoutPresets[mode]
+    if (mode !== 'free') {
+      setScale(preset.scale)
+      setRotation(preset.rotation)
+      setPositionX(preset.positionX)
+      setPositionY(preset.positionY)
+      setBlendMode(preset.blendMode)
+    }
+  }
 
   const handleProductChange = (productId: string) => {
     localStorage.setItem('selected_product_id', productId)
@@ -228,11 +306,15 @@ export default function CustomizeProduct() {
   }, [selectedProduct, selectedMaterial, scale, rotation, positionX, positionY, blendMode])
 
   const handleReset = () => {
-    setScale(100)
-    setRotation(0)
-    setPositionX(50)
-    setPositionY(50)
-    setBlendMode('normal')
+    const confirmed = window.confirm('确定要恢复默认设置吗？当前调节将被清空')
+    if (confirmed) {
+      setScale(100)
+      setRotation(0)
+      setPositionX(50)
+      setPositionY(50)
+      setBlendMode('screen')
+      showToastMessage('已恢复默认设置')
+    }
   }
 
   const fetchUserPatterns = async () => {
@@ -530,7 +612,7 @@ export default function CustomizeProduct() {
       const scaleFactor = currentDistance / initialTouchDistance.current
       const angleDiff = currentAngle - initialTouchAngle.current
       
-      setScale(Math.round(Math.max(50, Math.min(200, initialScale.current * scaleFactor))))
+      setScale(Math.round(Math.max(10, Math.min(200, initialScale.current * scaleFactor))))
       setRotation(Math.round(initialRotation.current + angleDiff))
     }
   }
@@ -543,7 +625,7 @@ export default function CustomizeProduct() {
       e.preventDefault()
       e.stopPropagation()
       const delta = e.deltaY > 0 ? -2 : 2
-      setScale((prev: number) => Math.max(50, Math.min(200, prev + delta)))
+      setScale((prev: number) => Math.max(10, Math.min(200, prev + delta)))
     }
 
     el.addEventListener('wheel', handleWheel, { passive: false })
@@ -720,6 +802,17 @@ export default function CustomizeProduct() {
                   </h2>
                   
                   <div className="flex gap-2 z-10">
+                    <button
+                      onClick={() => setShowCompare(!showCompare)}
+                      className={`px-3 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
+                        showCompare
+                          ? 'bg-deep-blue text-rice-paper shadow-sm'
+                          : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-deep-blue-light'
+                      }`}
+                      style={{ zIndex: 10 }}
+                    >
+                      {showCompare ? '关闭对比' : '对比原图'}
+                    </button>
                     {views.map((view) => (
                       <button
                         key={view}
@@ -740,62 +833,163 @@ export default function CustomizeProduct() {
                 <div className="relative">
                   <div className="absolute -inset-3 border-3 border-deep-blue rounded-sm opacity-10" />
                   
-                  <div
-                    className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden"
-                    style={{ touchAction: 'none' }}
-                  >
-                    <div className="absolute inset-0 bg-ink-wash opacity-10" />
-                    
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <img
-                        src={currentProduct?.image}
-                        alt={currentProduct?.name}
-                        className="w-48 h-auto object-contain"
-                      />
+                  {showCompare ? (
+                    <div className="flex">
+                      <div className="flex-1 relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden">
+                        <div className="absolute inset-0 bg-ink-wash opacity-10" />
+                        <div className="absolute top-2 left-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
+                          <p className="font-song text-xs text-deep-blue">原图</p>
+                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <img
+                            src={currentProduct?.image}
+                            alt={currentProduct?.name}
+                            className="w-40 h-auto object-contain"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="flex-1 relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden" style={{ touchAction: 'none' }}>
+                        <div className="absolute inset-0 bg-ink-wash opacity-10" />
+                        <div className="absolute top-2 left-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
+                          <p className="font-song text-xs text-deep-blue">定制效果</p>
+                        </div>
+                        
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="relative">
+                            <img
+                              src={currentProduct?.image}
+                              alt={currentProduct?.name}
+                              className="w-40 h-auto object-contain"
+                            />
+                            {layoutMode === 'tile' && (
+                              <div
+                                className="absolute inset-0"
+                                style={{
+                                  backgroundImage: `url(${selectedPatternImage})`,
+                                  backgroundSize: '30%',
+                                  backgroundRepeat: 'repeat',
+                                  opacity: 0.7,
+                                  mixBlendMode: blendMode as any,
+                                }}
+                              />
+                            )}
+                          </div>
+                        </div>
+                        
+                        {layoutMode !== 'tile' && (
+                          <motion.div
+                            ref={dragRef}
+                            className={`absolute inset-0 flex items-center justify-center cursor-grab select-none active:cursor-grabbing ${
+                              layoutMode !== 'free' ? 'pointer-events-none' : ''
+                            }`}
+                            animate={{
+                              scale: scale / 100,
+                              rotate: rotation,
+                              x: (positionX - 50) * 2,
+                              y: (positionY - 50) * 2,
+                            }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                            style={{
+                              transformOrigin: 'center center',
+                              mixBlendMode: blendMode as any,
+                              touchAction: layoutMode === 'free' ? 'none' : 'auto',
+                            }}
+                            onMouseDown={handleMouseDown}
+                            onTouchStart={handleTouchStart}
+                            onTouchMove={handleTouchMove}
+                          >
+                            <img
+                              src={selectedPatternImage}
+                              alt="纹样"
+                              draggable={false}
+                              className="w-32 h-32 object-cover"
+                              style={{ 
+                                opacity: 0.7,
+                                userSelect: 'none',
+                                pointerEvents: 'none'
+                              } as React.CSSProperties}
+                            />
+                          </motion.div>
+                        )}
+                      </div>
                     </div>
-                    
-                    <motion.div
-                      ref={dragRef}
-                      className="absolute inset-0 flex items-center justify-center cursor-grab select-none active:cursor-grabbing"
-                      animate={{
-                        scale: scale / 100,
-                        rotate: rotation,
-                        x: (positionX - 50) * 2,
-                        y: (positionY - 50) * 2,
-                      }}
-                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                      style={{
-                        transformOrigin: 'center center',
-                        mixBlendMode: blendMode as any,
-                        touchAction: 'none',
-                      }}
-                      onMouseDown={handleMouseDown}
-                      onTouchStart={handleTouchStart}
-                      onTouchMove={handleTouchMove}
+                  ) : (
+                    <div
+                      className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden"
+                      style={{ touchAction: 'none' }}
                     >
-                      <img
-                        src={selectedPatternImage}
-                        alt="纹样"
-                        draggable={false}
-                        className="w-40 h-40 object-cover"
-                        style={{ 
-                          opacity: 0.7,
-                          userSelect: 'none',
-                          pointerEvents: 'none'
-                        } as React.CSSProperties}
-                      />
-                    </motion.div>
-                    
-                    <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
-                      <div>
-                        <h3 className="font-shufa text-lg text-deep-blue">{currentProduct?.name}</h3>
-                        <p className="font-song text-palace-red text-base">¥{currentProduct?.price}</p>
+                      <div className="absolute inset-0 bg-ink-wash opacity-10" />
+                      
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="relative">
+                          <img
+                            src={currentProduct?.image}
+                            alt={currentProduct?.name}
+                            className="w-48 h-auto object-contain"
+                          />
+                          {layoutMode === 'tile' && (
+                            <div
+                              className="absolute inset-0"
+                              style={{
+                                backgroundImage: `url(${selectedPatternImage})`,
+                                backgroundSize: '30%',
+                                backgroundRepeat: 'repeat',
+                                opacity: 0.7,
+                                mixBlendMode: blendMode as any,
+                              }}
+                            />
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="font-song text-xs text-deep-blue-light">材质：{materials.find(m => m.id === selectedMaterial)?.name}</span>
+                      
+                      {layoutMode !== 'tile' && (
+                        <motion.div
+                          ref={dragRef}
+                          className={`absolute inset-0 flex items-center justify-center cursor-grab select-none active:cursor-grabbing ${
+                            layoutMode !== 'free' ? 'pointer-events-none' : ''
+                          }`}
+                          animate={{
+                            scale: scale / 100,
+                            rotate: rotation,
+                            x: (positionX - 50) * 2,
+                            y: (positionY - 50) * 2,
+                          }}
+                          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                          style={{
+                            transformOrigin: 'center center',
+                            mixBlendMode: blendMode as any,
+                            touchAction: layoutMode === 'free' ? 'none' : 'auto',
+                          }}
+                          onMouseDown={handleMouseDown}
+                          onTouchStart={handleTouchStart}
+                          onTouchMove={handleTouchMove}
+                        >
+                          <img
+                            src={selectedPatternImage}
+                            alt="纹样"
+                            draggable={false}
+                            className="w-40 h-40 object-cover"
+                            style={{ 
+                              opacity: 0.7,
+                              userSelect: 'none',
+                              pointerEvents: 'none'
+                            } as React.CSSProperties}
+                          />
+                        </motion.div>
+                      )}
+                      
+                      <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
+                        <div>
+                          <h3 className="font-shufa text-lg text-deep-blue">{currentProduct?.name}</h3>
+                          <p className="font-song text-palace-red text-base">¥{currentProduct?.price}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-song text-xs text-deep-blue-light">材质：{materials.find(m => m.id === selectedMaterial)?.name}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                   
                   <div className="absolute top-2 right-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
                     <p className="font-song text-xs text-deep-blue-light">
@@ -803,10 +997,51 @@ export default function CustomizeProduct() {
                       <span className="sm:hidden">双指缩放旋转</span>
                     </p>
                   </div>
+                  
+                  {layoutMode === 'free' && !showCompare && (
+                    <div className="absolute bottom-16 left-3 bg-rice-paper/80 backdrop-blur-sm px-3 py-2 rounded-sm text-left">
+                      <p className="font-song text-xs text-deep-blue-light">
+                        <span className="text-deep-blue">大小：{scale}%</span>
+                      </p>
+                      <p className="font-song text-xs text-deep-blue-light">
+                        <span className="text-deep-blue">位置：X:{positionX} Y:{positionY}</span>
+                      </p>
+                      <p className="font-song text-xs text-deep-blue-light">
+                        <span className="text-deep-blue">叠加：{blendModeLabels[blendMode] || blendMode}</span>
+                      </p>
+                    </div>
+                  )}
                 </div>
               </FrameDecorations>
 
               <FrameDecorations className="bg-rice-paper-light p-4">
+                <div className="mb-4">
+                  <h2 className="font-shufa text-lg text-deep-blue flex items-center">
+                    <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">排</span>
+                    纹样排版
+                  </h2>
+                </div>
+                
+                <div className="grid grid-cols-4 gap-2 mb-6">
+                  {(Object.keys(layoutPresets) as LayoutMode[]).map((mode) => {
+                    const preset = layoutPresets[mode]
+                    return (
+                      <button
+                        key={mode}
+                        onClick={() => handleLayoutChange(mode)}
+                        className={`relative p-3 rounded-sm transition-all duration-300 ${
+                          layoutMode === mode
+                            ? 'bg-palace-red text-rice-paper shadow-md'
+                            : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                        }`}
+                      >
+                        <div className="text-xl mb-1">{preset.icon}</div>
+                        <div className="font-song text-xs">{preset.name}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+
                 <div className="mb-4">
                   <h2 className="font-shufa text-lg text-deep-blue flex items-center">
                     <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">定</span>
@@ -814,11 +1049,11 @@ export default function CustomizeProduct() {
                   </h2>
                 </div>
                 
-                <div className="space-y-4">
+                <div className={`space-y-4 ${layoutMode !== 'free' ? 'opacity-50 pointer-events-none' : ''}`}>
                   <InkSlider
                     label="纹样大小"
                     value={scale}
-                    min={50}
+                    min={10}
                     max={200}
                     onChange={setScale}
                     className="w-full"
@@ -1106,6 +1341,21 @@ export default function CustomizeProduct() {
           )}
         </AnimatePresence>
       </div>
+      
+      <AnimatePresence>
+        {showToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50"
+          >
+            <div className="bg-deep-blue text-rice-paper px-6 py-3 rounded-sm font-song shadow-lg">
+              {toastMessage}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
