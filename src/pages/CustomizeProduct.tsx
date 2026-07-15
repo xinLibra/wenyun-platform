@@ -255,6 +255,7 @@ export default function CustomizeProduct() {
   })
   const [patternModalLoading, setPatternModalLoading] = useState(false)
   const dragRef = useRef<HTMLDivElement>(null)
+  const previewContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const reorderProduct = localStorage.getItem('reorder_product')
@@ -618,7 +619,7 @@ export default function CustomizeProduct() {
   }
 
   useEffect(() => {
-    const el = dragRef.current
+    const el = previewContainerRef.current
     if (!el) return
 
     const handleWheel = (e: WheelEvent) => {
@@ -830,7 +831,7 @@ export default function CustomizeProduct() {
                   </div>
                 </div>
                 
-                <div className="relative">
+                <div className="relative" ref={previewContainerRef}>
                   <div className="absolute -inset-3 border-3 border-deep-blue rounded-sm opacity-10" />
                   
                   {showCompare ? (
