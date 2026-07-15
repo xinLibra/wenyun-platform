@@ -7,6 +7,7 @@ import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { useCart } from '../hooks/useCart'
 import { supabase } from '../lib/supabase'
 import { products, materials } from '../lib/products'
+import PatternPreview from '../components/PatternPreview'
 
 export default function Cart() {
   const navigate = useNavigate()
@@ -15,6 +16,7 @@ export default function Cart() {
   const [isCheckingOut, setIsCheckingOut] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
+    phone: '',
     address: '',
   })
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
@@ -64,6 +66,11 @@ export default function Cart() {
       return
     }
 
+    if (!formData.phone.trim()) {
+      alert('请填写联系电话')
+      return
+    }
+
     if (!formData.address.trim()) {
       alert('请填写收货地址')
       return
@@ -75,26 +82,41 @@ export default function Cart() {
       const existingOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
       
       for (const item of selectedItemsList) {
+        const product = products[item.productId]
         existingOrders.unshift({
           id: `demo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           user_id: session.user.id,
           product_id: item.productId,
-          generation_id: null,
+          generation_id: item.generationId,
+          image_url: item.customization?.patternImage,
+          product_image: product?.image,
           customization: item.customization,
           status: 'demo',
           created_at: new Date().toISOString(),
-          shipping_info: { name: formData.name, address: formData.address }
+          shipping_info: { name: formData.name, phone: formData.phone, address: formData.address }
         })
       }
 
       localStorage.setItem('demo_orders', JSON.stringify(existingOrders))
+      
+      if (session.user) {
+        const deleteResult = await supabase
+          .from('cart_items')
+          .delete()
+          .eq('user_id', session.user.id)
+          .in('id', [...selectedItems])
+        console.log('[Cart] checkout delete result:', deleteResult)
+      }
       
       for (const itemId of selectedItems) {
         removeFromCart(itemId)
       }
       setSelectedItems(new Set())
       setShowCheckout(false)
-      setFormData({ name: '', address: '' })
+      setFormData({ name: '', phone: '', address: '' })
+      
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
       navigate('/orders')
     } catch (err) {
       console.error('Checkout error:', err)
@@ -193,13 +215,29 @@ export default function Cart() {
                       className="w-5 h-5 text-palace-red border-deep-blue-200 rounded-sm focus:ring-palace-red"
                     />
                   </label>
-                  <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                    <img
-                      src={product?.image}
-                      alt={product?.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
+                  <div className="flex-shrink-0">
+                      {item.customization?.patternImage && product?.image ? (
+                        <PatternPreview
+                          productImage={product.image}
+                          patternImage={item.customization.patternImage}
+                          scale={item.customization.scale || 100}
+                          rotation={item.customization.rotation || 0}
+                          positionX={item.customization.positionX || 50}
+                          positionY={item.customization.positionY || 50}
+                          blendMode={item.customization.blendMode || 'normal'}
+                          size="small"
+                          showFrame={false}
+                        />
+                      ) : (
+                        <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
+                          <img
+                            src={product?.image}
+                            alt={product?.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
                   <div className="flex-1">
                     <h3 className="font-shufa text-lg text-deep-blue mb-1">{product?.name}</h3>
                     <p className="font-song text-sm text-deep-blue-light mb-2">
@@ -276,6 +314,16 @@ export default function Cart() {
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="请输入姓名"
+                      className="w-full px-4 py-2 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-song text-deep-blue-light text-sm mb-1">联系电话</label>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      placeholder="请输入手机号"
                       className="w-full px-4 py-2 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
                     />
                   </div>

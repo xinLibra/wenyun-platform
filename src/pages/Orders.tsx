@@ -6,15 +6,24 @@ import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import { products, materials } from '../lib/products'
+import PatternPreview from '../components/PatternPreview'
 
 interface Order {
   id: string
   user_id: string
   product_id: string
   generation_id: string
+  image_url?: string
+  product_image?: string
   customization: Record<string, any>
   status: string
   created_at: string
+  quantity?: number
+  shipping_info?: {
+    name?: string
+    phone?: string
+    address?: string
+  }
 }
 
 const statusLabels: Record<string, string> = {
@@ -31,8 +40,11 @@ export default function Orders() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showReorderModal, setShowReorderModal] = useState(false)
+  const [showReorderQuantityModal, setShowReorderQuantityModal] = useState(false)
+  const [reorderQuantity, setReorderQuantity] = useState(1)
   const [reorderFormData, setReorderFormData] = useState({
     name: '',
+    phone: '',
     address: '',
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -40,6 +52,11 @@ export default function Orders() {
   const handleReorderSubmit = async () => {
     if (!reorderFormData.name.trim()) {
       alert('请填写收货人姓名')
+      return
+    }
+
+    if (!reorderFormData.phone.trim()) {
+      alert('请填写联系电话')
       return
     }
 
@@ -65,10 +82,13 @@ export default function Orders() {
         user_id: session.user.id,
         product_id: selectedOrder.product_id,
         generation_id: selectedOrder.generation_id,
+        image_url: selectedOrder.image_url,
+        product_image: selectedOrder.product_image,
         customization: selectedOrder.customization,
+        quantity: reorderQuantity,
         status: 'demo',
         created_at: new Date().toISOString(),
-        shipping_info: { name: reorderFormData.name, address: reorderFormData.address }
+        shipping_info: { name: reorderFormData.name, phone: reorderFormData.phone, address: reorderFormData.address }
       }
 
       const existingOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
@@ -77,7 +97,7 @@ export default function Orders() {
 
       setOrders(prev => [order, ...prev])
       setShowReorderModal(false)
-      setReorderFormData({ name: '', address: '' })
+      setReorderFormData({ name: '', phone: '', address: '' })
       alert('下单成功')
     } catch (err) {
       console.error('Order error:', err)
@@ -204,12 +224,28 @@ export default function Orders() {
                     className="flex gap-4 cursor-pointer hover:bg-rice-paper/50 rounded-sm p-2 -m-2 transition-colors"
                     onClick={() => setSelectedOrder(order)}
                   >
-                    <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                      <img
-                        src={product?.image}
-                        alt={product?.name}
-                        className="w-full h-full object-cover"
-                      />
+                    <div className="flex-shrink-0">
+                      {order.image_url && order.product_image ? (
+                        <PatternPreview
+                          productImage={order.product_image}
+                          patternImage={order.image_url}
+                          scale={order.customization.scale || 100}
+                          rotation={order.customization.rotation || 0}
+                          positionX={order.customization.positionX || 50}
+                          positionY={order.customization.positionY || 50}
+                          blendMode={order.customization.blendMode || 'normal'}
+                          size="small"
+                          showFrame={false}
+                        />
+                      ) : (
+                        <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
+                          <img
+                            src={product?.image}
+                            alt={product?.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1">
                       <h3 className="font-shufa text-lg text-deep-blue mb-1">{product?.name}</h3>
@@ -277,12 +313,28 @@ export default function Orders() {
                 {selectedOrder && (
                   <>
                     <div className="flex gap-4 mb-4">
-                      <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                        <img
-                          src={products[selectedOrder.product_id]?.image}
-                          alt={products[selectedOrder.product_id]?.name}
-                          className="w-full h-full object-cover"
-                        />
+                      <div className="flex-shrink-0">
+                        {selectedOrder.image_url && selectedOrder.product_image ? (
+                          <PatternPreview
+                            productImage={selectedOrder.product_image}
+                            patternImage={selectedOrder.image_url}
+                            scale={selectedOrder.customization.scale || 100}
+                            rotation={selectedOrder.customization.rotation || 0}
+                            positionX={selectedOrder.customization.positionX || 50}
+                            positionY={selectedOrder.customization.positionY || 50}
+                            blendMode={selectedOrder.customization.blendMode || 'normal'}
+                            size="small"
+                            showFrame={false}
+                          />
+                        ) : (
+                          <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
+                            <img
+                              src={products[selectedOrder.product_id]?.image}
+                              alt={products[selectedOrder.product_id]?.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
                       </div>
                       <div className="flex-1">
                         <h3 className="font-shufa text-lg text-deep-blue mb-1">
@@ -302,6 +354,26 @@ export default function Orders() {
                         <span className="font-song text-deep-blue-light text-sm">订单号</span>
                         <span className="font-song text-deep-blue text-sm font-mono">{selectedOrder.id}</span>
                       </div>
+                      <div className="flex justify-between">
+                        <span className="font-song text-deep-blue-light text-sm">购买数量</span>
+                        <span className="font-song text-deep-blue text-sm">{selectedOrder.quantity || 1}件</span>
+                      </div>
+                      {selectedOrder.shipping_info && (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="font-song text-deep-blue-light text-sm">收货人</span>
+                            <span className="font-song text-deep-blue text-sm">{selectedOrder.shipping_info.name || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-song text-deep-blue-light text-sm">联系电话</span>
+                            <span className="font-song text-deep-blue text-sm">{selectedOrder.shipping_info.phone || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-song text-deep-blue-light text-sm">收货地址</span>
+                            <span className="font-song text-deep-blue text-sm max-w-[200px] text-right truncate">{selectedOrder.shipping_info.address || '-'}</span>
+                          </div>
+                        </>
+                      )}
                       <div className="flex justify-between">
                         <span className="font-song text-deep-blue-light text-sm">下单时间</span>
                         <span className="font-song text-deep-blue text-sm">
@@ -330,13 +402,62 @@ export default function Orders() {
 
                     <div className="flex justify-end">
                       <Button className="flex-1" onClick={() => {
-                        setShowReorderModal(true)
+                        setReorderQuantity(1)
+                        setShowReorderQuantityModal(true)
                       }}>
-                        再买一单
+                        再次购买
                       </Button>
                     </div>
                   </>
                 )}
+              </FrameDecorations>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showReorderQuantityModal && selectedOrder && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 bg-ink-black/60 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowReorderQuantityModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-sm w-full"
+            >
+              <FrameDecorations className="bg-rice-paper-light p-6">
+                <h2 className="font-shufa text-xl text-deep-blue mb-6 text-center">选择购买数量</h2>
+                
+                <div className="flex items-center justify-center gap-4 mb-6">
+                  <button
+                    onClick={() => setReorderQuantity(Math.max(1, reorderQuantity - 1))}
+                    className="w-12 h-12 flex items-center justify-center bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue text-xl hover:bg-deep-blue-100 transition-colors"
+                  >
+                    -
+                  </button>
+                  <span className="w-16 text-center font-shufa text-2xl text-deep-blue">{reorderQuantity}</span>
+                  <button
+                    onClick={() => setReorderQuantity(Math.min(99, reorderQuantity + 1))}
+                    className="w-12 h-12 flex items-center justify-center bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue text-xl hover:bg-deep-blue-100 transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => setShowReorderQuantityModal(false)}>
+                    取消
+                  </Button>
+                  <Button className="flex-1" onClick={() => {
+                    setShowReorderQuantityModal(false)
+                    setShowReorderModal(true)
+                  }}>
+                    确认
+                  </Button>
+                </div>
               </FrameDecorations>
             </motion.div>
           </motion.div>
@@ -370,6 +491,16 @@ export default function Orders() {
                     />
                   </div>
                   <div>
+                    <label className="block font-song text-deep-blue-light text-sm mb-1">联系电话</label>
+                    <input
+                      type="tel"
+                      value={reorderFormData.phone}
+                      onChange={(e) => setReorderFormData({ ...reorderFormData, phone: e.target.value })}
+                      placeholder="请输入手机号"
+                      className="w-full px-4 py-2 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
+                    />
+                  </div>
+                  <div>
                     <label className="block font-song text-deep-blue-light text-sm mb-1">收货地址</label>
                     <textarea
                       value={reorderFormData.address}
@@ -383,25 +514,44 @@ export default function Orders() {
 
                 <div className="border-t border-deep-blue-100 pt-4 mb-4">
                   <div className="flex items-center gap-4 mb-3">
-                    <div className="w-16 h-16 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                      <img
-                        src={products[selectedOrder.product_id]?.image}
-                        alt={products[selectedOrder.product_id]?.name}
-                        className="w-full h-full object-cover"
-                      />
+                      <div className="flex-shrink-0">
+                        {selectedOrder.image_url && selectedOrder.product_image ? (
+                          <PatternPreview
+                            productImage={selectedOrder.product_image}
+                            patternImage={selectedOrder.image_url}
+                            scale={selectedOrder.customization.scale || 100}
+                            rotation={selectedOrder.customization.rotation || 0}
+                            positionX={selectedOrder.customization.positionX || 50}
+                            positionY={selectedOrder.customization.positionY || 50}
+                            blendMode={selectedOrder.customization.blendMode || 'normal'}
+                            size="small"
+                            showFrame={false}
+                          />
+                        ) : (
+                          <div className="w-16 h-16 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
+                            <img
+                              src={products[selectedOrder.product_id]?.image}
+                              alt={products[selectedOrder.product_id]?.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-shufa text-deep-blue">{products[selectedOrder.product_id]?.name}</h3>
+                        <p className="font-song text-sm text-deep-blue-light">
+                          材质：{materials[selectedOrder.customization?.material] || '未知'}
+                        </p>
+                        <p className="font-song text-xs text-deep-blue-light">
+                          数量：{reorderQuantity}件
+                        </p>
+                      </div>
+                      <span className="font-shufa text-palace-red text-xl">¥{(parseFloat(products[selectedOrder.product_id]?.price || '0') * reorderQuantity).toFixed(0)}</span>
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-shufa text-deep-blue">{products[selectedOrder.product_id]?.name}</h3>
-                      <p className="font-song text-sm text-deep-blue-light">
-                        材质：{materials[selectedOrder.customization?.material] || '未知'}
-                      </p>
+                    <div className="flex justify-between items-center">
+                      <span className="font-song text-deep-blue">订单合计</span>
+                      <span className="font-shufa text-palace-red text-xl">¥{(parseFloat(products[selectedOrder.product_id]?.price || '0') * reorderQuantity).toFixed(0)}</span>
                     </div>
-                    <span className="font-shufa text-palace-red text-xl">¥{products[selectedOrder.product_id]?.price}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-song text-deep-blue">订单合计</span>
-                    <span className="font-shufa text-palace-red text-xl">¥{products[selectedOrder.product_id]?.price}</span>
-                  </div>
                 </div>
 
                 <div className="flex gap-3">

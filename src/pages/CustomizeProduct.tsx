@@ -162,8 +162,11 @@ export default function CustomizeProduct() {
   const [isBuying, setIsBuying] = useState(false)
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [quantity, setQuantity] = useState(1)
+  const [showQuantityModal, setShowQuantityModal] = useState(false)
+  const [quantityAction, setQuantityAction] = useState<'cart' | 'buy' | null>(null)
   const [orderFormData, setOrderFormData] = useState({
     name: '',
+    phone: '',
     address: '',
   })
   const [showPatternModal, setShowPatternModal] = useState(false)
@@ -322,13 +325,9 @@ export default function CustomizeProduct() {
   }
 
   const handleAddToCart = () => {
-    addToCart({
-      productId: selectedProduct,
-      generationId: 'demo-id',
-      customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial },
-      quantity: quantity
-    })
-    alert('已加入购物车')
+    setQuantityAction('cart')
+    setQuantity(1)
+    setShowQuantityModal(true)
   }
 
   const handleBuyNow = async () => {
@@ -339,12 +338,37 @@ export default function CustomizeProduct() {
       return
     }
 
-    setShowOrderModal(true)
+    setQuantityAction('buy')
+    setQuantity(1)
+    setShowQuantityModal(true)
+  }
+
+  const handleConfirmQuantity = () => {
+    setShowQuantityModal(false)
+    
+    if (quantityAction === 'cart') {
+      addToCart({
+        productId: selectedProduct,
+        generationId: null,
+        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, patternImage: selectedPatternImage },
+        quantity: quantity
+      })
+      alert('已加入购物车')
+    } else if (quantityAction === 'buy') {
+      setShowOrderModal(true)
+    }
+    
+    setQuantityAction(null)
   }
 
   const handleConfirmOrder = async () => {
     if (!orderFormData.name.trim()) {
       alert('请填写收货人姓名')
+      return
+    }
+
+    if (!orderFormData.phone.trim()) {
+      alert('请填写联系电话')
       return
     }
 
@@ -368,10 +392,13 @@ export default function CustomizeProduct() {
         user_id: session.user.id,
         product_id: selectedProduct,
         generation_id: null,
+        image_url: selectedPatternImage,
+        product_image: currentProduct?.image,
         customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial },
+        quantity: quantity,
         status: 'demo',
         created_at: new Date().toISOString(),
-        shipping_info: { name: orderFormData.name, address: orderFormData.address }
+        shipping_info: { name: orderFormData.name, phone: orderFormData.phone, address: orderFormData.address }
       }
 
       const existingOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
@@ -379,7 +406,7 @@ export default function CustomizeProduct() {
       localStorage.setItem('demo_orders', JSON.stringify(existingOrders))
 
       setShowOrderModal(false)
-      setOrderFormData({ name: '', address: '' })
+      setOrderFormData({ name: '', phone: '', address: '' })
       navigate('/orders')
     } catch (err) {
       console.error('Order error:', err)
@@ -848,22 +875,7 @@ export default function CustomizeProduct() {
                 <Button variant="primary" onClick={handleOpenPatternModal}>选择纹样</Button>
               </div>
               
-              <div className="flex gap-2 items-center">
-                <div className="flex items-center border border-deep-blue-200 rounded-sm">
-                  <button
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="w-10 h-10 flex items-center justify-center bg-rice-paper font-song text-deep-blue hover:bg-deep-blue-100 transition-colors"
-                  >
-                    -
-                  </button>
-                  <span className="w-12 text-center font-song text-deep-blue">{quantity}</span>
-                  <button
-                    onClick={() => setQuantity(Math.min(99, quantity + 1))}
-                    className="w-10 h-10 flex items-center justify-center bg-rice-paper font-song text-deep-blue hover:bg-deep-blue-100 transition-colors"
-                  >
-                    +
-                  </button>
-                </div>
+              <div className="flex gap-2">
                 <Button variant="secondary" onClick={handleAddToCart}>加入购物车</Button>
                 <StampButton onClick={handleBuyNow} disabled={isBuying}>
                   {isBuying ? '处理中...' : '立即购买'}
@@ -901,6 +913,16 @@ export default function CustomizeProduct() {
                     />
                   </div>
                   <div>
+                    <label className="block font-song text-deep-blue-light text-sm mb-1">联系电话</label>
+                    <input
+                      type="tel"
+                      value={orderFormData.phone}
+                      onChange={(e) => setOrderFormData({ ...orderFormData, phone: e.target.value })}
+                      placeholder="请输入手机号"
+                      className="w-full px-4 py-2 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
+                    />
+                  </div>
+                  <div>
                     <label className="block font-song text-deep-blue-light text-sm mb-1">收货地址</label>
                     <textarea
                       value={orderFormData.address}
@@ -926,12 +948,15 @@ export default function CustomizeProduct() {
                       <p className="font-song text-sm text-deep-blue-light">
                         材质：{materials.find(m => m.id === selectedMaterial)?.name}
                       </p>
+                      <p className="font-song text-xs text-deep-blue-light">
+                        数量：{quantity} 件
+                      </p>
                     </div>
-                    <span className="font-zhuanke text-palace-red text-xl">¥{currentProduct?.price}</span>
+                    <span className="font-zhuanke text-palace-red text-xl">¥{(parseFloat(currentProduct?.price || '0') * quantity).toFixed(0)}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="font-song text-deep-blue">订单合计</span>
-                    <span className="font-zhuanke text-palace-red text-xl">¥{currentProduct?.price}</span>
+                    <span className="font-zhuanke text-palace-red text-xl">¥{(parseFloat(currentProduct?.price || '0') * quantity).toFixed(0)}</span>
                   </div>
                 </div>
 
@@ -947,6 +972,51 @@ export default function CustomizeProduct() {
                 <p className="font-song text-xs text-deep-blue-light text-center mt-4">
                   演示模式，无需实际支付
                 </p>
+              </FrameDecorations>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showQuantityModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 bg-ink-black/60 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowQuantityModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-sm w-full"
+            >
+              <FrameDecorations className="bg-rice-paper-light p-6">
+                <h2 className="font-shufa text-xl text-deep-blue mb-6 text-center">选择购买数量</h2>
+                
+                <div className="flex items-center justify-center gap-4 mb-6">
+                  <button
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    className="w-12 h-12 flex items-center justify-center bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue text-xl hover:bg-deep-blue-100 transition-colors"
+                  >
+                    -
+                  </button>
+                  <span className="w-16 text-center font-shufa text-2xl text-deep-blue">{quantity}</span>
+                  <button
+                    onClick={() => setQuantity(Math.min(99, quantity + 1))}
+                    className="w-12 h-12 flex items-center justify-center bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue text-xl hover:bg-deep-blue-100 transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => setShowQuantityModal(false)}>
+                    取消
+                  </Button>
+                  <Button className="flex-1" onClick={handleConfirmQuantity}>
+                    确认
+                  </Button>
+                </div>
               </FrameDecorations>
             </motion.div>
           </motion.div>

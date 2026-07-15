@@ -1,0 +1,88 @@
+import React from 'react';
+import { motion } from 'framer-motion';
+
+interface PatternPreviewProps {
+  productImage: string;
+  patternImage: string;
+  scale: number;
+  rotation: number;
+  positionX: number;
+  positionY: number;
+  blendMode: string;
+  size?: 'small' | 'medium' | 'large';
+  showFrame?: boolean;
+}
+
+const PatternPreview: React.FC<PatternPreviewProps> = ({
+  productImage,
+  patternImage,
+  scale,
+  rotation,
+  positionX,
+  positionY,
+  blendMode,
+  size = 'medium',
+  showFrame = true,
+}) => {
+  const sizeConfig = {
+    small: {
+      containerSize: 'w-24 h-24',
+      productSize: 'w-14 h-auto',
+      patternSize: 'w-12 h-12',
+      offsetMultiplier: 0.5,
+    },
+    medium: {
+      containerSize: 'w-48 h-64',
+      productSize: 'w-32 h-auto',
+      patternSize: 'w-28 h-28',
+      offsetMultiplier: 1.5,
+    },
+    large: {
+      containerSize: 'w-64 h-85',
+      productSize: 'w-48 h-auto',
+      patternSize: 'w-40 h-40',
+      offsetMultiplier: 2,
+    },
+  };
+
+  const config = sizeConfig[size];
+
+  return (
+    <div className={`relative ${config.containerSize} bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden`}>
+      {showFrame && (
+        <div className="absolute inset-0 bg-ink-wash opacity-10" />
+      )}
+
+      <div className="absolute inset-0 flex items-center justify-center">
+        <img
+          src={productImage}
+          alt="产品"
+          className={`${config.productSize} object-contain`}
+        />
+      </div>
+
+      <motion.div
+        className="absolute inset-0 flex items-center justify-center"
+        animate={{
+          scale: scale / 100,
+          rotate: rotation,
+          x: (positionX - 50) * config.offsetMultiplier,
+          y: (positionY - 50) * config.offsetMultiplier,
+        }}
+        style={{
+          transformOrigin: 'center center',
+          mixBlendMode: blendMode as any,
+        }}
+      >
+        <img
+          src={patternImage}
+          alt="纹样"
+          className={`${config.patternSize} object-cover`}
+          style={{ opacity: 0.7 }}
+        />
+      </motion.div>
+    </div>
+  );
+};
+
+export default PatternPreview;

@@ -1,52 +1,67 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 export interface CartItem {
   id: string
   productId: string
-  generationId: string
+  generationId: string | null
   customization: Record<string, any>
   quantity: number
 }
 
+const STORAGE_KEY = 'cart_items_local'
+
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>([])
+  const isLoaded = useRef(false)
 
   useEffect(() => {
-    const syncCartWithDB = async () => {
+    const syncCart = async () => {
       const { data: { session } } = await supabase.auth?.getSession()
-      if (!session?.user) {
-        setItems([])
-        return
-      }
+      
+      if (session?.user) {
+        try {
+          const { data: dbCart } = await supabase
+            .from('cart_items')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .order('created_at', { ascending: false })
 
-      try {
-        const { data: dbCart } = await supabase
-          .from('cart_items')
-          .select('*')
-          .eq('user_id', session.user.id)
-
-        if (dbCart && dbCart.length > 0) {
-          const dbItems: CartItem[] = dbCart.map((item: any) => ({
-            id: item.id,
-            productId: item.product_id,
-            generationId: item.generation_id,
-            customization: item.customization,
-            quantity: item.quantity,
-          }))
-          setItems(dbItems)
-        } else {
-          setItems([])
+          if (dbCart && dbCart.length > 0) {
+            const dbItems: CartItem[] = dbCart.map((item: any) => ({
+              id: item.id,
+              productId: item.product_id,
+              generationId: item.generation_id,
+              customization: item.customization,
+              quantity: item.quantity,
+            }))
+            setItems(dbItems)
+          } else {
+            const localCart = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+            if (localCart.length > 0) {
+              setItems(localCart)
+            } else {
+              setItems([])
+            }
+          }
+        } catch (error) {
+          console.error('Failed to sync cart from DB:', error)
+          const localCart = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+          setItems(localCart)
         }
-      } catch (error) {
-        console.error('Failed to sync cart from DB:', error)
+      } else {
+        const localCart = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+        setItems(localCart)
       }
+      
+      isLoaded.current = true
     }
 
-    syncCartWithDB()
+    syncCart()
 
     const subscription = supabase.auth?.onAuthStateChange(async (_event, _session) => {
-      await syncCartWithDB()
+      isLoaded.current = false
+      await syncCart()
     })
 
     return () => {
@@ -54,40 +69,93 @@ export function useCart() {
     }
   }, [])
 
+  const COMPARE_FIELDS = ['scale', 'rotation', 'positionX', 'positionY', 'blendMode', 'material']
+
   useEffect(() => {
     const saveToDB = async () => {
+      if (!isLoaded.current) {
+        return
+      }
+
       const { data: { session } } = await supabase.auth?.getSession()
-      if (!session?.user) return
+      
+      if (session?.user) {
+        try {
+          if (items.length > 0) {
+            const upsertResult = await supabase
+              .from('cart_items')
+              .upsert(
+                items.map(item => ({
+                  id: item.id,
+                  user_id: session.user.id,
+                  product_id: item.productId,
+                  generation_id: item.generationId || null,
+                  customization: item.customization,
+                  quantity: item.quantity,
+                })),
+                { onConflict: 'id' }
+              )
+            
+            if (upsertResult.error) {
+              console.error('[Cart] Upsert failed:', upsertResult.error)
+              return
+            }
+          }
 
-      try {
-        await supabase
-          .from('cart_items')
-          .delete()
-          .eq('user_id', session.user.id)
-
-        for (const item of items) {
-          await supabase
+          const existingResult = await supabase
             .from('cart_items')
-            .insert({
-              id: item.id,
-              user_id: session.user.id,
-              product_id: item.productId,
-              generation_id: item.generationId,
-              customization: item.customization,
-              quantity: item.quantity,
-            })
+            .select('id')
+            .eq('user_id', session.user.id)
+          const existingIds = new Set((existingResult.data || []).map((item: any) => item.id))
+          const currentIds = new Set(items.map(item => item.id))
+          
+          const staleIds = [...existingIds].filter(id => !currentIds.has(id))
+          if (staleIds.length > 0) {
+            await supabase
+              .from('cart_items')
+              .delete()
+              .eq('user_id', session.user.id)
+              .in('id', staleIds)
+          }
+        } catch (error: any) {
+          console.error('[Cart] Failed to save cart to DB:', error.message)
         }
-      } catch (error) {
-        console.error('Failed to save cart to DB:', error)
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
       }
     }
 
-    const timer = setTimeout(saveToDB, 500)
-    return () => clearTimeout(timer)
+    saveToDB()
   }, [items])
 
   function addToCart(item: Omit<CartItem, 'id'>) {
-    setItems((prev) => [...prev, { ...item, id: `cart-${Date.now()}` }])
+    setItems((prev) => {
+      const existingIndex = prev.findIndex((i) => {
+        if (i.productId !== item.productId) return false
+        
+        for (const key of COMPARE_FIELDS) {
+          const existingVal = i.customization[key]
+          const newVal = item.customization[key]
+          if (JSON.stringify(existingVal) !== JSON.stringify(newVal)) {
+            return false
+          }
+        }
+        
+        return true
+      })
+
+      if (existingIndex >= 0) {
+        const newItems = [...prev]
+        newItems[existingIndex] = {
+          ...newItems[existingIndex],
+          quantity: newItems[existingIndex].quantity + item.quantity,
+        }
+        return newItems
+      }
+
+      const uuid = crypto.randomUUID()
+      return [...prev, { ...item, id: uuid }]
+    })
   }
 
   function removeFromCart(id: string) {
