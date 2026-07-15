@@ -377,7 +377,7 @@ export default function Header({ onAuthOpen }: HeaderProps) {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="md:hidden bg-rice-paper-light border-t border-deep-blue-100 relative z-50 max-h-[calc(100vh-4rem)] overflow-y-auto"
+              className="md:hidden bg-rice-paper-light border-t border-deep-blue-100 relative z-50 max-h-[calc(100dvh-4rem)] overflow-y-auto"
             >
               <nav className="flex flex-col py-4">
                 {navItems.map((item) => {

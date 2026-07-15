@@ -134,8 +134,8 @@ export function Auth({ onClose, onLogin, initialMode = 'login' }: AuthProps) {
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-md"
       >
-        <div className="bg-rice-paper-light rounded-sm shadow-xl border border-deep-blue-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-deep-blue to-deep-blue-light p-6 text-center relative">
+        <div className="bg-rice-paper-light rounded-sm shadow-xl border border-deep-blue-100 overflow-hidden max-h-[85dvh] flex flex-col">
+          <div className="bg-gradient-to-r from-deep-blue to-deep-blue-light p-6 text-center relative flex-shrink-0">
             <button
               onClick={onClose}
               className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-rice-paper/80 hover:text-rice-paper transition-colors"
@@ -155,7 +155,7 @@ export function Auth({ onClose, onLogin, initialMode = 'login' }: AuthProps) {
             </p>
           </div>
 
-          <div className="p-6">
+          <div className="p-6 overflow-y-auto">
             {error && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}

@@ -401,7 +401,7 @@ export default function ProfilePage() {
                           <div className="flex gap-2">
                             <button
                               onClick={() => {
-                                const proxyUrl = `/api/download?url=${encodeURIComponent(generation.image_url)}`
+                                const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(generation.image_url)}`
                                 const link = document.createElement('a')
                                 link.href = proxyUrl
                                 link.download = `纹韵纹样_${generation.id}.png`

@@ -289,6 +289,11 @@ export default function CreatePattern() {
     let shareUrl = `${window.location.origin}/gallery`
     
     if (session?.user) {
+      const confirmed = window.confirm('分享前会自动保存这件作品并设为公开可见，是否继续？')
+      if (!confirmed) {
+        return
+      }
+
       try {
         const { data: profileData } = await supabase
           .from('profiles')
@@ -680,15 +685,6 @@ export default function CreatePattern() {
             className="max-w-4xl w-full"
           >
             <div className="relative">
-              <button
-                onClick={() => setShowImagePreview(false)}
-                className="absolute -top-12 right-0 w-10 h-10 flex items-center justify-center bg-rice-paper/90 hover:bg-rice-paper rounded-full transition-colors z-10 shadow-md"
-              >
-                <svg className="w-6 h-6 text-deep-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              
               <div className="aspect-square bg-rice-paper-dark rounded-sm overflow-hidden shadow-2xl">
                 <img
                   src={generatedImage}
@@ -700,7 +696,7 @@ export default function CreatePattern() {
               <div className="mt-4 flex justify-center">
                 <button
                   onClick={() => {
-                    const proxyUrl = `/api/download?url=${encodeURIComponent(generatedImage)}`
+                    const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(generatedImage)}`
                     const link = document.createElement('a')
                     link.href = proxyUrl
                     link.download = `纹韵纹样_${Date.now()}.png`

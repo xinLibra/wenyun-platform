@@ -127,7 +127,7 @@ export default function MyWorksPage() {
 
   const handleDownload = async (imageUrl: string) => {
     try {
-      const proxyUrl = `/api/download?url=${encodeURIComponent(imageUrl)}`
+      const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(imageUrl)}`
       
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
       

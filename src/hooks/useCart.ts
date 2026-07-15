@@ -10,19 +10,15 @@ export interface CartItem {
 }
 
 export function useCart() {
-  const [items, setItems] = useState<CartItem[]>(() => {
-    const saved = localStorage.getItem('cart')
-    return saved ? JSON.parse(saved) : []
-  })
-
-  useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(items))
-  }, [items])
+  const [items, setItems] = useState<CartItem[]>([])
 
   useEffect(() => {
     const syncCartWithDB = async () => {
       const { data: { session } } = await supabase.auth?.getSession()
-      if (!session?.user) return
+      if (!session?.user) {
+        setItems([])
+        return
+      }
 
       try {
         const { data: dbCart } = await supabase
@@ -38,20 +34,9 @@ export function useCart() {
             customization: item.customization,
             quantity: item.quantity,
           }))
-          
-          const mergedItems = [...dbItems]
-          items.forEach(localItem => {
-            const existing = mergedItems.find(i => 
-              i.productId === localItem.productId && 
-              i.generationId === localItem.generationId &&
-              JSON.stringify(i.customization) === JSON.stringify(localItem.customization)
-            )
-            if (!existing) {
-              mergedItems.push(localItem)
-            }
-          })
-          
-          setItems(mergedItems)
+          setItems(dbItems)
+        } else {
+          setItems([])
         }
       } catch (error) {
         console.error('Failed to sync cart from DB:', error)
@@ -60,10 +45,8 @@ export function useCart() {
 
     syncCartWithDB()
 
-    const subscription = supabase.auth?.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        await syncCartWithDB()
-      }
+    const subscription = supabase.auth?.onAuthStateChange(async (_event, _session) => {
+      await syncCartWithDB()
     })
 
     return () => {

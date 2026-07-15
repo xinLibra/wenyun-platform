@@ -161,6 +161,7 @@ export default function CustomizeProduct() {
   const [currentPage, setCurrentPage] = useState(0)
   const [isBuying, setIsBuying] = useState(false)
   const [showOrderModal, setShowOrderModal] = useState(false)
+  const [quantity, setQuantity] = useState(1)
   const [orderFormData, setOrderFormData] = useState({
     name: '',
     address: '',
@@ -325,7 +326,7 @@ export default function CustomizeProduct() {
       productId: selectedProduct,
       generationId: 'demo-id',
       customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial },
-      quantity: 1
+      quantity: quantity
     })
     alert('已加入购物车')
   }
@@ -847,7 +848,22 @@ export default function CustomizeProduct() {
                 <Button variant="primary" onClick={handleOpenPatternModal}>选择纹样</Button>
               </div>
               
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                <div className="flex items-center border border-deep-blue-200 rounded-sm">
+                  <button
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    className="w-10 h-10 flex items-center justify-center bg-rice-paper font-song text-deep-blue hover:bg-deep-blue-100 transition-colors"
+                  >
+                    -
+                  </button>
+                  <span className="w-12 text-center font-song text-deep-blue">{quantity}</span>
+                  <button
+                    onClick={() => setQuantity(Math.min(99, quantity + 1))}
+                    className="w-10 h-10 flex items-center justify-center bg-rice-paper font-song text-deep-blue hover:bg-deep-blue-100 transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
                 <Button variant="secondary" onClick={handleAddToCart}>加入购物车</Button>
                 <StampButton onClick={handleBuyNow} disabled={isBuying}>
                   {isBuying ? '处理中...' : '立即购买'}
