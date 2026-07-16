@@ -385,7 +385,7 @@ export default function Orders() {
                       <div className="flex justify-between">
                         <span className="font-song text-deep-blue-light text-sm">下单时间</span>
                         <span className="font-song text-deep-blue text-sm">
-                          {new Date(selectedOrder.created_at).toLocaleString('zh-CN')}
+                          {new Date(selectedOrder.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
                         </span>
                       </div>
                       <div className="flex justify-between">

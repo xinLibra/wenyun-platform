@@ -134,7 +134,7 @@ export default function OrderConfirmPage() {
                     <div className="flex justify-between items-center mb-2">
                       <span className="font-song text-deep-blue-light">下单时间</span>
                       <span className="font-song text-deep-blue">
-                        {new Date(order.created_at).toLocaleString('zh-CN')}
+                        {new Date(order.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
                       </span>
                     </div>
                     <div className="flex justify-between items-center mb-2">
