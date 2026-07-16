@@ -225,6 +225,7 @@ export default function Orders() {
                           blendMode={order.customization.blendMode || 'normal'}
                           size="small"
                           showFrame={false}
+                          layoutMode={order.customization.layoutMode}
                         />
                       ) : (
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
@@ -321,6 +322,7 @@ export default function Orders() {
                             blendMode={selectedOrder.customization.blendMode || 'normal'}
                             size="small"
                             showFrame={false}
+                            layoutMode={selectedOrder.customization.layoutMode}
                           />
                         ) : (
                           <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
@@ -529,6 +531,7 @@ export default function Orders() {
                             blendMode={selectedOrder.customization.blendMode || 'normal'}
                             size="small"
                             showFrame={false}
+                            layoutMode={selectedOrder.customization.layoutMode}
                           />
                         ) : (
                           <div className="w-16 h-16 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">

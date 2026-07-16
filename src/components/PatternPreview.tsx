@@ -11,6 +11,7 @@ interface PatternPreviewProps {
   blendMode: string;
   size?: 'small' | 'medium' | 'large';
   showFrame?: boolean;
+  layoutMode?: 'center' | 'tile' | 'corner' | 'band' | 'free';
 }
 
 const PatternPreview: React.FC<PatternPreviewProps> = ({
@@ -23,6 +24,7 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
   blendMode,
   size = 'medium',
   showFrame = true,
+  layoutMode = 'free',
 }) => {
   const sizeConfig = {
     small: {
@@ -47,20 +49,66 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
 
   const config = sizeConfig[size];
 
-  return (
-    <div className={`relative ${config.containerSize} bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden`}>
-      {showFrame && (
-        <div className="absolute inset-0 bg-ink-wash opacity-10" />
-      )}
-
-      <div className="absolute inset-0 flex items-center justify-center">
-        <img
-          src={productImage}
-          alt="产品"
-          className={`${config.productSize} object-contain`}
+  const renderPattern = () => {
+    if (layoutMode === 'band') {
+      return (
+        <div
+          className="absolute"
+          style={{
+            left: `${(positionX - 50) * 0.8}%`,
+            right: `${(50 - positionX) * 0.8}%`,
+            top: `${positionY - 10}%`,
+            height: '20%',
+            backgroundImage: `url(${patternImage})`,
+            backgroundSize: `${scale / 4}%`,
+            backgroundRepeat: 'repeat-x',
+            opacity: 0.7,
+            mixBlendMode: blendMode as any,
+            transform: `rotate(${rotation}deg)`,
+            transformOrigin: 'center center',
+          }}
         />
-      </div>
+      );
+    }
 
+    if (layoutMode === 'tile') {
+      return (
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `url(${patternImage})`,
+            backgroundSize: `${scale / 2}%`,
+            backgroundRepeat: 'repeat',
+            opacity: 0.7,
+            mixBlendMode: blendMode as any,
+            transform: `rotate(${rotation}deg)`,
+            transformOrigin: 'center center',
+          }}
+        />
+      );
+    }
+
+    if (layoutMode === 'corner') {
+      return (
+        <div
+          className="absolute"
+          style={{
+            left: '5%',
+            top: '5%',
+            width: '40%',
+            height: '40%',
+            backgroundImage: `url(${patternImage})`,
+            backgroundSize: 'cover',
+            opacity: 0.7,
+            mixBlendMode: blendMode as any,
+            transform: `rotate(${rotation}deg) scale(${scale / 200})`,
+            transformOrigin: 'top left',
+          }}
+        />
+      );
+    }
+
+    return (
       <motion.div
         className="absolute inset-0 flex items-center justify-center"
         animate={{
@@ -81,6 +129,24 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
           style={{ opacity: 0.7 }}
         />
       </motion.div>
+    );
+  };
+
+  return (
+    <div className={`relative ${config.containerSize} bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden`}>
+      {showFrame && (
+        <div className="absolute inset-0 bg-ink-wash opacity-10" />
+      )}
+
+      <div className="absolute inset-0 flex items-center justify-center">
+        <img
+          src={productImage}
+          alt="产品"
+          className={`${config.productSize} object-contain`}
+        />
+      </div>
+
+      {renderPattern()}
     </div>
   );
 };
