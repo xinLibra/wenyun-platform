@@ -265,7 +265,7 @@ export default function Orders() {
                       </p>
                       <div className="flex items-center justify-between">
                         <span className="font-song text-deep-blue-light text-sm">
-                          {new Date(order.created_at).toLocaleString('zh-CN')}
+                          {new Date(order.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
                         </span>
                         <span className="font-shufa text-palace-red text-lg">¥{product?.price}</span>
                       </div>

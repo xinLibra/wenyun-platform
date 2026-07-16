@@ -499,6 +499,8 @@ export default function CustomizeProduct() {
       return
     }
 
+    console.log('[Order] Session user:', session.user.id, session.user.email)
+
     setIsBuying(true)
 
     try {
@@ -516,7 +518,9 @@ export default function CustomizeProduct() {
         shipping_info: { name: orderFormData.name, phone: orderFormData.phone, address: orderFormData.address }
       }
 
-      await supabase.from('orders').insert(order).select()
+      console.log('[Order] Inserting order:', order)
+      const insertResult = await supabase.from('orders').insert(order).select()
+      console.log('[Order] Insert result:', insertResult)
 
       const existingOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
       existingOrders.unshift(order)
@@ -526,7 +530,7 @@ export default function CustomizeProduct() {
       setOrderFormData({ name: '', phone: '', address: '' })
       navigate('/orders')
     } catch (err) {
-      console.error('Order error:', err)
+      console.error('[Order] Error:', err)
       alert('提交失败，请重试')
     } finally {
       setIsBuying(false)
