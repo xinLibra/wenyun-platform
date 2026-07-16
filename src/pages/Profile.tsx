@@ -409,7 +409,7 @@ export default function ProfilePage() {
                                 link.click()
                                 document.body.removeChild(link)
                               }}
-                              className="flex-1 py-1.5 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-xs text-deep-blue hover:border-palace-red hover:text-palace-red transition-colors"
+                              className="flex-1 py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
                             >
                               下载
                             </button>

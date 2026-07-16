@@ -56,7 +56,7 @@ const productMaterials: Record<string, string[]> = {
 
 const views = ['front', 'back', 'side']
 
-type LayoutMode = 'center' | 'tile' | 'corner' | 'free'
+type LayoutMode = 'center' | 'tile' | 'corner' | 'band' | 'free'
 
 const blendModeLabels: Record<string, string> = {
   normal: '正常',
@@ -99,6 +99,15 @@ const layoutPresets: Record<LayoutMode, {
     rotation: 0,
     positionX: 15,
     positionY: 85,
+    blendMode: 'screen',
+  },
+  band: {
+    name: '腰封式',
+    icon: '▬',
+    scale: 50,
+    rotation: 0,
+    positionX: 50,
+    positionY: 50,
     blendMode: 'screen',
   },
   free: {
@@ -181,7 +190,20 @@ export default function CustomizeProduct() {
   const [currentView, setCurrentView] = useState('front')
   const [blendMode, setBlendMode] = useState(getInitialParams(getInitialProduct()).blendMode)
   const [selectedCategory, setSelectedCategory] = useState(getInitialCategory())
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('free')
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
+    const savedProduct = localStorage.getItem('selected_product_id') || 'scarf_front'
+    const draftKey = `product_config_draft_${savedProduct}`
+    const savedDraft = localStorage.getItem(draftKey)
+    if (savedDraft) {
+      try {
+        const draft = JSON.parse(savedDraft)
+        return draft.layoutMode || 'free'
+      } catch {
+        return 'free'
+      }
+    }
+    return 'free'
+  })
   const [showCompare, setShowCompare] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
@@ -284,11 +306,17 @@ export default function CustomizeProduct() {
       try {
         const draft = JSON.parse(savedDraft)
         setSelectedMaterial(draft.materialId || (productMaterials[selectedProduct]?.[0] || ''))
+        if (draft.patternImage) {
+          setSelectedPatternImage(draft.patternImage)
+        }
+        if (draft.layoutMode) {
+          setLayoutMode(draft.layoutMode)
+        }
         setScale(draft.params?.scale || 100)
         setRotation(draft.params?.rotation || 0)
         setPositionX(draft.params?.positionX || 50)
         setPositionY(draft.params?.positionY || 50)
-        setBlendMode(draft.params?.blendMode || 'normal')
+        setBlendMode(draft.params?.blendMode || 'screen')
       } catch {
         // 解析失败，使用默认值
       }
@@ -300,11 +328,13 @@ export default function CustomizeProduct() {
     const draft = {
       productId: selectedProduct,
       materialId: selectedMaterial,
+      patternImage: selectedPatternImage,
+      layoutMode,
       params: { scale, rotation, positionX, positionY, blendMode },
       updatedAt: new Date().toISOString()
     }
     localStorage.setItem(draftKey, JSON.stringify(draft))
-  }, [selectedProduct, selectedMaterial, scale, rotation, positionX, positionY, blendMode])
+  }, [selectedProduct, selectedMaterial, selectedPatternImage, layoutMode, scale, rotation, positionX, positionY, blendMode])
 
   const handleReset = () => {
     const confirmed = window.confirm('确定要恢复默认设置吗？当前调节将被清空')
@@ -396,6 +426,8 @@ export default function CustomizeProduct() {
     const draft = {
       productId: selectedProduct,
       materialId: selectedMaterial,
+      patternImage: selectedPatternImage,
+      layoutMode,
       params: { scale, rotation, positionX, positionY, blendMode },
       updatedAt: new Date().toISOString()
     }
@@ -544,12 +576,13 @@ export default function CustomizeProduct() {
 
   const nativeMouseMoveHandler = (e: MouseEvent) => {
     e.preventDefault()
-    if (!dragRef.current) return
+    const el = dragRef.current || previewContainerRef.current
+    if (!el) return
     
     const dx = e.clientX - dragStartX.current
     const dy = e.clientY - dragStartY.current
     
-    const rect = dragRef.current.getBoundingClientRect()
+    const rect = el.getBoundingClientRect()
     const pxPerPercent = rect.width / 100
     
     const newX = dragOffsetStartX.current + (dx / pxPerPercent)
@@ -868,22 +901,43 @@ export default function CustomizeProduct() {
                                 className="absolute inset-0"
                                 style={{
                                   backgroundImage: `url(${selectedPatternImage})`,
-                                  backgroundSize: '30%',
+                                  backgroundSize: `${scale / 2}%`,
                                   backgroundRepeat: 'repeat',
                                   opacity: 0.7,
                                   mixBlendMode: blendMode as any,
+                                  transform: `rotate(${rotation}deg)`,
+                                  transformOrigin: 'center center',
                                 }}
+                              />
+                            )}
+                            {layoutMode === 'band' && (
+                              <div
+                                className="absolute cursor-grab active:cursor-grabbing"
+                                style={{
+                                  left: `${(positionX - 50) * 0.8}%`,
+                                  right: `${(50 - positionX) * 0.8}%`,
+                                  top: `${positionY - 10}%`,
+                                  height: '20%',
+                                  backgroundImage: `url(${selectedPatternImage})`,
+                                  backgroundSize: `${scale / 4}%`,
+                                  backgroundRepeat: 'repeat-x',
+                                  opacity: 0.7,
+                                  mixBlendMode: blendMode as any,
+                                  transform: `rotate(${rotation}deg)`,
+                                  transformOrigin: 'center center',
+                                }}
+                                onMouseDown={handleMouseDown}
+                                onTouchStart={handleTouchStart}
+                                onTouchMove={handleTouchMove}
                               />
                             )}
                           </div>
                         </div>
                         
-                        {layoutMode !== 'tile' && (
+                        {layoutMode !== 'tile' && layoutMode !== 'band' && (
                           <motion.div
                             ref={dragRef}
-                            className={`absolute inset-0 flex items-center justify-center cursor-grab select-none active:cursor-grabbing ${
-                              layoutMode !== 'free' ? 'pointer-events-none' : ''
-                            }`}
+                            className={`absolute inset-0 flex items-center justify-center cursor-grab select-none active:cursor-grabbing`}
                             animate={{
                               scale: scale / 100,
                               rotate: rotation,
@@ -894,7 +948,7 @@ export default function CustomizeProduct() {
                             style={{
                               transformOrigin: 'center center',
                               mixBlendMode: blendMode as any,
-                              touchAction: layoutMode === 'free' ? 'none' : 'auto',
+                              touchAction: 'none',
                             }}
                             onMouseDown={handleMouseDown}
                             onTouchStart={handleTouchStart}
@@ -934,22 +988,43 @@ export default function CustomizeProduct() {
                               className="absolute inset-0"
                               style={{
                                 backgroundImage: `url(${selectedPatternImage})`,
-                                backgroundSize: '30%',
+                                backgroundSize: `${scale / 2}%`,
                                 backgroundRepeat: 'repeat',
                                 opacity: 0.7,
                                 mixBlendMode: blendMode as any,
+                                transform: `rotate(${rotation}deg)`,
+                                transformOrigin: 'center center',
                               }}
+                            />
+                          )}
+                          {layoutMode === 'band' && (
+                            <div
+                              className="absolute cursor-grab active:cursor-grabbing"
+                              style={{
+                                left: `${(positionX - 50) * 0.8}%`,
+                                right: `${(50 - positionX) * 0.8}%`,
+                                top: `${positionY - 10}%`,
+                                height: '20%',
+                                backgroundImage: `url(${selectedPatternImage})`,
+                                backgroundSize: `${scale / 4}%`,
+                                backgroundRepeat: 'repeat-x',
+                                opacity: 0.7,
+                                mixBlendMode: blendMode as any,
+                                transform: `rotate(${rotation}deg)`,
+                                transformOrigin: 'center center',
+                              }}
+                              onMouseDown={handleMouseDown}
+                              onTouchStart={handleTouchStart}
+                              onTouchMove={handleTouchMove}
                             />
                           )}
                         </div>
                       </div>
                       
-                      {layoutMode !== 'tile' && (
+                      {layoutMode !== 'tile' && layoutMode !== 'band' && (
                         <motion.div
                           ref={dragRef}
-                          className={`absolute inset-0 flex items-center justify-center cursor-grab select-none active:cursor-grabbing ${
-                            layoutMode !== 'free' ? 'pointer-events-none' : ''
-                          }`}
+                          className={`absolute inset-0 flex items-center justify-center cursor-grab select-none active:cursor-grabbing`}
                           animate={{
                             scale: scale / 100,
                             rotate: rotation,
@@ -960,7 +1035,7 @@ export default function CustomizeProduct() {
                           style={{
                             transformOrigin: 'center center',
                             mixBlendMode: blendMode as any,
-                            touchAction: layoutMode === 'free' ? 'none' : 'auto',
+                            touchAction: 'none',
                           }}
                           onMouseDown={handleMouseDown}
                           onTouchStart={handleTouchStart}
@@ -999,7 +1074,7 @@ export default function CustomizeProduct() {
                     </p>
                   </div>
                   
-                  {layoutMode === 'free' && !showCompare && (
+                  {!showCompare && (
                     <div className="absolute bottom-16 left-3 bg-rice-paper/80 backdrop-blur-sm px-3 py-2 rounded-sm text-left">
                       <p className="font-song text-xs text-deep-blue-light">
                         <span className="text-deep-blue">大小：{scale}%</span>
@@ -1050,7 +1125,7 @@ export default function CustomizeProduct() {
                   </h2>
                 </div>
                 
-                <div className={`space-y-4 ${layoutMode !== 'free' ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="space-y-4">
                   <InkSlider
                     label="纹样大小"
                     value={scale}
@@ -1060,23 +1135,27 @@ export default function CustomizeProduct() {
                     className="w-full"
                   />
                   
-                  <InkSlider
-                    label="左右偏移"
-                    value={positionX}
-                    min={0}
-                    max={100}
-                    onChange={setPositionX}
-                    className="w-full"
-                  />
+                  {layoutMode !== 'tile' && (
+                    <InkSlider
+                      label="左右偏移"
+                      value={positionX}
+                      min={0}
+                      max={100}
+                      onChange={setPositionX}
+                      className="w-full"
+                    />
+                  )}
                   
-                  <InkSlider
-                    label="上下偏移"
-                    value={positionY}
-                    min={0}
-                    max={100}
-                    onChange={setPositionY}
-                    className="w-full"
-                  />
+                  {layoutMode !== 'tile' && (
+                    <InkSlider
+                      label="上下偏移"
+                      value={positionY}
+                      min={0}
+                      max={100}
+                      onChange={setPositionY}
+                      className="w-full"
+                    />
+                  )}
                   
                   <InkSlider
                     label="旋转角度"

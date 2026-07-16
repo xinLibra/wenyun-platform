@@ -303,11 +303,34 @@ export default function CreatePattern() {
         
         const isGuest = localStorage.getItem('is_guest') === 'true'
         const nickname = isGuest ? '游客' : (profileData?.nickname || session.user.email?.split('@')[0] || '用户')
+
+        const autoTags: string[] = []
+        const arrangementOption = ARRANGEMENT_OPTIONS.find(o => o.value === generationParams.arrangement)
+        if (arrangementOption) autoTags.push(arrangementOption.label)
+        const symmetryOption = SYMMETRY_OPTIONS.find(o => o.value === generationParams.symmetry)
+        if (symmetryOption) autoTags.push(symmetryOption.label)
+        if (generationParams.dimension.style.figurative < 40) {
+          autoTags.push('抽象风格')
+        } else if (generationParams.dimension.style.figurative > 60) {
+          autoTags.push('具象风格')
+        }
+        if (generationParams.dimension.style.simplicity < 40) {
+          autoTags.push('繁复风格')
+        } else if (generationParams.dimension.style.simplicity > 60) {
+          autoTags.push('简约风格')
+        }
+        if (generationParams.dimension.style.handmade < 40) {
+          autoTags.push('数字科技感')
+        } else if (generationParams.dimension.style.handmade > 60) {
+          autoTags.push('手作感')
+        }
+        const uniqueTags = [...new Set(autoTags)]
+        const title = workTitle || `纹样作品 #${Date.now().toString(36).toUpperCase()}`
         
         const { data: savedData } = await supabase.from('generations').insert({
           user_id: session.user.id,
           style_id: dimension.craft[0] || null,
-          params: generationParams,
+          params: { ...generationParams, tags: uniqueTags, title },
           image_url: generatedImage,
           author_nickname: nickname,
           is_public: true,

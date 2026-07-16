@@ -552,9 +552,21 @@ export default function Gallery() {
                 
                 <div className="flex items-center justify-between py-4 border-t border-deep-blue-100">
                   <div className="flex items-center gap-4">
-                    <span className="font-song text-deep-blue-light">
-                      分类: {selectedWork.tags.length > 0 ? selectedWork.tags[0] : '未分类'}
-                    </span>
+                    <span className="font-song text-deep-blue-light">分类:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedWork.tags.length > 0 ? (
+                        selectedWork.tags.map((tag: string, index: number) => (
+                          <span
+                            key={index}
+                            className="px-2 py-1 bg-deep-blue-50 text-deep-blue text-xs font-song rounded-sm"
+                          >
+                            {tag}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-deep-blue-light text-xs font-song">未分类</span>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="flex gap-3">
