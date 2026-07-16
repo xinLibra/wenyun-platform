@@ -522,10 +522,6 @@ export default function CustomizeProduct() {
       const insertResult = await supabase.from('orders').insert(order).select()
       console.log('[Order] Insert result:', insertResult)
 
-      const existingOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
-      existingOrders.unshift(order)
-      localStorage.setItem('demo_orders', JSON.stringify(existingOrders))
-
       setShowOrderModal(false)
       setOrderFormData({ name: '', phone: '', address: '' })
       navigate('/orders')

@@ -79,8 +79,6 @@ export default function Cart() {
     setIsCheckingOut(true)
 
     try {
-      const existingOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
-      
       const newOrders = []
       for (const item of selectedItemsList) {
         const product = products[item.productId]
@@ -98,12 +96,9 @@ export default function Cart() {
           shipping_info: { name: formData.name, phone: formData.phone, address: formData.address }
         }
         newOrders.push(order)
-        existingOrders.unshift(order)
       }
 
       await supabase.from('orders').insert(newOrders).select()
-
-      localStorage.setItem('demo_orders', JSON.stringify(existingOrders))
       
       if (session.user) {
         const deleteResult = await supabase
