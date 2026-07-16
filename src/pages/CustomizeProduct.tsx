@@ -911,6 +911,8 @@ export default function CustomizeProduct() {
                                   transform: `rotate(${rotation}deg)`,
                                   transformOrigin: 'center center',
                                 }}
+                                onTouchStart={handleTouchStart}
+                                onTouchMove={handleTouchMove}
                               />
                             )}
                             {layoutMode === 'band' && (
@@ -998,6 +1000,8 @@ export default function CustomizeProduct() {
                                 transform: `rotate(${rotation}deg)`,
                                 transformOrigin: 'center center',
                               }}
+                              onTouchStart={handleTouchStart}
+                              onTouchMove={handleTouchMove}
                             />
                           )}
                           {layoutMode === 'band' && (
@@ -1078,20 +1082,28 @@ export default function CustomizeProduct() {
                   </div>
                   
                   {!showCompare && (
-                    <div className="absolute top-16 right-2 bg-rice-paper/70 backdrop-blur-sm px-2 py-1 rounded-sm text-left">
-                      <p className="font-song text-[10px] text-deep-blue-light leading-tight">
+                    <div className="hidden sm:absolute sm:top-16 sm:right-2 bg-rice-paper/70 backdrop-blur-sm px-2 py-1 rounded-sm text-left">
+                      <p className="font-song text-xs text-deep-blue-light leading-tight">
                         <span className="text-deep-blue">大小：{scale}%</span>
                       </p>
-                      <p className="font-song text-[10px] text-deep-blue-light leading-tight">
+                      <p className="font-song text-xs text-deep-blue-light leading-tight">
                         <span className="text-deep-blue">位置：X:{positionX} Y:{positionY}</span>
                       </p>
-                      <p className="font-song text-[10px] text-deep-blue-light leading-tight">
+                      <p className="font-song text-xs text-deep-blue-light leading-tight">
                         <span className="text-deep-blue">叠加：{blendModeLabels[blendMode] || blendMode}</span>
                       </p>
                     </div>
                   )}
                 </div>
               </FrameDecorations>
+
+              <div className="sm:hidden bg-rice-paper/50 px-3 py-2">
+                <div className="flex justify-between text-[10px] font-song">
+                  <span className="text-deep-blue-light">大小：{scale}%</span>
+                  <span className="text-deep-blue-light">位置：X:{positionX} Y:{positionY}</span>
+                  <span className="text-deep-blue-light">叠加：{blendModeLabels[blendMode] || blendMode}</span>
+                </div>
+              </div>
 
               <FrameDecorations className="bg-rice-paper-light p-4">
                 <div className="mb-4">
