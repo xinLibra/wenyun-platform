@@ -128,7 +128,13 @@ export default function Orders() {
         const demoOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
           .filter((o: Order) => o.user_id === session.user.id)
 
-        const allOrders = [...demoOrders, ...(ordersData || [])].sort(
+        const allOrdersRaw = [...demoOrders, ...(ordersData || [])]
+        const seenIds = new Set<string>()
+        const allOrders = allOrdersRaw.filter(order => {
+          if (seenIds.has(order.id)) return false
+          seenIds.add(order.id)
+          return true
+        }).sort(
           (a: Order, b: Order) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         )
 
