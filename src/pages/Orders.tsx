@@ -113,6 +113,9 @@ export default function Orders() {
     const fetchOrders = async () => {
       const { data: { session } } = await supabase.auth?.getSession()
       
+      console.log('[DEBUG] Session:', session)
+      console.log('[DEBUG] Session user:', session?.user?.id, session?.user?.email)
+      
       if (!session?.user) {
         navigate('/login')
         return
@@ -125,10 +128,18 @@ export default function Orders() {
           .eq('user_id', session.user.id)
           .order('created_at', { ascending: false })
 
+        console.log('[DEBUG] 查询返回原始条数:', ordersData?.length)
+        console.log('[DEBUG] 查询返回原始数据:', JSON.stringify(ordersData))
+
         const demoOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
           .filter((o: Order) => o.user_id === session.user.id)
 
+        console.log('[DEBUG] localStorage demo_orders条数:', demoOrders.length)
+        console.log('[DEBUG] localStorage demo_orders:', JSON.stringify(demoOrders))
+
         const allOrdersRaw = [...demoOrders, ...(ordersData || [])]
+        console.log('[DEBUG] 合并后原始条数:', allOrdersRaw.length)
+
         const seenIds = new Set<string>()
         const allOrders = allOrdersRaw.filter(order => {
           if (seenIds.has(order.id)) return false
@@ -138,9 +149,12 @@ export default function Orders() {
           (a: Order, b: Order) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         )
 
+        console.log('[DEBUG] 去重排序后条数:', allOrders.length)
+        console.log('[DEBUG] 去重排序后数据:', JSON.stringify(allOrders))
+
         setOrders(allOrders)
       } catch (error) {
-        console.error('Fetch orders error:', error)
+        console.error('[DEBUG] Fetch orders error:', error)
         const demoOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
           .filter((o: Order) => o.user_id === session.user.id)
         setOrders(demoOrders)
