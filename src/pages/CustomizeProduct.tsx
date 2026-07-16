@@ -901,7 +901,7 @@ export default function CustomizeProduct() {
                             />
                             {layoutMode === 'tile' && (
                               <div
-                                className="absolute inset-0"
+                                className="absolute inset-0 cursor-grab active:cursor-grabbing"
                                 style={{
                                   backgroundImage: `url(${selectedPatternImage})`,
                                   backgroundSize: `${scale / 2}%`,
@@ -911,6 +911,8 @@ export default function CustomizeProduct() {
                                   transform: `rotate(${rotation}deg)`,
                                   transformOrigin: 'center center',
                                 }}
+                                draggable={false}
+                                onMouseDown={handleMouseDown}
                                 onTouchStart={handleTouchStart}
                                 onTouchMove={handleTouchMove}
                               />
@@ -931,6 +933,7 @@ export default function CustomizeProduct() {
                                   transform: `rotate(${rotation}deg)`,
                                   transformOrigin: 'center center',
                                 }}
+                                draggable={false}
                                 onMouseDown={handleMouseDown}
                                 onTouchStart={handleTouchStart}
                                 onTouchMove={handleTouchMove}

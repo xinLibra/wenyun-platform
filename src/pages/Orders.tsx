@@ -121,6 +121,11 @@ export default function Orders() {
           .order('created_at', { ascending: false })
 
         console.log('[DEBUG] 查询返回条数:', ordersData?.length)
+        if (ordersData) {
+          ordersData.forEach(order => {
+            console.log('[DEBUG] 订单:', order.id.slice(0, 8), 'layoutMode:', order.customization?.layoutMode, 'customization:', JSON.stringify(order.customization))
+          })
+        }
         setOrders(ordersData || [])
       } catch (error) {
         console.error('[DEBUG] Fetch orders error:', error)
