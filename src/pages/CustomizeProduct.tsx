@@ -503,7 +503,7 @@ export default function CustomizeProduct() {
 
     try {
       const order = {
-        id: `demo_${Date.now()}`,
+        id: crypto.randomUUID(),
         user_id: session.user.id,
         product_id: selectedProduct,
         generation_id: null,

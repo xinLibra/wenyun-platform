@@ -78,7 +78,7 @@ export default function Orders() {
 
     try {
       const order = {
-        id: `demo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        id: crypto.randomUUID(),
         user_id: session.user.id,
         product_id: selectedOrder.product_id,
         generation_id: selectedOrder.generation_id,
@@ -90,6 +90,8 @@ export default function Orders() {
         created_at: new Date().toISOString(),
         shipping_info: { name: reorderFormData.name, phone: reorderFormData.phone, address: reorderFormData.address }
       }
+
+      await supabase.from('orders').insert(order).select()
 
       const existingOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
       existingOrders.unshift(order)

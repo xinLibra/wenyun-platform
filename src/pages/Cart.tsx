@@ -81,21 +81,27 @@ export default function Cart() {
     try {
       const existingOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
       
+      const newOrders = []
       for (const item of selectedItemsList) {
         const product = products[item.productId]
-        existingOrders.unshift({
-          id: `demo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        const order = {
+          id: crypto.randomUUID(),
           user_id: session.user.id,
           product_id: item.productId,
           generation_id: item.generationId,
           image_url: item.customization?.patternImage,
           product_image: product?.image,
           customization: item.customization,
+          quantity: item.quantity,
           status: 'demo',
           created_at: new Date().toISOString(),
           shipping_info: { name: formData.name, phone: formData.phone, address: formData.address }
-        })
+        }
+        newOrders.push(order)
+        existingOrders.unshift(order)
       }
+
+      await supabase.from('orders').insert(newOrders).select()
 
       localStorage.setItem('demo_orders', JSON.stringify(existingOrders))
       
