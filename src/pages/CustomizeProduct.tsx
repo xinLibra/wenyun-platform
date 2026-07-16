@@ -509,12 +509,14 @@ export default function CustomizeProduct() {
         generation_id: null,
         image_url: selectedPatternImage,
         product_image: currentProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial },
+        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, layoutMode },
         quantity: quantity,
         status: 'demo',
         created_at: new Date().toISOString(),
         shipping_info: { name: orderFormData.name, phone: orderFormData.phone, address: orderFormData.address }
       }
+
+      await supabase.from('orders').insert(order).select()
 
       const existingOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]')
       existingOrders.unshift(order)
@@ -621,12 +623,13 @@ export default function CustomizeProduct() {
     e.preventDefault()
     
     if (e.touches.length === 1) {
-      if (!dragRef.current) return
+      const el = dragRef.current || previewContainerRef.current
+      if (!el) return
       
       const dx = e.touches[0].clientX - dragStartX.current
       const dy = e.touches[0].clientY - dragStartY.current
       
-      const rect = dragRef.current.getBoundingClientRect()
+      const rect = el.getBoundingClientRect()
       const pxPerPercent = rect.width / 100
       
       const newX = dragOffsetStartX.current + (dx / pxPerPercent)
@@ -1075,14 +1078,14 @@ export default function CustomizeProduct() {
                   </div>
                   
                   {!showCompare && (
-                    <div className="absolute bottom-16 left-3 bg-rice-paper/80 backdrop-blur-sm px-3 py-2 rounded-sm text-left">
-                      <p className="font-song text-xs text-deep-blue-light">
+                    <div className="absolute top-16 right-2 bg-rice-paper/70 backdrop-blur-sm px-2 py-1 rounded-sm text-left">
+                      <p className="font-song text-[10px] text-deep-blue-light leading-tight">
                         <span className="text-deep-blue">大小：{scale}%</span>
                       </p>
-                      <p className="font-song text-xs text-deep-blue-light">
+                      <p className="font-song text-[10px] text-deep-blue-light leading-tight">
                         <span className="text-deep-blue">位置：X:{positionX} Y:{positionY}</span>
                       </p>
-                      <p className="font-song text-xs text-deep-blue-light">
+                      <p className="font-song text-[10px] text-deep-blue-light leading-tight">
                         <span className="text-deep-blue">叠加：{blendModeLabels[blendMode] || blendMode}</span>
                       </p>
                     </div>
