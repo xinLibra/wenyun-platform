@@ -279,7 +279,14 @@ export default function Orders() {
                       </p>
                       <div className="flex items-center justify-between">
                         <span className="font-song text-deep-blue-light text-sm">
-                          {new Date(order.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+                          {(() => {
+                            const raw = order.created_at;
+                            const utcDateStr = raw.endsWith('Z') ? raw : raw + 'Z';
+                            const date = new Date(utcDateStr);
+                            const formatted = date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                            console.log('[DEBUG] 时间格式化:', raw, '-> 加Z后:', utcDateStr, '-> 格式化后:', formatted);
+                            return formatted;
+                          })()}
                         </span>
                         <span className="font-shufa text-palace-red text-lg">¥{product?.price}</span>
                       </div>
@@ -399,7 +406,14 @@ export default function Orders() {
                       <div className="flex justify-between">
                         <span className="font-song text-deep-blue-light text-sm">下单时间</span>
                         <span className="font-song text-deep-blue text-sm">
-                          {new Date(selectedOrder.created_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+                          {(() => {
+                            const raw = selectedOrder.created_at;
+                            const utcDateStr = raw.endsWith('Z') ? raw : raw + 'Z';
+                            const date = new Date(utcDateStr);
+                            const formatted = date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                            console.log('[DEBUG] 详情时间格式化:', raw, '-> 加Z后:', utcDateStr, '-> 格式化后:', formatted);
+                            return formatted;
+                          })()}
                         </span>
                       </div>
                       <div className="flex justify-between">
