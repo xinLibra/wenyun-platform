@@ -881,7 +881,7 @@ export default function CustomizeProduct() {
                           <img
                             src={currentProduct?.image}
                             alt={currentProduct?.name}
-                            className="w-40 h-auto object-contain"
+                            className="w-48 h-auto object-contain"
                           />
                         </div>
                       </div>
@@ -897,7 +897,7 @@ export default function CustomizeProduct() {
                             <img
                               src={currentProduct?.image}
                               alt={currentProduct?.name}
-                              className="w-40 h-auto object-contain"
+                              className="w-48 h-auto object-contain"
                             />
                             {layoutMode === 'tile' && (
                               <div
