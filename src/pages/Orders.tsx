@@ -233,7 +233,9 @@ export default function Orders() {
                           layoutMode={order.customization.layoutMode}
                           textOverlay={order.customization.textOverlay}
                           textFont={order.customization.textFont}
-                          textPosition={order.customization.textPosition}
+                          textSize={order.customization.textSize || 16}
+                          textPositionX={order.customization.textPositionX || 50}
+                          textPositionY={order.customization.textPositionY || 85}
                         />
                       ) : (
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
@@ -252,6 +254,9 @@ export default function Orders() {
                       </p>
                       <p className="font-song text-xs text-deep-blue-light mb-2">
                         定制参数：尺寸 {order.customization?.scale || 100}%，旋转 {order.customization?.rotation || 0}°
+                        {order.customization?.textOverlay && (
+                          <span>，文字：{order.customization.textOverlay}</span>
+                        )}
                       </p>
                       <div className="flex items-center justify-between">
                         <span className="font-song text-deep-blue-light text-sm">
@@ -333,7 +338,9 @@ export default function Orders() {
                             layoutMode={selectedOrder.customization.layoutMode}
                             textOverlay={selectedOrder.customization.textOverlay}
                             textFont={selectedOrder.customization.textFont}
-                            textPosition={selectedOrder.customization.textPosition}
+                            textSize={selectedOrder.customization.textSize || 16}
+                            textPositionX={selectedOrder.customization.textPositionX || 50}
+                            textPositionY={selectedOrder.customization.textPositionY || 85}
                           />
                         ) : (
                           <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
@@ -354,6 +361,9 @@ export default function Orders() {
                         </p>
                         <p className="font-song text-xs text-deep-blue-light">
                           定制参数：尺寸 {selectedOrder.customization?.scale || 100}%，旋转 {selectedOrder.customization?.rotation || 0}°，位置 ({selectedOrder.customization?.positionX || 50}%, {selectedOrder.customization?.positionY || 50}%)
+                          {selectedOrder.customization?.textOverlay && (
+                            <span>，文字：{selectedOrder.customization.textOverlay}（{selectedOrder.customization.textSize || 16}px）</span>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -545,7 +555,9 @@ export default function Orders() {
                             layoutMode={selectedOrder.customization.layoutMode}
                             textOverlay={selectedOrder.customization.textOverlay}
                             textFont={selectedOrder.customization.textFont}
-                            textPosition={selectedOrder.customization.textPosition}
+                            textSize={selectedOrder.customization.textSize || 16}
+                            textPositionX={selectedOrder.customization.textPositionX || 50}
+                            textPositionY={selectedOrder.customization.textPositionY || 85}
                           />
                         ) : (
                           <div className="w-16 h-16 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">

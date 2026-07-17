@@ -173,6 +173,36 @@ export default function CustomizeProduct() {
     }
   }
 
+  const getInitialTextParams = (productId: string) => {
+    const draftKey = `product_config_draft_${productId}`
+    const savedDraft = localStorage.getItem(draftKey)
+    if (savedDraft) {
+      try {
+        const draft = JSON.parse(savedDraft)
+        if (draft.text) {
+          return {
+            textOverlay: draft.text.textOverlay || '',
+            textFont: draft.text.textFont || 'shufa',
+            textSize: draft.text.textSize || 16,
+            textPositionX: draft.text.textPositionX || 50,
+            textPositionY: draft.text.textPositionY || 85,
+            textRotation: draft.text.textRotation || 0,
+          }
+        }
+      } catch {
+        // 解析失败
+      }
+    }
+    return {
+      textOverlay: '',
+      textFont: 'shufa' as const,
+      textSize: 16,
+      textPositionX: 50,
+      textPositionY: 85,
+      textRotation: 0,
+    }
+  }
+
   const getInitialCategory = () => {
     const savedCategory = localStorage.getItem('selected_product_category')
     if (savedCategory && ['文创', '服饰'].includes(savedCategory)) {
@@ -207,10 +237,21 @@ export default function CustomizeProduct() {
   const [showCompare, setShowCompare] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
+  const [activeTab, setActiveTab] = useState<'pattern' | 'text'>('pattern')
   
-  const [textOverlay, setTextOverlay] = useState('')
-  const [textFont, setTextFont] = useState<'shufa' | 'song' | 'hei' | 'kai'>('shufa')
-  const [textPosition, setTextPosition] = useState<'bottom-center' | 'bottom-left' | 'bottom-right'>('bottom-center')
+  const initialTextParams = getInitialTextParams(getInitialProduct())
+  const [textOverlay, setTextOverlay] = useState(initialTextParams.textOverlay)
+  const [textFont, setTextFont] = useState<'shufa' | 'song' | 'hei' | 'kai'>(initialTextParams.textFont)
+  const [textSize, setTextSize] = useState(initialTextParams.textSize)
+  const [textPositionX, setTextPositionX] = useState(initialTextParams.textPositionX)
+  const [textPositionY, setTextPositionY] = useState(initialTextParams.textPositionY)
+  const [textRotation, setTextRotation] = useState(initialTextParams.textRotation || 0)
+  const [isDraggingText, setIsDraggingText] = useState(false)
+  const [selectedElement, setSelectedElement] = useState<'pattern' | 'text' | null>('pattern')
+  const textDragStartX = useRef(0)
+  const textDragStartY = useRef(0)
+  const textDragOffsetStartX = useRef(0)
+  const textDragOffsetStartY = useRef(0)
 
   const showToastMessage = (message: string) => {
     setToastMessage(message)
@@ -321,6 +362,14 @@ export default function CustomizeProduct() {
         setPositionX(draft.params?.positionX || 50)
         setPositionY(draft.params?.positionY || 50)
         setBlendMode(draft.params?.blendMode || 'screen')
+        if (draft.text) {
+          setTextOverlay(draft.text.textOverlay || '')
+          setTextFont(draft.text.textFont || 'shufa')
+          setTextSize(draft.text.textSize || 16)
+          setTextPositionX(draft.text.textPositionX || 50)
+          setTextPositionY(draft.text.textPositionY || 85)
+          setTextRotation(draft.text.textRotation || 0)
+        }
       } catch {
         // 解析失败，使用默认值
       }
@@ -335,19 +384,35 @@ export default function CustomizeProduct() {
       patternImage: selectedPatternImage,
       layoutMode,
       params: { scale, rotation, positionX, positionY, blendMode },
+      text: { textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
       updatedAt: new Date().toISOString()
     }
     localStorage.setItem(draftKey, JSON.stringify(draft))
-  }, [selectedProduct, selectedMaterial, selectedPatternImage, layoutMode, scale, rotation, positionX, positionY, blendMode])
+  }, [selectedProduct, selectedMaterial, selectedPatternImage, layoutMode, scale, rotation, positionX, positionY, blendMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation])
 
   const handleReset = () => {
     const confirmed = window.confirm('确定要恢复默认设置吗？当前调节将被清空')
     if (confirmed) {
-      setScale(100)
-      setRotation(0)
-      setPositionX(50)
-      setPositionY(50)
-      setBlendMode('screen')
+      const preset = layoutPresets[layoutMode]
+      if (layoutMode !== 'free') {
+        setScale(preset.scale)
+        setRotation(preset.rotation)
+        setPositionX(preset.positionX)
+        setPositionY(preset.positionY)
+        setBlendMode(preset.blendMode)
+      } else {
+        setScale(100)
+        setRotation(0)
+        setPositionX(50)
+        setPositionY(50)
+        setBlendMode('screen')
+      }
+      setTextOverlay('')
+      setTextFont('shufa')
+      setTextSize(16)
+      setTextPositionX(50)
+      setTextPositionY(85)
+      setTextRotation(0)
       showToastMessage('已恢复默认设置')
     }
   }
@@ -433,6 +498,7 @@ export default function CustomizeProduct() {
       patternImage: selectedPatternImage,
       layoutMode,
       params: { scale, rotation, positionX, positionY, blendMode },
+      text: { textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
       updatedAt: new Date().toISOString()
     }
     localStorage.setItem(draftKey, JSON.stringify(draft))
@@ -469,7 +535,7 @@ export default function CustomizeProduct() {
       addToCart({
         productId: selectedProduct,
         generationId: null,
-        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, patternImage: selectedPatternImage },
+        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, patternImage: selectedPatternImage, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY },
         quantity: quantity
       })
       alert('已加入购物车')
@@ -515,7 +581,7 @@ export default function CustomizeProduct() {
         generation_id: null,
         image_url: selectedPatternImage,
         product_image: currentProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, layoutMode, textOverlay, textFont, textPosition },
+        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY },
         quantity: quantity,
         status: 'demo',
         created_at: new Date().toISOString(),
@@ -561,8 +627,14 @@ export default function CustomizeProduct() {
     e.preventDefault()
     dragStartX.current = e.clientX
     dragStartY.current = e.clientY
-    dragOffsetStartX.current = positionX
-    dragOffsetStartY.current = positionY
+    
+    if (selectedElement === 'pattern') {
+      dragOffsetStartX.current = positionX
+      dragOffsetStartY.current = positionY
+    } else if (selectedElement === 'text') {
+      dragOffsetStartX.current = textPositionX
+      dragOffsetStartY.current = textPositionY
+    }
     
     const longPressTimer = setTimeout(() => {
       window.addEventListener('mousemove', nativeMouseMoveHandler)
@@ -594,8 +666,13 @@ export default function CustomizeProduct() {
     const newX = dragOffsetStartX.current + (dx / pxPerPercent)
     const newY = dragOffsetStartY.current + (dy / pxPerPercent)
     
-    setPositionX(Math.round(Math.max(0, Math.min(100, newX))))
-    setPositionY(Math.round(Math.max(0, Math.min(100, newY))))
+    if (selectedElement === 'pattern') {
+      setPositionX(Math.round(Math.max(0, Math.min(100, newX))))
+      setPositionY(Math.round(Math.max(0, Math.min(100, newY))))
+    } else if (selectedElement === 'text') {
+      setTextPositionX(Math.round(Math.max(0, Math.min(100, newX))))
+      setTextPositionY(Math.round(Math.max(0, Math.min(100, newY))))
+    }
   }
 
   const nativeMouseUpHandler = () => {
@@ -604,12 +681,93 @@ export default function CustomizeProduct() {
     window.removeEventListener('mouseleave', nativeMouseUpHandler)
   }
 
+  const handleTextMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setIsDraggingText(true)
+    textDragStartX.current = e.clientX
+    textDragStartY.current = e.clientY
+    textDragOffsetStartX.current = textPositionX
+    textDragOffsetStartY.current = textPositionY
+    
+    window.addEventListener('mousemove', handleTextMouseMove)
+    window.addEventListener('mouseup', handleTextMouseUp)
+    window.addEventListener('mouseleave', handleTextMouseUp)
+  }
+
+  const handleTextMouseMove = (e: MouseEvent) => {
+    e.preventDefault()
+    const el = previewContainerRef.current
+    if (!el) return
+    
+    const dx = e.clientX - textDragStartX.current
+    const dy = e.clientY - textDragStartY.current
+    
+    const rect = el.getBoundingClientRect()
+    const pxPerPercent = rect.width / 100
+    
+    const newX = textDragOffsetStartX.current + (dx / pxPerPercent)
+    const newY = textDragOffsetStartY.current + (dy / pxPerPercent)
+    
+    setTextPositionX(Math.round(Math.max(0, Math.min(100, newX))))
+    setTextPositionY(Math.round(Math.max(0, Math.min(100, newY))))
+  }
+
+  const handleTextMouseUp = () => {
+    setIsDraggingText(false)
+    window.removeEventListener('mousemove', handleTextMouseMove)
+    window.removeEventListener('mouseup', handleTextMouseUp)
+    window.removeEventListener('mouseleave', handleTextMouseUp)
+  }
+
+  const handleTextTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation()
+    if (e.touches.length === 1) {
+      setIsDraggingText(true)
+      textDragStartX.current = e.touches[0].clientX
+      textDragStartY.current = e.touches[0].clientY
+      textDragOffsetStartX.current = textPositionX
+      textDragOffsetStartY.current = textPositionY
+    }
+  }
+
+  const handleTextTouchMove = (e: React.TouchEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (e.touches.length === 1 && isDraggingText) {
+      const el = previewContainerRef.current
+      if (!el) return
+      
+      const dx = e.touches[0].clientX - textDragStartX.current
+      const dy = e.touches[0].clientY - textDragStartY.current
+      
+      const rect = el.getBoundingClientRect()
+      const pxPerPercent = rect.width / 100
+      
+      const newX = textDragOffsetStartX.current + (dx / pxPerPercent)
+      const newY = textDragOffsetStartY.current + (dy / pxPerPercent)
+      
+      setTextPositionX(Math.round(Math.max(0, Math.min(100, newX))))
+      setTextPositionY(Math.round(Math.max(0, Math.min(100, newY))))
+    }
+  }
+
+  const handleTextTouchEnd = () => {
+    setIsDraggingText(false)
+  }
+
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
       dragStartX.current = e.touches[0].clientX
       dragStartY.current = e.touches[0].clientY
-      dragOffsetStartX.current = positionX
-      dragOffsetStartY.current = positionY
+      
+      if (selectedElement === 'pattern') {
+        dragOffsetStartX.current = positionX
+        dragOffsetStartY.current = positionY
+      } else if (selectedElement === 'text') {
+        dragOffsetStartX.current = textPositionX
+        dragOffsetStartY.current = textPositionY
+      }
     } else if (e.touches.length === 2) {
       const touch1 = e.touches[0]
       const touch2 = e.touches[1]
@@ -618,8 +776,14 @@ export default function CustomizeProduct() {
       const dy = touch2.clientY - touch1.clientY
       initialTouchDistance.current = Math.sqrt(dx * dx + dy * dy)
       initialTouchAngle.current = Math.atan2(dy, dx) * (180 / Math.PI)
-      initialScale.current = scale
-      initialRotation.current = rotation
+      
+      if (selectedElement === 'pattern') {
+        initialScale.current = scale
+        initialRotation.current = rotation
+      } else if (selectedElement === 'text') {
+        initialScale.current = textSize
+        initialRotation.current = 0
+      }
     }
   }
 
@@ -639,8 +803,13 @@ export default function CustomizeProduct() {
       const newX = dragOffsetStartX.current + (dx / pxPerPercent)
       const newY = dragOffsetStartY.current + (dy / pxPerPercent)
       
-      setPositionX(Math.round(Math.max(0, Math.min(100, newX))))
-      setPositionY(Math.round(Math.max(0, Math.min(100, newY))))
+      if (selectedElement === 'pattern') {
+        setPositionX(Math.round(Math.max(0, Math.min(100, newX))))
+        setPositionY(Math.round(Math.max(0, Math.min(100, newY))))
+      } else if (selectedElement === 'text') {
+        setTextPositionX(Math.round(Math.max(0, Math.min(100, newX))))
+        setTextPositionY(Math.round(Math.max(0, Math.min(100, newY))))
+      }
     } else if (e.touches.length === 2) {
       const touch1 = e.touches[0]
       const touch2 = e.touches[1]
@@ -653,8 +822,12 @@ export default function CustomizeProduct() {
       const scaleFactor = currentDistance / initialTouchDistance.current
       const angleDiff = currentAngle - initialTouchAngle.current
       
-      setScale(Math.round(Math.max(10, Math.min(200, initialScale.current * scaleFactor))))
-      setRotation(Math.round(initialRotation.current + angleDiff))
+      if (selectedElement === 'pattern') {
+        setScale(Math.round(Math.max(10, Math.min(200, initialScale.current * scaleFactor))))
+        setRotation(Math.round(initialRotation.current + angleDiff))
+      } else if (selectedElement === 'text') {
+        setTextSize(Math.round(Math.max(8, Math.min(48, initialScale.current * scaleFactor))))
+      }
     }
   }
 
@@ -663,19 +836,25 @@ export default function CustomizeProduct() {
     if (!el) return
 
     const handleWheel = (e: WheelEvent) => {
+      if (!selectedElement) return
       e.preventDefault()
       e.stopPropagation()
       const delta = e.deltaY > 0 ? -2 : 2
-      setScale((prev: number) => Math.max(10, Math.min(200, prev + delta)))
+      
+      if (selectedElement === 'pattern') {
+        setScale((prev: number) => Math.max(10, Math.min(200, prev + delta)))
+      } else if (selectedElement === 'text') {
+        setTextSize((prev: number) => Math.max(8, Math.min(48, prev + delta)))
+      }
     }
 
     el.addEventListener('wheel', handleWheel, { passive: false })
     return () => el.removeEventListener('wheel', handleWheel)
-  }, [])
+  }, [selectedElement])
 
   useEffect(() => {
     saveDraft()
-  }, [selectedProduct, selectedMaterial, scale, rotation, positionX, positionY, blendMode])
+  }, [selectedProduct, selectedMaterial, scale, rotation, positionX, positionY, blendMode, textOverlay, textFont, textSize, textPositionX, textPositionY])
 
   return (
     <div className="min-h-screen py-8 px-4 overflow-x-hidden">
@@ -834,8 +1013,8 @@ export default function CustomizeProduct() {
             transition={{ delay: 0.4 }}
             className="lg:col-span-2"
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FrameDecorations className="bg-rice-paper-light p-4">
+            <div className="flex flex-col lg:flex-row lg:gap-6">
+              <FrameDecorations className="bg-rice-paper-light p-4 lg:sticky lg:top-6 lg:self-start lg:w-1/2">
                 <div className="flex justify-between items-center mb-3">
                   <h2 className="font-shufa text-lg text-deep-blue flex items-center">
                     <span className="w-6 h-6 bg-ming-yellow/50 rounded-sm flex items-center justify-center text-deep-blue mr-2 text-sm">览</span>
@@ -871,7 +1050,11 @@ export default function CustomizeProduct() {
                   </div>
                 </div>
                 
-                <div className="relative" ref={previewContainerRef}>
+                <div className="relative" ref={previewContainerRef} onClick={(e) => {
+                    if (e.target === previewContainerRef.current) {
+                      setSelectedElement(null)
+                    }
+                  }}>
                   <div className="absolute -inset-3 border-3 border-deep-blue rounded-sm opacity-10" />
                   
                   {showCompare ? (
@@ -886,6 +1069,9 @@ export default function CustomizeProduct() {
                             src={currentProduct?.image}
                             alt={currentProduct?.name}
                             className="w-48 h-auto object-contain"
+                            draggable={false}
+                            onMouseDown={(e) => e.preventDefault()}
+                            style={{ userSelect: 'none', WebkitUserDrag: 'none' } as React.CSSProperties}
                           />
                         </div>
                       </div>
@@ -902,10 +1088,13 @@ export default function CustomizeProduct() {
                               src={currentProduct?.image}
                               alt={currentProduct?.name}
                               className="w-48 h-auto object-contain"
+                              draggable={false}
+                              onMouseDown={(e) => e.preventDefault()}
+                              style={{ userSelect: 'none', WebkitUserDrag: 'none' } as React.CSSProperties}
                             />
                             {layoutMode === 'tile' && (
                               <div
-                                className="absolute inset-0 cursor-grab active:cursor-grabbing"
+                                className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
                                 style={{
                                   backgroundImage: `url(${selectedPatternImage})`,
                                   backgroundSize: `${scale / 2}%`,
@@ -914,16 +1103,22 @@ export default function CustomizeProduct() {
                                   mixBlendMode: blendMode as any,
                                   transform: `rotate(${rotation}deg)`,
                                   transformOrigin: 'center center',
+                                  userSelect: 'none',
+                                  WebkitUserDrag: 'none',
+                                  borderStyle: selectedElement === 'pattern' ? 'dashed' : 'none',
+                                  borderWidth: '2px',
+                                  borderColor: 'rgba(98, 150, 180, 0.8)',
                                 }}
                                 draggable={false}
-                                onMouseDown={handleMouseDown}
-                                onTouchStart={handleTouchStart}
-                                onTouchMove={handleTouchMove}
+                                onClick={() => setSelectedElement('pattern')}
+                                onMouseDown={(e) => { setSelectedElement('pattern'); handleMouseDown(e) }}
+                                onTouchStart={(e) => { setSelectedElement('pattern'); handleTouchStart(e) }}
+                                onTouchMove={(e) => { e.preventDefault(); handleTouchMove(e) }}
                               />
                             )}
                             {layoutMode === 'band' && (
                               <div
-                                className="absolute cursor-grab active:cursor-grabbing"
+                                className="absolute cursor-grab active:cursor-grabbing select-none"
                                 style={{
                                   left: `${(positionX - 50) * 0.8}%`,
                                   right: `${(50 - positionX) * 0.8}%`,
@@ -936,11 +1131,17 @@ export default function CustomizeProduct() {
                                   mixBlendMode: blendMode as any,
                                   transform: `rotate(${rotation}deg)`,
                                   transformOrigin: 'center center',
+                                  userSelect: 'none',
+                                  WebkitUserDrag: 'none',
+                                  borderStyle: selectedElement === 'pattern' ? 'dashed' : 'none',
+                                  borderWidth: '2px',
+                                  borderColor: 'rgba(98, 150, 180, 0.8)',
                                 }}
                                 draggable={false}
-                                onMouseDown={handleMouseDown}
-                                onTouchStart={handleTouchStart}
-                                onTouchMove={handleTouchMove}
+                                onClick={() => setSelectedElement('pattern')}
+                                onMouseDown={(e) => { setSelectedElement('pattern'); handleMouseDown(e) }}
+                                onTouchStart={(e) => { setSelectedElement('pattern'); handleTouchStart(e) }}
+                                onTouchMove={(e) => { e.preventDefault(); handleTouchMove(e) }}
                               />
                             )}
                           </div>
@@ -962,37 +1163,56 @@ export default function CustomizeProduct() {
                               mixBlendMode: blendMode as any,
                               touchAction: 'none',
                             }}
-                            onMouseDown={handleMouseDown}
-                            onTouchStart={handleTouchStart}
+                            onMouseDown={(e) => { setSelectedElement('pattern'); handleMouseDown(e) }}
+                            onClick={() => setSelectedElement('pattern')}
+                            onTouchStart={(e) => { setSelectedElement('pattern'); handleTouchStart(e) }}
                             onTouchMove={handleTouchMove}
                           >
-                            <img
-                              src={selectedPatternImage}
-                              alt="纹样"
-                              draggable={false}
-                              className="w-32 h-32 object-cover"
-                              style={{ 
-                                opacity: 0.7,
-                                userSelect: 'none',
-                                pointerEvents: 'none'
-                              } as React.CSSProperties}
-                            />
+                            <div className="relative w-32 h-32" style={{
+                              borderStyle: selectedElement === 'pattern' ? 'dashed' : 'none',
+                              borderWidth: '2px',
+                              borderColor: 'rgba(98, 150, 180, 0.8)',
+                              borderRadius: '4px',
+                            }}>
+                              <img
+                                src={selectedPatternImage}
+                                alt="纹样"
+                                draggable={false}
+                                className="w-full h-full object-cover"
+                                style={{ 
+                                  opacity: 0.7,
+                                  userSelect: 'none',
+                                  pointerEvents: 'none'
+                                } as React.CSSProperties}
+                              />
+                            </div>
                           </motion.div>
                         )}
                         
                         {textOverlay && (
                           <div
-                            className={`absolute bottom-3 left-3 right-3 px-2 py-1 bg-rice-paper/80 backdrop-blur-sm rounded-sm ${
-                              textPosition === 'bottom-center' ? 'text-center' :
-                              textPosition === 'bottom-left' ? 'text-left' : 'text-right'
-                            }`}
+                            className="absolute px-2 py-1 cursor-grab active:cursor-grabbing select-none text-center"
                             style={{
                               fontFamily: textFont === 'shufa' ? 'Ma Shan Zheng, cursive' :
                                         textFont === 'song' ? 'Noto Serif SC, serif' :
                                         textFont === 'hei' ? 'Noto Sans SC, sans-serif' : 'KaiTi, serif',
-                              fontSize: '14px',
+                              fontSize: `${textSize}px`,
                               color: '#1a1a2e',
+                              left: `${textPositionX}%`,
+                              top: `${textPositionY}%`,
+                              transform: `translate(-50%, -50%) rotate(${textRotation}deg)`,
+                              whiteSpace: 'nowrap',
+                              borderStyle: selectedElement === 'text' ? 'dashed' : 'none',
+                              borderWidth: '2px',
+                              borderColor: 'rgba(98, 150, 180, 0.8)',
+                              borderRadius: '4px',
                             }}
+                            draggable={false}
+                            onMouseDown={(e) => { e.stopPropagation(); setSelectedElement('text'); handleTextMouseDown(e) }}
+                            onClick={(e) => { e.stopPropagation(); setSelectedElement('text') }}
+                            onTouchStart={(e) => { e.stopPropagation(); setSelectedElement('text'); handleTextTouchStart(e) }}
+                            onTouchMove={(e) => { e.stopPropagation(); handleTextTouchMove(e) }}
+                            onTouchEnd={(e) => { e.stopPropagation(); handleTextTouchEnd() }}
                           >
                             {textOverlay}
                           </div>
@@ -1012,10 +1232,13 @@ export default function CustomizeProduct() {
                             src={currentProduct?.image}
                             alt={currentProduct?.name}
                             className="w-48 h-auto object-contain"
+                            draggable={false}
+                            onMouseDown={(e) => e.preventDefault()}
+                            style={{ userSelect: 'none', WebkitUserDrag: 'none' } as React.CSSProperties}
                           />
                           {layoutMode === 'tile' && (
                             <div
-                              className="absolute inset-0 cursor-grab active:cursor-grabbing"
+                              className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
                               style={{
                                 backgroundImage: `url(${selectedPatternImage})`,
                                 backgroundSize: `${scale / 2}%`,
@@ -1024,16 +1247,18 @@ export default function CustomizeProduct() {
                                 mixBlendMode: blendMode as any,
                                 transform: `rotate(${rotation}deg)`,
                                 transformOrigin: 'center center',
+                                userSelect: 'none',
+                                WebkitUserDrag: 'none',
                               }}
                               draggable={false}
-                              onMouseDown={handleMouseDown}
-                              onTouchStart={handleTouchStart}
-                              onTouchMove={handleTouchMove}
+                              onMouseDown={(e) => { e.preventDefault(); handleMouseDown(e) }}
+                              onTouchStart={(e) => { e.preventDefault(); handleTouchStart(e) }}
+                              onTouchMove={(e) => { e.preventDefault(); handleTouchMove(e) }}
                             />
                           )}
                           {layoutMode === 'band' && (
                             <div
-                              className="absolute cursor-grab active:cursor-grabbing"
+                              className="absolute cursor-grab active:cursor-grabbing select-none"
                               style={{
                                 left: `${(positionX - 50) * 0.8}%`,
                                 right: `${(50 - positionX) * 0.8}%`,
@@ -1046,11 +1271,13 @@ export default function CustomizeProduct() {
                                 mixBlendMode: blendMode as any,
                                 transform: `rotate(${rotation}deg)`,
                                 transformOrigin: 'center center',
+                                userSelect: 'none',
+                                WebkitUserDrag: 'none',
                               }}
                               draggable={false}
-                              onMouseDown={handleMouseDown}
-                              onTouchStart={handleTouchStart}
-                              onTouchMove={handleTouchMove}
+                              onMouseDown={(e) => { e.preventDefault(); handleMouseDown(e) }}
+                              onTouchStart={(e) => { e.preventDefault(); handleTouchStart(e) }}
+                              onTouchMove={(e) => { e.preventDefault(); handleTouchMove(e) }}
                             />
                           )}
                         </div>
@@ -1072,37 +1299,56 @@ export default function CustomizeProduct() {
                             mixBlendMode: blendMode as any,
                             touchAction: 'none',
                           }}
-                          onMouseDown={handleMouseDown}
-                          onTouchStart={handleTouchStart}
+                          onMouseDown={(e) => { setSelectedElement('pattern'); handleMouseDown(e) }}
+                          onClick={() => setSelectedElement('pattern')}
+                          onTouchStart={(e) => { setSelectedElement('pattern'); handleTouchStart(e) }}
                           onTouchMove={handleTouchMove}
                         >
-                          <img
-                            src={selectedPatternImage}
-                            alt="纹样"
-                            draggable={false}
-                            className="w-40 h-40 object-cover"
-                            style={{ 
-                              opacity: 0.7,
-                              userSelect: 'none',
-                              pointerEvents: 'none'
-                            } as React.CSSProperties}
-                          />
+                          <div className="relative w-40 h-40" style={{
+                              borderStyle: selectedElement === 'pattern' ? 'dashed' : 'none',
+                              borderWidth: '2px',
+                              borderColor: 'rgba(98, 150, 180, 0.8)',
+                              borderRadius: '4px',
+                            }}>
+                            <img
+                              src={selectedPatternImage}
+                              alt="纹样"
+                              draggable={false}
+                              className="w-full h-full object-cover"
+                              style={{ 
+                                opacity: 0.7,
+                                userSelect: 'none',
+                                pointerEvents: 'none'
+                              } as React.CSSProperties}
+                            />
+                          </div>
                         </motion.div>
                       )}
                       
                       {textOverlay && (
                       <div
-                        className={`absolute bottom-14 left-3 right-3 px-2 py-1 bg-rice-paper/80 backdrop-blur-sm rounded-sm ${
-                          textPosition === 'bottom-center' ? 'text-center' :
-                          textPosition === 'bottom-left' ? 'text-left' : 'text-right'
-                        }`}
+                        className="absolute px-2 py-1 cursor-grab active:cursor-grabbing select-none text-center"
                         style={{
                           fontFamily: textFont === 'shufa' ? 'Ma Shan Zheng, cursive' :
                                     textFont === 'song' ? 'Noto Serif SC, serif' :
                                     textFont === 'hei' ? 'Noto Sans SC, sans-serif' : 'KaiTi, serif',
-                          fontSize: '16px',
+                          fontSize: `${textSize}px`,
                           color: '#1a1a2e',
+                          left: `${textPositionX}%`,
+                          top: `${textPositionY}%`,
+                          transform: `translate(-50%, -50%) rotate(${textRotation}deg)`,
+                          whiteSpace: 'nowrap',
+                          borderStyle: selectedElement === 'text' ? 'dashed' : 'none',
+                          borderWidth: '2px',
+                          borderColor: 'rgba(98, 150, 180, 0.8)',
+                          borderRadius: '4px',
                         }}
+                        draggable={false}
+                        onMouseDown={(e) => { e.stopPropagation(); setSelectedElement('text'); handleTextMouseDown(e) }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedElement('text') }}
+                        onTouchStart={(e) => { e.stopPropagation(); setSelectedElement('text'); handleTextTouchStart(e) }}
+                        onTouchMove={(e) => { e.stopPropagation(); handleTextTouchMove(e) }}
+                        onTouchEnd={(e) => { e.stopPropagation(); handleTextTouchEnd() }}
                       >
                         {textOverlay}
                       </div>
@@ -1151,15 +1397,39 @@ export default function CustomizeProduct() {
                 </div>
               </div>
 
-              <FrameDecorations className="bg-rice-paper-light p-4">
-                <div className="mb-4">
-                  <h2 className="font-shufa text-lg text-deep-blue flex items-center">
-                    <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">排</span>
-                    纹样排版
-                  </h2>
+              <FrameDecorations className="bg-rice-paper-light p-4 lg:w-1/2">
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => setActiveTab('pattern')}
+                    className={`flex-1 py-2 rounded-sm font-shufa text-sm transition-all duration-300 ${
+                      activeTab === 'pattern'
+                        ? 'bg-palace-red text-rice-paper shadow-md'
+                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                    }`}
+                  >
+                    图案设置
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('text')}
+                    className={`flex-1 py-2 rounded-sm font-shufa text-sm transition-all duration-300 ${
+                      activeTab === 'text'
+                        ? 'bg-palace-red text-rice-paper shadow-md'
+                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                    }`}
+                  >
+                    文字设置
+                  </button>
                 </div>
-                
-                <div className="grid grid-cols-4 gap-2 mb-6">
+
+                <>
+                {activeTab === 'pattern' && (
+                  <div className="space-y-6">
+                    <div>
+                      <h2 className="font-shufa text-lg text-deep-blue flex items-center mb-4">
+                        <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">排</span>
+                        纹样排版
+                      </h2>
+                      <div className="grid grid-cols-4 gap-2">
                   {(Object.keys(layoutPresets) as LayoutMode[]).map((mode) => {
                     const preset = layoutPresets[mode]
                     return (
@@ -1179,56 +1449,66 @@ export default function CustomizeProduct() {
                   })}
                 </div>
 
-                <div className="mb-4">
-                  <h2 className="font-shufa text-lg text-deep-blue flex items-center">
-                    <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">定</span>
-                    定制调节
-                  </h2>
-                </div>
-                
-                <div className="space-y-4">
-                  <InkSlider
-                    label="纹样大小"
-                    value={scale}
-                    min={10}
-                    max={200}
-                    onChange={setScale}
-                    className="w-full"
-                  />
+                <div className="pt-4 border-t border-deep-blue-100">
+                    <h2 className="font-shufa text-lg text-deep-blue flex items-center mb-4">
+                      <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">定</span>
+                      定制调节
+                    </h2>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block font-song text-deep-blue text-xs mb-1">纹样大小</label>
+                        <InkSlider
+                          label={`${scale}%`}
+                          value={scale}
+                          min={10}
+                          max={200}
+                          onChange={setScale}
+                          className="w-full"
+                        />
+                      </div>
                   
                   {layoutMode !== 'tile' && (
-                    <InkSlider
-                      label="左右偏移"
-                      value={positionX}
-                      min={0}
-                      max={100}
-                      onChange={setPositionX}
-                      className="w-full"
-                    />
-                  )}
+                        <div>
+                          <label className="block font-song text-deep-blue text-xs mb-1">左右偏移</label>
+                          <InkSlider
+                            label={`${positionX}%`}
+                            value={positionX}
+                            min={0}
+                            max={100}
+                            onChange={setPositionX}
+                            className="w-full"
+                          />
+                        </div>
+                      )}
+                      
+                      {layoutMode !== 'tile' && (
+                        <div>
+                          <label className="block font-song text-deep-blue text-xs mb-1">上下偏移</label>
+                          <InkSlider
+                            label={`${positionY}%`}
+                            value={positionY}
+                            min={0}
+                            max={100}
+                            onChange={setPositionY}
+                            className="w-full"
+                          />
+                        </div>
+                      )}
+                      
+                      <div>
+                        <label className="block font-song text-deep-blue text-xs mb-1">旋转角度</label>
+                        <InkSlider
+                          label={`${rotation}°`}
+                          value={rotation}
+                          min={-180}
+                          max={180}
+                          onChange={setRotation}
+                          className="w-full"
+                        />
+                      </div>
                   
-                  {layoutMode !== 'tile' && (
-                    <InkSlider
-                      label="上下偏移"
-                      value={positionY}
-                      min={0}
-                      max={100}
-                      onChange={setPositionY}
-                      className="w-full"
-                    />
-                  )}
-                  
-                  <InkSlider
-                    label="旋转角度"
-                    value={rotation}
-                    min={-180}
-                    max={180}
-                    onChange={setRotation}
-                    className="w-full"
-                  />
-                  
-                  <div className="pt-3 border-t border-deep-blue-100">
-                    <label className="block font-song text-deep-blue text-sm mb-2">叠加效果</label>
+                  <div className="pt-4 border-t border-deep-blue-100">
+                    <label className="block font-song text-deep-blue text-sm mb-3">叠加效果</label>
                     <BambooToggle
                       options={[
                         { value: 'normal', label: '正常' },
@@ -1240,73 +1520,112 @@ export default function CustomizeProduct() {
                       onChange={setBlendMode}
                     />
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'text' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block font-song text-deep-blue text-xs mb-2">文字内容</label>
+                    <input
+                      type="text"
+                      placeholder="输入文字（20字以内）"
+                      value={textOverlay}
+                      onChange={(e) => setTextOverlay(e.target.value.slice(0, 20))}
+                      className="w-full px-3 py-2 border border-deep-blue-200 rounded-sm bg-rice-paper font-song text-deep-blue focus:outline-none focus:border-palace-red"
+                    />
+                  </div>
                   
-                  <div className="pt-3 border-t border-deep-blue-100">
-                    <h3 className="font-shufa text-deep-blue text-sm mb-3 flex items-center">
-                      <span className="w-4 h-4 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">文</span>
-                      文字嵌入
-                    </h3>
+                  <div>
+                    <label className="block font-song text-deep-blue text-xs mb-2">字体选择</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { value: 'shufa', label: '书法体' },
+                        { value: 'song', label: '宋体' },
+                        { value: 'hei', label: '黑体' },
+                        { value: 'kai', label: '楷体' },
+                      ].map(font => (
+                        <button
+                          key={font.value}
+                          onClick={() => setTextFont(font.value as any)}
+                          className={`p-2 rounded-sm border transition-all text-center ${
+                            textFont === font.value
+                              ? 'bg-palace-red border-palace-red'
+                              : 'bg-rice-paper border-deep-blue-200 hover:border-palace-red'
+                          }`}
+                          style={{
+                            fontFamily: font.value === 'shufa' ? 'Ma Shan Zheng, cursive' :
+                                       font.value === 'song' ? 'Noto Serif SC, serif' :
+                                       font.value === 'hei' ? 'Noto Sans SC, sans-serif' : 'KaiTi, serif',
+                          }}
+                        >
+                          <div className={`text-sm ${
+                            textFont === font.value ? 'text-ming-yellow' : 'text-deep-blue'
+                          }`}>
+                            {font.label}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="bg-deep-blue-50/50 rounded-sm p-3">
+                    <p className="hidden sm:block font-song text-xs text-deep-blue-light mb-3 text-center">点击选中文字后，可拖动调整位置，滚轮调整大小</p>
+                    <p className="sm:hidden font-song text-xs text-deep-blue-light mb-3 text-center">点击选中文字后，可拖动调整位置，双指缩放调整大小</p>
                     
-                    <div className="space-y-3">
-                      <input
-                        type="text"
-                        placeholder="输入文字（20字以内）"
-                        value={textOverlay}
-                        onChange={(e) => setTextOverlay(e.target.value.slice(0, 20))}
-                        className="w-full px-3 py-2 border border-deep-blue-200 rounded-sm bg-rice-paper font-song text-deep-blue focus:outline-none focus:border-palace-red"
+                    <div>
+                      <label className="block font-song text-deep-blue text-xs mb-2">字体大小</label>
+                      <InkSlider
+                        label={`${textSize}px`}
+                        value={textSize}
+                        min={8}
+                        max={48}
+                        onChange={setTextSize}
+                        className="w-full"
                       />
-                      
-                      <div>
-                        <label className="block font-song text-deep-blue text-xs mb-2">字体选择</label>
-                        <div className="flex gap-2">
-                          {[
-                            { value: 'shufa', label: '书法体' },
-                            { value: 'song', label: '宋体' },
-                            { value: 'hei', label: '黑体' },
-                            { value: 'kai', label: '楷体' },
-                          ].map(font => (
-                            <button
-                              key={font.value}
-                              onClick={() => setTextFont(font.value as any)}
-                              className={`flex-1 px-3 py-1.5 text-xs rounded-sm border transition-all ${
-                                textFont === font.value
-                                  ? 'bg-palace-red text-ming-yellow border-palace-red'
-                                  : 'bg-rice-paper text-deep-blue border-deep-blue-200 hover:border-palace-red'
-                              }`}
-                            >
-                              {font.label}
-                            </button>
-                          ))}
-                        </div>
+                    </div>
+                    
+                    <div className="mt-3">
+                    <label className="block font-song text-deep-blue text-xs mb-2">文字位置</label>
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <InkSlider
+                          label="水平"
+                          value={textPositionX}
+                          min={0}
+                          max={100}
+                          onChange={setTextPositionX}
+                          className="w-full"
+                        />
                       </div>
-                      
-                      <div>
-                        <label className="block font-song text-deep-blue text-xs mb-2">文字位置</label>
-                        <div className="flex gap-2">
-                          {[
-                            { value: 'bottom-center', label: '底部居中' },
-                            { value: 'bottom-left', label: '左下角' },
-                            { value: 'bottom-right', label: '右下角' },
-                          ].map(pos => (
-                            <button
-                              key={pos.value}
-                              onClick={() => setTextPosition(pos.value as any)}
-                              className={`flex-1 px-3 py-1.5 text-xs rounded-sm border transition-all ${
-                                textPosition === pos.value
-                                  ? 'bg-palace-red text-ming-yellow border-palace-red'
-                                  : 'bg-rice-paper text-deep-blue border-deep-blue-200 hover:border-palace-red'
-                              }`}
-                            >
-                              {pos.label}
-                            </button>
-                          ))}
-                        </div>
+                      <div className="flex-1">
+                        <InkSlider
+                          label="垂直"
+                          value={textPositionY}
+                          min={0}
+                          max={100}
+                          onChange={setTextPositionY}
+                          className="w-full"
+                        />
                       </div>
                     </div>
                   </div>
+                  
+                  <div className="mt-3">
+                    <label className="block font-song text-deep-blue text-xs mb-2">旋转角度</label>
+                    <InkSlider
+                      label={`${textRotation}°`}
+                      value={textRotation}
+                      min={-180}
+                      max={180}
+                      onChange={setTextRotation}
+                      className="w-full"
+                    />
+                  </div>
                 </div>
-              </FrameDecorations>
-            </div>
+            )}
+                </>
+            </FrameDecorations>
 
             <div className="flex flex-wrap justify-between items-center gap-4 mt-6">
               <div className="flex gap-2">

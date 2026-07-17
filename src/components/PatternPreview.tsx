@@ -14,7 +14,9 @@ interface PatternPreviewProps {
   layoutMode?: 'center' | 'tile' | 'corner' | 'band' | 'free';
   textOverlay?: string;
   textFont?: 'shufa' | 'song' | 'hei' | 'kai';
-  textPosition?: 'bottom-center' | 'bottom-left' | 'bottom-right';
+  textSize?: number;
+  textPositionX?: number;
+  textPositionY?: number;
 }
 
 const PatternPreview: React.FC<PatternPreviewProps> = ({
@@ -30,7 +32,9 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
   layoutMode = 'free',
   textOverlay = '',
   textFont = 'shufa',
-  textPosition = 'bottom-center',
+  textSize = 16,
+  textPositionX = 50,
+  textPositionY = 85,
 }) => {
   const sizeConfig = {
     small: {
@@ -38,18 +42,21 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
       productSize: 'w-14 h-auto',
       patternSize: 'w-12 h-12',
       offsetMultiplier: 0.5,
+      textScale: 0.35,
     },
     medium: {
       containerSize: 'w-48 h-64',
       productSize: 'w-32 h-auto',
       patternSize: 'w-28 h-28',
       offsetMultiplier: 1.5,
+      textScale: 0.75,
     },
     large: {
       containerSize: 'w-64 h-85',
       productSize: 'w-48 h-auto',
       patternSize: 'w-40 h-40',
       offsetMultiplier: 2,
+      textScale: 1,
     },
   };
 
@@ -159,16 +166,17 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
       
       {textOverlay && (
         <div
-          className={`absolute bottom-2 left-2 right-2 px-2 py-1 bg-rice-paper/80 backdrop-blur-sm rounded-sm ${
-            textPosition === 'bottom-center' ? 'text-center' :
-            textPosition === 'bottom-left' ? 'text-left' : 'text-right'
-          }`}
+          className="absolute px-2 py-1 text-center"
           style={{
             fontFamily: textFont === 'shufa' ? 'Ma Shan Zheng, cursive' :
                       textFont === 'song' ? 'Noto Serif SC, serif' :
                       textFont === 'hei' ? 'Noto Sans SC, sans-serif' : 'KaiTi, serif',
-            fontSize: size === 'small' ? '10px' : size === 'medium' ? '12px' : '14px',
+            fontSize: `${textSize * config.textScale}px`,
             color: '#1a1a2e',
+            left: `${textPositionX}%`,
+            top: `${textPositionY}%`,
+            transform: 'translate(-50%, -50%)',
+            whiteSpace: 'nowrap',
           }}
         >
           {textOverlay}

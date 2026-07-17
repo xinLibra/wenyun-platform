@@ -228,6 +228,12 @@ export default function Cart() {
                           blendMode={item.customization.blendMode || 'normal'}
                           size="small"
                           showFrame={false}
+                          layoutMode={item.customization.layoutMode || 'free'}
+                          textOverlay={item.customization.textOverlay}
+                          textFont={item.customization.textFont}
+                          textSize={item.customization.textSize || 16}
+                          textPositionX={item.customization.textPositionX || 50}
+                          textPositionY={item.customization.textPositionY || 85}
                         />
                       ) : (
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
