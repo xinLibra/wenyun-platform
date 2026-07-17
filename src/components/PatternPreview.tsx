@@ -139,14 +139,17 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
       )}
 
       <div className="absolute inset-0 flex items-center justify-center">
-        <img
-          src={productImage}
-          alt="产品"
-          className={`${config.productSize} object-contain`}
-        />
+        <div className="relative">
+          <img
+            src={productImage}
+            alt="产品"
+            className={`${config.productSize} object-contain`}
+          />
+          {(layoutMode === 'tile' || layoutMode === 'band') && renderPattern()}
+        </div>
       </div>
 
-      {renderPattern()}
+      {(layoutMode !== 'tile' && layoutMode !== 'band') && renderPattern()}
     </div>
   );
 };
