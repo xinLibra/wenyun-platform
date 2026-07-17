@@ -12,6 +12,9 @@ interface PatternPreviewProps {
   size?: 'small' | 'medium' | 'large';
   showFrame?: boolean;
   layoutMode?: 'center' | 'tile' | 'corner' | 'band' | 'free';
+  textOverlay?: string;
+  textFont?: 'shufa' | 'song' | 'hei' | 'kai';
+  textPosition?: 'bottom-center' | 'bottom-left' | 'bottom-right';
 }
 
 const PatternPreview: React.FC<PatternPreviewProps> = ({
@@ -25,6 +28,9 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
   size = 'medium',
   showFrame = true,
   layoutMode = 'free',
+  textOverlay = '',
+  textFont = 'shufa',
+  textPosition = 'bottom-center',
 }) => {
   const sizeConfig = {
     small: {
@@ -150,6 +156,24 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
       </div>
 
       {(layoutMode !== 'tile' && layoutMode !== 'band') && renderPattern()}
+      
+      {textOverlay && (
+        <div
+          className={`absolute bottom-2 left-2 right-2 px-2 py-1 bg-rice-paper/80 backdrop-blur-sm rounded-sm ${
+            textPosition === 'bottom-center' ? 'text-center' :
+            textPosition === 'bottom-left' ? 'text-left' : 'text-right'
+          }`}
+          style={{
+            fontFamily: textFont === 'shufa' ? 'Ma Shan Zheng, cursive' :
+                      textFont === 'song' ? 'Noto Serif SC, serif' :
+                      textFont === 'hei' ? 'Noto Sans SC, sans-serif' : 'KaiTi, serif',
+            fontSize: size === 'small' ? '10px' : size === 'medium' ? '12px' : '14px',
+            color: '#1a1a2e',
+          }}
+        >
+          {textOverlay}
+        </div>
+      )}
     </div>
   );
 };

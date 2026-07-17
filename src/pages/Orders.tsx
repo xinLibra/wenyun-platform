@@ -231,6 +231,9 @@ export default function Orders() {
                           size="small"
                           showFrame={false}
                           layoutMode={order.customization.layoutMode}
+                          textOverlay={order.customization.textOverlay}
+                          textFont={order.customization.textFont}
+                          textPosition={order.customization.textPosition}
                         />
                       ) : (
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
@@ -328,6 +331,9 @@ export default function Orders() {
                             size="small"
                             showFrame={false}
                             layoutMode={selectedOrder.customization.layoutMode}
+                            textOverlay={selectedOrder.customization.textOverlay}
+                            textFont={selectedOrder.customization.textFont}
+                            textPosition={selectedOrder.customization.textPosition}
                           />
                         ) : (
                           <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
@@ -537,6 +543,9 @@ export default function Orders() {
                             size="small"
                             showFrame={false}
                             layoutMode={selectedOrder.customization.layoutMode}
+                            textOverlay={selectedOrder.customization.textOverlay}
+                            textFont={selectedOrder.customization.textFont}
+                            textPosition={selectedOrder.customization.textPosition}
                           />
                         ) : (
                           <div className="w-16 h-16 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">

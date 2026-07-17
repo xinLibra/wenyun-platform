@@ -207,6 +207,10 @@ export default function CustomizeProduct() {
   const [showCompare, setShowCompare] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
+  
+  const [textOverlay, setTextOverlay] = useState('')
+  const [textFont, setTextFont] = useState<'shufa' | 'song' | 'hei' | 'kai'>('shufa')
+  const [textPosition, setTextPosition] = useState<'bottom-center' | 'bottom-left' | 'bottom-right'>('bottom-center')
 
   const showToastMessage = (message: string) => {
     setToastMessage(message)
@@ -511,7 +515,7 @@ export default function CustomizeProduct() {
         generation_id: null,
         image_url: selectedPatternImage,
         product_image: currentProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, layoutMode },
+        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, layoutMode, textOverlay, textFont, textPosition },
         quantity: quantity,
         status: 'demo',
         created_at: new Date().toISOString(),
@@ -975,6 +979,24 @@ export default function CustomizeProduct() {
                             />
                           </motion.div>
                         )}
+                        
+                        {textOverlay && (
+                          <div
+                            className={`absolute bottom-3 left-3 right-3 px-2 py-1 bg-rice-paper/80 backdrop-blur-sm rounded-sm ${
+                              textPosition === 'bottom-center' ? 'text-center' :
+                              textPosition === 'bottom-left' ? 'text-left' : 'text-right'
+                            }`}
+                            style={{
+                              fontFamily: textFont === 'shufa' ? 'Ma Shan Zheng, cursive' :
+                                        textFont === 'song' ? 'Noto Serif SC, serif' :
+                                        textFont === 'hei' ? 'Noto Sans SC, sans-serif' : 'KaiTi, serif',
+                              fontSize: '14px',
+                              color: '#1a1a2e',
+                            }}
+                          >
+                            {textOverlay}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -1068,7 +1090,25 @@ export default function CustomizeProduct() {
                         </motion.div>
                       )}
                       
-                      <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
+                      {textOverlay && (
+                      <div
+                        className={`absolute bottom-14 left-3 right-3 px-2 py-1 bg-rice-paper/80 backdrop-blur-sm rounded-sm ${
+                          textPosition === 'bottom-center' ? 'text-center' :
+                          textPosition === 'bottom-left' ? 'text-left' : 'text-right'
+                        }`}
+                        style={{
+                          fontFamily: textFont === 'shufa' ? 'Ma Shan Zheng, cursive' :
+                                    textFont === 'song' ? 'Noto Serif SC, serif' :
+                                    textFont === 'hei' ? 'Noto Sans SC, sans-serif' : 'KaiTi, serif',
+                          fontSize: '16px',
+                          color: '#1a1a2e',
+                        }}
+                      >
+                        {textOverlay}
+                      </div>
+                    )}
+                    
+                    <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
                         <div>
                           <h3 className="font-shufa text-lg text-deep-blue">{currentProduct?.name}</h3>
                           <p className="font-song text-palace-red text-base">¥{currentProduct?.price}</p>
@@ -1199,6 +1239,70 @@ export default function CustomizeProduct() {
                       value={blendMode}
                       onChange={setBlendMode}
                     />
+                  </div>
+                  
+                  <div className="pt-3 border-t border-deep-blue-100">
+                    <h3 className="font-shufa text-deep-blue text-sm mb-3 flex items-center">
+                      <span className="w-4 h-4 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">文</span>
+                      文字嵌入
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        placeholder="输入文字（20字以内）"
+                        value={textOverlay}
+                        onChange={(e) => setTextOverlay(e.target.value.slice(0, 20))}
+                        className="w-full px-3 py-2 border border-deep-blue-200 rounded-sm bg-rice-paper font-song text-deep-blue focus:outline-none focus:border-palace-red"
+                      />
+                      
+                      <div>
+                        <label className="block font-song text-deep-blue text-xs mb-2">字体选择</label>
+                        <div className="flex gap-2">
+                          {[
+                            { value: 'shufa', label: '书法体' },
+                            { value: 'song', label: '宋体' },
+                            { value: 'hei', label: '黑体' },
+                            { value: 'kai', label: '楷体' },
+                          ].map(font => (
+                            <button
+                              key={font.value}
+                              onClick={() => setTextFont(font.value as any)}
+                              className={`flex-1 px-3 py-1.5 text-xs rounded-sm border transition-all ${
+                                textFont === font.value
+                                  ? 'bg-palace-red text-ming-yellow border-palace-red'
+                                  : 'bg-rice-paper text-deep-blue border-deep-blue-200 hover:border-palace-red'
+                              }`}
+                            >
+                              {font.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <label className="block font-song text-deep-blue text-xs mb-2">文字位置</label>
+                        <div className="flex gap-2">
+                          {[
+                            { value: 'bottom-center', label: '底部居中' },
+                            { value: 'bottom-left', label: '左下角' },
+                            { value: 'bottom-right', label: '右下角' },
+                          ].map(pos => (
+                            <button
+                              key={pos.value}
+                              onClick={() => setTextPosition(pos.value as any)}
+                              className={`flex-1 px-3 py-1.5 text-xs rounded-sm border transition-all ${
+                                textPosition === pos.value
+                                  ? 'bg-palace-red text-ming-yellow border-palace-red'
+                                  : 'bg-rice-paper text-deep-blue border-deep-blue-200 hover:border-palace-red'
+                              }`}
+                            >
+                              {pos.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </FrameDecorations>
