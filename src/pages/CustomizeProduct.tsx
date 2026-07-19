@@ -7,6 +7,8 @@ import { InkSlider } from '../components/ui/InkSlider'
 import { BambooToggle } from '../components/ui/Select'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
+import { PatternRenderer, layoutPresets } from '../components/PatternRenderer'
+import { DraggableText } from '../components/DraggableText'
 import { useCart } from '../hooks/useCart'
 import { supabase } from '../lib/supabase'
 
@@ -65,61 +67,7 @@ const blendModeLabels: Record<string, string> = {
   screen: '滤色',
 }
 
-const layoutPresets: Record<LayoutMode, {
-  name: string
-  icon: string
-  scale: number
-  rotation: number
-  positionX: number
-  positionY: number
-  blendMode: string
-}> = {
-  center: {
-    name: '居中放大',
-    icon: '◎',
-    scale: 120,
-    rotation: 0,
-    positionX: 50,
-    positionY: 50,
-    blendMode: 'screen',
-  },
-  tile: {
-    name: '重复平铺',
-    icon: '◆',
-    scale: 50,
-    rotation: 0,
-    positionX: 50,
-    positionY: 50,
-    blendMode: 'screen',
-  },
-  corner: {
-    name: '角落点缀',
-    icon: '◇',
-    scale: 25,
-    rotation: 0,
-    positionX: 15,
-    positionY: 85,
-    blendMode: 'screen',
-  },
-  band: {
-    name: '腰封式',
-    icon: '▬',
-    scale: 50,
-    rotation: 0,
-    positionX: 50,
-    positionY: 50,
-    blendMode: 'screen',
-  },
-  free: {
-    name: '自由模式',
-    icon: '✦',
-    scale: 100,
-    rotation: 0,
-    positionX: 50,
-    positionY: 50,
-    blendMode: 'screen',
-  },
-}
+
 
 const getInitialProduct = () => {
   const savedProduct = localStorage.getItem('selected_product_id')
@@ -246,12 +194,7 @@ export default function CustomizeProduct() {
   const [textPositionX, setTextPositionX] = useState(initialTextParams.textPositionX)
   const [textPositionY, setTextPositionY] = useState(initialTextParams.textPositionY)
   const [textRotation, setTextRotation] = useState(initialTextParams.textRotation || 0)
-  const [isDraggingText, setIsDraggingText] = useState(false)
   const [selectedElement, setSelectedElement] = useState<'pattern' | 'text' | null>('pattern')
-  const textDragStartX = useRef(0)
-  const textDragStartY = useRef(0)
-  const textDragOffsetStartX = useRef(0)
-  const textDragOffsetStartY = useRef(0)
 
   const showToastMessage = (message: string) => {
     setToastMessage(message)
@@ -323,6 +266,7 @@ export default function CustomizeProduct() {
   const [patternModalLoading, setPatternModalLoading] = useState(false)
   const dragRef = useRef<HTMLDivElement>(null)
   const previewContainerRef = useRef<HTMLDivElement>(null)
+  const productBoxRef = useRef<HTMLDivElement>(null)   // 新增：拖拽比例计算改用这个更小、更准确的容器
 
   useEffect(() => {
     const reorderProduct = localStorage.getItem('reorder_product')
@@ -535,7 +479,7 @@ export default function CustomizeProduct() {
       addToCart({
         productId: selectedProduct,
         generationId: null,
-        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, patternImage: selectedPatternImage, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY },
+        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, patternImage: selectedPatternImage, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
         quantity: quantity
       })
       alert('已加入购物车')
@@ -581,7 +525,7 @@ export default function CustomizeProduct() {
         generation_id: null,
         image_url: selectedPatternImage,
         product_image: currentProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY },
+        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
         quantity: quantity,
         status: 'demo',
         created_at: new Date().toISOString(),
@@ -624,17 +568,10 @@ export default function CustomizeProduct() {
   const dragOffsetStartY = useRef(0)
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault()
     dragStartX.current = e.clientX
     dragStartY.current = e.clientY
-    
-    if (selectedElement === 'pattern') {
-      dragOffsetStartX.current = positionX
-      dragOffsetStartY.current = positionY
-    } else if (selectedElement === 'text') {
-      dragOffsetStartX.current = textPositionX
-      dragOffsetStartY.current = textPositionY
-    }
+    dragOffsetStartX.current = positionX
+    dragOffsetStartY.current = positionY
     
     const longPressTimer = setTimeout(() => {
       window.addEventListener('mousemove', nativeMouseMoveHandler)
@@ -654,8 +591,8 @@ export default function CustomizeProduct() {
 
   const nativeMouseMoveHandler = (e: MouseEvent) => {
     e.preventDefault()
-    const el = dragRef.current || previewContainerRef.current
-    if (!el) return
+  const el = productBoxRef.current
+  if (!el) return
     
     const dx = e.clientX - dragStartX.current
     const dy = e.clientY - dragStartY.current
@@ -666,13 +603,8 @@ export default function CustomizeProduct() {
     const newX = dragOffsetStartX.current + (dx / pxPerPercent)
     const newY = dragOffsetStartY.current + (dy / pxPerPercent)
     
-    if (selectedElement === 'pattern') {
-      setPositionX(Math.round(Math.max(0, Math.min(100, newX))))
-      setPositionY(Math.round(Math.max(0, Math.min(100, newY))))
-    } else if (selectedElement === 'text') {
-      setTextPositionX(Math.round(Math.max(0, Math.min(100, newX))))
-      setTextPositionY(Math.round(Math.max(0, Math.min(100, newY))))
-    }
+    setPositionX(Math.round(Math.max(0, Math.min(100, newX))))
+    setPositionY(Math.round(Math.max(0, Math.min(100, newY))))
   }
 
   const nativeMouseUpHandler = () => {
@@ -681,93 +613,12 @@ export default function CustomizeProduct() {
     window.removeEventListener('mouseleave', nativeMouseUpHandler)
   }
 
-  const handleTextMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    e.preventDefault()
-    setIsDraggingText(true)
-    textDragStartX.current = e.clientX
-    textDragStartY.current = e.clientY
-    textDragOffsetStartX.current = textPositionX
-    textDragOffsetStartY.current = textPositionY
-    
-    window.addEventListener('mousemove', handleTextMouseMove)
-    window.addEventListener('mouseup', handleTextMouseUp)
-    window.addEventListener('mouseleave', handleTextMouseUp)
-  }
-
-  const handleTextMouseMove = (e: MouseEvent) => {
-    e.preventDefault()
-    const el = previewContainerRef.current
-    if (!el) return
-    
-    const dx = e.clientX - textDragStartX.current
-    const dy = e.clientY - textDragStartY.current
-    
-    const rect = el.getBoundingClientRect()
-    const pxPerPercent = rect.width / 100
-    
-    const newX = textDragOffsetStartX.current + (dx / pxPerPercent)
-    const newY = textDragOffsetStartY.current + (dy / pxPerPercent)
-    
-    setTextPositionX(Math.round(Math.max(0, Math.min(100, newX))))
-    setTextPositionY(Math.round(Math.max(0, Math.min(100, newY))))
-  }
-
-  const handleTextMouseUp = () => {
-    setIsDraggingText(false)
-    window.removeEventListener('mousemove', handleTextMouseMove)
-    window.removeEventListener('mouseup', handleTextMouseUp)
-    window.removeEventListener('mouseleave', handleTextMouseUp)
-  }
-
-  const handleTextTouchStart = (e: React.TouchEvent) => {
-    e.stopPropagation()
-    if (e.touches.length === 1) {
-      setIsDraggingText(true)
-      textDragStartX.current = e.touches[0].clientX
-      textDragStartY.current = e.touches[0].clientY
-      textDragOffsetStartX.current = textPositionX
-      textDragOffsetStartY.current = textPositionY
-    }
-  }
-
-  const handleTextTouchMove = (e: React.TouchEvent) => {
-    e.stopPropagation()
-    e.preventDefault()
-    if (e.touches.length === 1 && isDraggingText) {
-      const el = previewContainerRef.current
-      if (!el) return
-      
-      const dx = e.touches[0].clientX - textDragStartX.current
-      const dy = e.touches[0].clientY - textDragStartY.current
-      
-      const rect = el.getBoundingClientRect()
-      const pxPerPercent = rect.width / 100
-      
-      const newX = textDragOffsetStartX.current + (dx / pxPerPercent)
-      const newY = textDragOffsetStartY.current + (dy / pxPerPercent)
-      
-      setTextPositionX(Math.round(Math.max(0, Math.min(100, newX))))
-      setTextPositionY(Math.round(Math.max(0, Math.min(100, newY))))
-    }
-  }
-
-  const handleTextTouchEnd = () => {
-    setIsDraggingText(false)
-  }
-
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
       dragStartX.current = e.touches[0].clientX
       dragStartY.current = e.touches[0].clientY
-      
-      if (selectedElement === 'pattern') {
-        dragOffsetStartX.current = positionX
-        dragOffsetStartY.current = positionY
-      } else if (selectedElement === 'text') {
-        dragOffsetStartX.current = textPositionX
-        dragOffsetStartY.current = textPositionY
-      }
+      dragOffsetStartX.current = positionX
+      dragOffsetStartY.current = positionY
     } else if (e.touches.length === 2) {
       const touch1 = e.touches[0]
       const touch2 = e.touches[1]
@@ -776,14 +627,8 @@ export default function CustomizeProduct() {
       const dy = touch2.clientY - touch1.clientY
       initialTouchDistance.current = Math.sqrt(dx * dx + dy * dy)
       initialTouchAngle.current = Math.atan2(dy, dx) * (180 / Math.PI)
-      
-      if (selectedElement === 'pattern') {
-        initialScale.current = scale
-        initialRotation.current = rotation
-      } else if (selectedElement === 'text') {
-        initialScale.current = textSize
-        initialRotation.current = 0
-      }
+      initialScale.current = scale
+      initialRotation.current = rotation
     }
   }
 
@@ -791,8 +636,8 @@ export default function CustomizeProduct() {
     e.preventDefault()
     
     if (e.touches.length === 1) {
-      const el = dragRef.current || previewContainerRef.current
-      if (!el) return
+  const el = productBoxRef.current
+  if (!el) return
       
       const dx = e.touches[0].clientX - dragStartX.current
       const dy = e.touches[0].clientY - dragStartY.current
@@ -803,13 +648,8 @@ export default function CustomizeProduct() {
       const newX = dragOffsetStartX.current + (dx / pxPerPercent)
       const newY = dragOffsetStartY.current + (dy / pxPerPercent)
       
-      if (selectedElement === 'pattern') {
-        setPositionX(Math.round(Math.max(0, Math.min(100, newX))))
-        setPositionY(Math.round(Math.max(0, Math.min(100, newY))))
-      } else if (selectedElement === 'text') {
-        setTextPositionX(Math.round(Math.max(0, Math.min(100, newX))))
-        setTextPositionY(Math.round(Math.max(0, Math.min(100, newY))))
-      }
+      setPositionX(Math.round(Math.max(0, Math.min(100, newX))))
+      setPositionY(Math.round(Math.max(0, Math.min(100, newY))))
     } else if (e.touches.length === 2) {
       const touch1 = e.touches[0]
       const touch2 = e.touches[1]
@@ -822,21 +662,16 @@ export default function CustomizeProduct() {
       const scaleFactor = currentDistance / initialTouchDistance.current
       const angleDiff = currentAngle - initialTouchAngle.current
       
-      if (selectedElement === 'pattern') {
-        setScale(Math.round(Math.max(10, Math.min(200, initialScale.current * scaleFactor))))
-        setRotation(Math.round(initialRotation.current + angleDiff))
-      } else if (selectedElement === 'text') {
-        setTextSize(Math.round(Math.max(8, Math.min(48, initialScale.current * scaleFactor))))
-      }
+      setScale(Math.round(Math.max(10, Math.min(200, initialScale.current * scaleFactor))))
+      setRotation(Math.round(initialRotation.current + angleDiff))
     }
   }
 
   useEffect(() => {
-    const el = previewContainerRef.current
+    const el = document.getElementById('preview-container')
     if (!el) return
 
     const handleWheel = (e: WheelEvent) => {
-      if (!selectedElement) return
       e.preventDefault()
       e.stopPropagation()
       const delta = e.deltaY > 0 ? -2 : 2
@@ -844,7 +679,7 @@ export default function CustomizeProduct() {
       if (selectedElement === 'pattern') {
         setScale((prev: number) => Math.max(10, Math.min(200, prev + delta)))
       } else if (selectedElement === 'text') {
-        setTextSize((prev: number) => Math.max(8, Math.min(48, prev + delta)))
+        setTextSize((prev: number) => Math.max(8, Math.min(120, prev + delta)))
       }
     }
 
@@ -852,9 +687,7 @@ export default function CustomizeProduct() {
     return () => el.removeEventListener('wheel', handleWheel)
   }, [selectedElement])
 
-  useEffect(() => {
-    saveDraft()
-  }, [selectedProduct, selectedMaterial, scale, rotation, positionX, positionY, blendMode, textOverlay, textFont, textSize, textPositionX, textPositionY])
+
 
   return (
     <div className="min-h-screen py-8 px-4 overflow-x-hidden">
@@ -1013,8 +846,8 @@ export default function CustomizeProduct() {
             transition={{ delay: 0.4 }}
             className="lg:col-span-2"
           >
-            <div className="flex flex-col lg:flex-row lg:gap-6">
-              <FrameDecorations className="bg-rice-paper-light p-4 lg:sticky lg:top-6 lg:self-start lg:w-1/2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FrameDecorations className="bg-rice-paper-light p-4">
                 <div className="flex justify-between items-center mb-3">
                   <h2 className="font-shufa text-lg text-deep-blue flex items-center">
                     <span className="w-6 h-6 bg-ming-yellow/50 rounded-sm flex items-center justify-center text-deep-blue mr-2 text-sm">览</span>
@@ -1050,11 +883,7 @@ export default function CustomizeProduct() {
                   </div>
                 </div>
                 
-                <div className="relative" ref={previewContainerRef} onClick={(e) => {
-                    if (e.target === previewContainerRef.current) {
-                      setSelectedElement(null)
-                    }
-                  }}>
+                <div className="relative" ref={previewContainerRef} id="preview-container">
                   <div className="absolute -inset-3 border-3 border-deep-blue rounded-sm opacity-10" />
                   
                   {showCompare ? (
@@ -1070,300 +899,141 @@ export default function CustomizeProduct() {
                             alt={currentProduct?.name}
                             className="w-48 h-auto object-contain"
                             draggable={false}
-                            onMouseDown={(e) => e.preventDefault()}
-                            style={{ userSelect: 'none', WebkitUserDrag: 'none' } as React.CSSProperties}
+                            onDragStart={(e) => e.preventDefault()}
                           />
                         </div>
                       </div>
                       
-                      <div className="flex-1 relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden" style={{ touchAction: 'none' }}>
+                      <div className="flex-1 relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden" style={{ touchAction: 'none' }} onClick={() => setSelectedElement(null)}>
                         <div className="absolute inset-0 bg-ink-wash opacity-10" />
                         <div className="absolute top-2 left-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
                           <p className="font-song text-xs text-deep-blue">定制效果</p>
                         </div>
                         
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="relative">
+                        <div className="absolute inset-0 flex items-center justify-center" onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}>
+                          <div className="relative" ref={productBoxRef}>
                             <img
                               src={currentProduct?.image}
                               alt={currentProduct?.name}
                               className="w-48 h-auto object-contain"
                               draggable={false}
-                              onMouseDown={(e) => e.preventDefault()}
-                              style={{ userSelect: 'none', WebkitUserDrag: 'none' } as React.CSSProperties}
+                              onDragStart={(e) => e.preventDefault()}
+                              onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
                             />
-                            {layoutMode === 'tile' && (
-                              <div
-                                className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
-                                style={{
-                                  backgroundImage: `url(${selectedPatternImage})`,
-                                  backgroundSize: `${scale / 2}%`,
-                                  backgroundRepeat: 'repeat',
-                                  opacity: 0.7,
-                                  mixBlendMode: blendMode as any,
-                                  transform: `rotate(${rotation}deg)`,
-                                  transformOrigin: 'center center',
-                                  userSelect: 'none',
-                                  WebkitUserDrag: 'none',
-                                  borderStyle: selectedElement === 'pattern' ? 'dashed' : 'none',
-                                  borderWidth: '2px',
-                                  borderColor: 'rgba(98, 150, 180, 0.8)',
+                            <PatternRenderer
+                              layoutMode={layoutMode}
+                              patternImage={selectedPatternImage}
+                              scale={scale}
+                              rotation={rotation}
+                              positionX={positionX}
+                              positionY={positionY}
+                              blendMode={blendMode}
+                              isSelected={selectedElement === 'pattern'}
+                              onSelect={() => setSelectedElement('pattern')}
+                              onMouseDown={handleMouseDown}
+                              onTouchStart={handleTouchStart}
+                              onTouchMove={handleTouchMove}
+                              imageSize="small"
+                            />
+                            {textOverlay && (
+                              <DraggableText
+                                text={textOverlay}
+                                font={textFont}
+                                fontSize={textSize}
+                                positionX={textPositionX}
+                                positionY={textPositionY}
+                                rotation={textRotation}
+                                isSelected={selectedElement === 'text'}
+                                onSelect={() => setSelectedElement('text')}
+                                onPositionChange={(x, y) => {
+                                  setTextPositionX(x)
+                                  setTextPositionY(y)
                                 }}
-                                draggable={false}
-                                onClick={() => setSelectedElement('pattern')}
-                                onMouseDown={(e) => { setSelectedElement('pattern'); handleMouseDown(e) }}
-                                onTouchStart={(e) => { setSelectedElement('pattern'); handleTouchStart(e) }}
-                                onTouchMove={(e) => { e.preventDefault(); handleTouchMove(e) }}
-                              />
-                            )}
-                            {layoutMode === 'band' && (
-                              <div
-                                className="absolute cursor-grab active:cursor-grabbing select-none"
-                                style={{
-                                  left: `${(positionX - 50) * 0.8}%`,
-                                  right: `${(50 - positionX) * 0.8}%`,
-                                  top: `${positionY - 10}%`,
-                                  height: '20%',
-                                  backgroundImage: `url(${selectedPatternImage})`,
-                                  backgroundSize: `${scale / 4}%`,
-                                  backgroundRepeat: 'repeat-x',
-                                  opacity: 0.7,
-                                  mixBlendMode: blendMode as any,
-                                  transform: `rotate(${rotation}deg)`,
-                                  transformOrigin: 'center center',
-                                  userSelect: 'none',
-                                  WebkitUserDrag: 'none',
-                                  borderStyle: selectedElement === 'pattern' ? 'dashed' : 'none',
-                                  borderWidth: '2px',
-                                  borderColor: 'rgba(98, 150, 180, 0.8)',
-                                }}
-                                draggable={false}
-                                onClick={() => setSelectedElement('pattern')}
-                                onMouseDown={(e) => { setSelectedElement('pattern'); handleMouseDown(e) }}
-                                onTouchStart={(e) => { setSelectedElement('pattern'); handleTouchStart(e) }}
-                                onTouchMove={(e) => { e.preventDefault(); handleTouchMove(e) }}
+                                containerRef={productBoxRef}
                               />
                             )}
                           </div>
                         </div>
-                        
-                        {layoutMode !== 'tile' && layoutMode !== 'band' && (
-                          <motion.div
-                            ref={dragRef}
-                            className={`absolute inset-0 flex items-center justify-center cursor-grab select-none active:cursor-grabbing`}
-                            animate={{
-                              scale: scale / 100,
-                              rotate: rotation,
-                              x: (positionX - 50) * 2,
-                              y: (positionY - 50) * 2,
-                            }}
-                            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                            style={{
-                              transformOrigin: 'center center',
-                              mixBlendMode: blendMode as any,
-                              touchAction: 'none',
-                            }}
-                            onMouseDown={(e) => { setSelectedElement('pattern'); handleMouseDown(e) }}
-                            onClick={() => setSelectedElement('pattern')}
-                            onTouchStart={(e) => { setSelectedElement('pattern'); handleTouchStart(e) }}
-                            onTouchMove={handleTouchMove}
-                          >
-                            <div className="relative w-32 h-32" style={{
-                              borderStyle: selectedElement === 'pattern' ? 'dashed' : 'none',
-                              borderWidth: '2px',
-                              borderColor: 'rgba(98, 150, 180, 0.8)',
-                              borderRadius: '4px',
-                            }}>
-                              <img
-                                src={selectedPatternImage}
-                                alt="纹样"
-                                draggable={false}
-                                className="w-full h-full object-cover"
-                                style={{ 
-                                  opacity: 0.7,
-                                  userSelect: 'none',
-                                  pointerEvents: 'none'
-                                } as React.CSSProperties}
-                              />
-                            </div>
-                          </motion.div>
-                        )}
-                        
-                        {textOverlay && (
-                          <div
-                            className="absolute px-2 py-1 cursor-grab active:cursor-grabbing select-none text-center"
-                            style={{
-                              fontFamily: textFont === 'shufa' ? 'Ma Shan Zheng, cursive' :
-                                        textFont === 'song' ? 'Noto Serif SC, serif' :
-                                        textFont === 'hei' ? 'Noto Sans SC, sans-serif' : 'KaiTi, serif',
-                              fontSize: `${textSize}px`,
-                              color: '#1a1a2e',
-                              left: `${textPositionX}%`,
-                              top: `${textPositionY}%`,
-                              transform: `translate(-50%, -50%) rotate(${textRotation}deg)`,
-                              whiteSpace: 'nowrap',
-                              borderStyle: selectedElement === 'text' ? 'dashed' : 'none',
-                              borderWidth: '2px',
-                              borderColor: 'rgba(98, 150, 180, 0.8)',
-                              borderRadius: '4px',
-                            }}
-                            draggable={false}
-                            onMouseDown={(e) => { e.stopPropagation(); setSelectedElement('text'); handleTextMouseDown(e) }}
-                            onClick={(e) => { e.stopPropagation(); setSelectedElement('text') }}
-                            onTouchStart={(e) => { e.stopPropagation(); setSelectedElement('text'); handleTextTouchStart(e) }}
-                            onTouchMove={(e) => { e.stopPropagation(); handleTextTouchMove(e) }}
-                            onTouchEnd={(e) => { e.stopPropagation(); handleTextTouchEnd() }}
-                          >
-                            {textOverlay}
-                          </div>
-                        )}
                       </div>
                     </div>
                   ) : (
                     <div
                       className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden"
                       style={{ touchAction: 'none' }}
+                      onClick={() => setSelectedElement(null)}
                     >
                       <div className="absolute inset-0 bg-ink-wash opacity-10" />
                       
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="relative">
+                      <div className="absolute inset-0 flex items-center justify-center" onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}>
+                        <div className="relative" ref={productBoxRef}>
                           <img
                             src={currentProduct?.image}
                             alt={currentProduct?.name}
                             className="w-48 h-auto object-contain"
                             draggable={false}
-                            onMouseDown={(e) => e.preventDefault()}
-                            style={{ userSelect: 'none', WebkitUserDrag: 'none' } as React.CSSProperties}
+                            onDragStart={(e) => e.preventDefault()}
+                            onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
                           />
-                          {layoutMode === 'tile' && (
-                            <div
-                              className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
-                              style={{
-                                backgroundImage: `url(${selectedPatternImage})`,
-                                backgroundSize: `${scale / 2}%`,
-                                backgroundRepeat: 'repeat',
-                                opacity: 0.7,
-                                mixBlendMode: blendMode as any,
-                                transform: `rotate(${rotation}deg)`,
-                                transformOrigin: 'center center',
-                                userSelect: 'none',
-                                WebkitUserDrag: 'none',
+                          <PatternRenderer
+                            layoutMode={layoutMode}
+                            patternImage={selectedPatternImage}
+                            scale={scale}
+                            rotation={rotation}
+                            positionX={positionX}
+                            positionY={positionY}
+                            blendMode={blendMode}
+                            isSelected={selectedElement === 'pattern'}
+                            onSelect={() => setSelectedElement('pattern')}
+                            onMouseDown={handleMouseDown}
+                            onTouchStart={handleTouchStart}
+                            onTouchMove={handleTouchMove}
+                            imageSize="large"
+                          />
+                          {textOverlay && (
+                            <DraggableText
+                              text={textOverlay}
+                              font={textFont}
+                              fontSize={textSize}
+                              positionX={textPositionX}
+                              positionY={textPositionY}
+                              rotation={textRotation}
+                              isSelected={selectedElement === 'text'}
+                              onSelect={() => setSelectedElement('text')}
+                              onPositionChange={(x, y) => {
+                                setTextPositionX(x)
+                                setTextPositionY(y)
                               }}
-                              draggable={false}
-                              onMouseDown={(e) => { e.preventDefault(); handleMouseDown(e) }}
-                              onTouchStart={(e) => { e.preventDefault(); handleTouchStart(e) }}
-                              onTouchMove={(e) => { e.preventDefault(); handleTouchMove(e) }}
-                            />
-                          )}
-                          {layoutMode === 'band' && (
-                            <div
-                              className="absolute cursor-grab active:cursor-grabbing select-none"
-                              style={{
-                                left: `${(positionX - 50) * 0.8}%`,
-                                right: `${(50 - positionX) * 0.8}%`,
-                                top: `${positionY - 10}%`,
-                                height: '20%',
-                                backgroundImage: `url(${selectedPatternImage})`,
-                                backgroundSize: `${scale / 4}%`,
-                                backgroundRepeat: 'repeat-x',
-                                opacity: 0.7,
-                                mixBlendMode: blendMode as any,
-                                transform: `rotate(${rotation}deg)`,
-                                transformOrigin: 'center center',
-                                userSelect: 'none',
-                                WebkitUserDrag: 'none',
-                              }}
-                              draggable={false}
-                              onMouseDown={(e) => { e.preventDefault(); handleMouseDown(e) }}
-                              onTouchStart={(e) => { e.preventDefault(); handleTouchStart(e) }}
-                              onTouchMove={(e) => { e.preventDefault(); handleTouchMove(e) }}
+                              containerRef={productBoxRef}
                             />
                           )}
                         </div>
                       </div>
-                      
-                      {layoutMode !== 'tile' && layoutMode !== 'band' && (
-                        <motion.div
-                          ref={dragRef}
-                          className={`absolute inset-0 flex items-center justify-center cursor-grab select-none active:cursor-grabbing`}
-                          animate={{
-                            scale: scale / 100,
-                            rotate: rotation,
-                            x: (positionX - 50) * 2,
-                            y: (positionY - 50) * 2,
-                          }}
-                          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                          style={{
-                            transformOrigin: 'center center',
-                            mixBlendMode: blendMode as any,
-                            touchAction: 'none',
-                          }}
-                          onMouseDown={(e) => { setSelectedElement('pattern'); handleMouseDown(e) }}
-                          onClick={() => setSelectedElement('pattern')}
-                          onTouchStart={(e) => { setSelectedElement('pattern'); handleTouchStart(e) }}
-                          onTouchMove={handleTouchMove}
-                        >
-                          <div className="relative w-40 h-40" style={{
-                              borderStyle: selectedElement === 'pattern' ? 'dashed' : 'none',
-                              borderWidth: '2px',
-                              borderColor: 'rgba(98, 150, 180, 0.8)',
-                              borderRadius: '4px',
-                            }}>
-                            <img
-                              src={selectedPatternImage}
-                              alt="纹样"
-                              draggable={false}
-                              className="w-full h-full object-cover"
-                              style={{ 
-                                opacity: 0.7,
-                                userSelect: 'none',
-                                pointerEvents: 'none'
-                              } as React.CSSProperties}
-                            />
-                          </div>
-                        </motion.div>
-                      )}
-                      
-                      {textOverlay && (
-                      <div
-                        className="absolute px-2 py-1 cursor-grab active:cursor-grabbing select-none text-center"
-                        style={{
-                          fontFamily: textFont === 'shufa' ? 'Ma Shan Zheng, cursive' :
-                                    textFont === 'song' ? 'Noto Serif SC, serif' :
-                                    textFont === 'hei' ? 'Noto Sans SC, sans-serif' : 'KaiTi, serif',
-                          fontSize: `${textSize}px`,
-                          color: '#1a1a2e',
-                          left: `${textPositionX}%`,
-                          top: `${textPositionY}%`,
-                          transform: `translate(-50%, -50%) rotate(${textRotation}deg)`,
-                          whiteSpace: 'nowrap',
-                          borderStyle: selectedElement === 'text' ? 'dashed' : 'none',
-                          borderWidth: '2px',
-                          borderColor: 'rgba(98, 150, 180, 0.8)',
-                          borderRadius: '4px',
-                        }}
-                        draggable={false}
-                        onMouseDown={(e) => { e.stopPropagation(); setSelectedElement('text'); handleTextMouseDown(e) }}
-                        onClick={(e) => { e.stopPropagation(); setSelectedElement('text') }}
-                        onTouchStart={(e) => { e.stopPropagation(); setSelectedElement('text'); handleTextTouchStart(e) }}
-                        onTouchMove={(e) => { e.stopPropagation(); handleTextTouchMove(e) }}
-                        onTouchEnd={(e) => { e.stopPropagation(); handleTextTouchEnd() }}
-                      >
-                        {textOverlay}
-                      </div>
-                    )}
                     
-                    <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
-                        <div>
-                          <h3 className="font-shufa text-lg text-deep-blue">{currentProduct?.name}</h3>
-                          <p className="font-song text-palace-red text-base">¥{currentProduct?.price}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-song text-xs text-deep-blue-light">材质：{materials.find(m => m.id === selectedMaterial)?.name}</span>
-                        </div>
-                      </div>
-                    </div>
+                    <div className="absolute bottom-3 left-3 right-3 flex flex-col gap-1.5">
+                                            {!showCompare && (
+                                              <div className="hidden sm:flex sm:items-center sm:gap-4 bg-rice-paper/70 backdrop-blur-sm px-2 py-1 rounded-sm w-fit">
+                                                <span className="font-song text-xs text-deep-blue-light">
+                                                  <span className="text-deep-blue">大小：{scale}%</span>
+                                                </span>
+                                                <span className="font-song text-xs text-deep-blue-light">
+                                                  <span className="text-deep-blue">位置：X:{positionX} Y:{positionY}</span>
+                                                </span>
+                                                <span className="font-song text-xs text-deep-blue-light">
+                                                  <span className="text-deep-blue">叠加：{blendModeLabels[blendMode] || blendMode}</span>
+                                                </span>
+                                              </div>
+                                            )}
+                                            <div className="flex justify-between items-end">
+                                              <div>
+                                                <h3 className="font-shufa text-lg text-deep-blue">{currentProduct?.name}</h3>
+                                                <p className="font-song text-palace-red text-base">¥{currentProduct?.price}</p>
+                                              </div>
+                                              <div className="text-right">
+                                                <span className="font-song text-xs text-deep-blue-light">材质：{materials.find(m => m.id === selectedMaterial)?.name}</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
                   )}
                   
                   <div className="absolute top-2 right-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
@@ -1373,19 +1043,6 @@ export default function CustomizeProduct() {
                     </p>
                   </div>
                   
-                  {!showCompare && (
-                    <div className="hidden sm:absolute sm:top-16 sm:right-2 bg-rice-paper/70 backdrop-blur-sm px-2 py-1 rounded-sm text-left">
-                      <p className="font-song text-xs text-deep-blue-light leading-tight">
-                        <span className="text-deep-blue">大小：{scale}%</span>
-                      </p>
-                      <p className="font-song text-xs text-deep-blue-light leading-tight">
-                        <span className="text-deep-blue">位置：X:{positionX} Y:{positionY}</span>
-                      </p>
-                      <p className="font-song text-xs text-deep-blue-light leading-tight">
-                        <span className="text-deep-blue">叠加：{blendModeLabels[blendMode] || blendMode}</span>
-                      </p>
-                    </div>
-                  )}
                 </div>
               </FrameDecorations>
 
@@ -1397,31 +1054,30 @@ export default function CustomizeProduct() {
                 </div>
               </div>
 
-              <FrameDecorations className="bg-rice-paper-light p-4 lg:w-1/2">
+              <FrameDecorations className="bg-rice-paper-light p-4">
                 <div className="flex gap-2 mb-4">
                   <button
                     onClick={() => setActiveTab('pattern')}
-                    className={`flex-1 py-2 rounded-sm font-shufa text-sm transition-all duration-300 ${
+                    className={`flex-1 py-2 px-4 rounded-sm font-shufa text-sm transition-all ${
                       activeTab === 'pattern'
                         ? 'bg-palace-red text-rice-paper shadow-md'
-                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red'
                     }`}
                   >
                     图案设置
                   </button>
                   <button
                     onClick={() => setActiveTab('text')}
-                    className={`flex-1 py-2 rounded-sm font-shufa text-sm transition-all duration-300 ${
+                    className={`flex-1 py-2 px-4 rounded-sm font-shufa text-sm transition-all ${
                       activeTab === 'text'
                         ? 'bg-palace-red text-rice-paper shadow-md'
-                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red'
                     }`}
                   >
                     文字设置
                   </button>
                 </div>
 
-                <>
                 {activeTab === 'pattern' && (
                   <div className="space-y-6">
                     <div>
@@ -1430,75 +1086,65 @@ export default function CustomizeProduct() {
                         纹样排版
                       </h2>
                       <div className="grid grid-cols-4 gap-2">
-                  {(Object.keys(layoutPresets) as LayoutMode[]).map((mode) => {
-                    const preset = layoutPresets[mode]
-                    return (
-                      <button
-                        key={mode}
-                        onClick={() => handleLayoutChange(mode)}
-                        className={`relative p-3 rounded-sm transition-all duration-300 ${
-                          layoutMode === mode
-                            ? 'bg-palace-red text-rice-paper shadow-md'
-                            : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                        }`}
-                      >
-                        <div className="text-xl mb-1">{preset.icon}</div>
-                        <div className="font-song text-xs">{preset.name}</div>
-                      </button>
-                    )
-                  })}
-                </div>
+                        {(Object.keys(layoutPresets) as LayoutMode[]).map((mode) => {
+                          const preset = layoutPresets[mode]
+                          return (
+                            <button
+                              key={mode}
+                              onClick={() => handleLayoutChange(mode)}
+                              className={`relative p-3 rounded-sm transition-all duration-300 ${
+                                layoutMode === mode
+                                  ? 'bg-palace-red text-rice-paper shadow-md'
+                                  : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                              }`}
+                            >
+                              <div className="text-xl mb-1">{preset.icon}</div>
+                              <div className="font-song text-xs">{preset.name}</div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
 
-                <div className="pt-4 border-t border-deep-blue-100">
-                    <h2 className="font-shufa text-lg text-deep-blue flex items-center mb-4">
-                      <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">定</span>
-                      定制调节
-                    </h2>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block font-song text-deep-blue text-xs mb-1">纹样大小</label>
+                    <div className="pt-4 border-t border-deep-blue-100">
+                      <h2 className="font-shufa text-lg text-deep-blue flex items-center mb-4">
+                        <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">定</span>
+                        定制调节
+                      </h2>
+                      <div className="space-y-4">
                         <InkSlider
-                          label={`${scale}%`}
+                          label="纹样大小"
                           value={scale}
                           min={10}
                           max={200}
                           onChange={setScale}
                           className="w-full"
                         />
-                      </div>
-                  
-                  {layoutMode !== 'tile' && (
-                        <div>
-                          <label className="block font-song text-deep-blue text-xs mb-1">左右偏移</label>
+                        
+                        {layoutMode !== 'tile' && (
                           <InkSlider
-                            label={`${positionX}%`}
+                            label="左右偏移"
                             value={positionX}
                             min={0}
                             max={100}
                             onChange={setPositionX}
                             className="w-full"
                           />
-                        </div>
-                      )}
-                      
-                      {layoutMode !== 'tile' && (
-                        <div>
-                          <label className="block font-song text-deep-blue text-xs mb-1">上下偏移</label>
+                        )}
+                        
+                        {layoutMode !== 'tile' && (
                           <InkSlider
-                            label={`${positionY}%`}
+                            label="上下偏移"
                             value={positionY}
                             min={0}
                             max={100}
                             onChange={setPositionY}
                             className="w-full"
                           />
-                        </div>
-                      )}
-                      
-                      <div>
-                        <label className="block font-song text-deep-blue text-xs mb-1">旋转角度</label>
+                        )}
+                        
                         <InkSlider
-                          label={`${rotation}°`}
+                          label="旋转角度"
                           value={rotation}
                           min={-180}
                           max={180}
@@ -1506,126 +1152,95 @@ export default function CustomizeProduct() {
                           className="w-full"
                         />
                       </div>
-                  
-                  <div className="pt-4 border-t border-deep-blue-100">
-                    <label className="block font-song text-deep-blue text-sm mb-3">叠加效果</label>
-                    <BambooToggle
-                      options={[
-                        { value: 'normal', label: '正常' },
-                        { value: 'overlay', label: '叠加' },
-                        { value: 'multiply', label: '正片叠底' },
-                        { value: 'screen', label: '滤色' },
-                      ]}
-                      value={blendMode}
-                      onChange={setBlendMode}
-                    />
-                  </div>
-                </div>
-              )}
+                    </div>
 
-              {activeTab === 'text' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block font-song text-deep-blue text-xs mb-2">文字内容</label>
-                    <input
-                      type="text"
-                      placeholder="输入文字（20字以内）"
-                      value={textOverlay}
-                      onChange={(e) => setTextOverlay(e.target.value.slice(0, 20))}
-                      className="w-full px-3 py-2 border border-deep-blue-200 rounded-sm bg-rice-paper font-song text-deep-blue focus:outline-none focus:border-palace-red"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block font-song text-deep-blue text-xs mb-2">字体选择</label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {[
-                        { value: 'shufa', label: '书法体' },
-                        { value: 'song', label: '宋体' },
-                        { value: 'hei', label: '黑体' },
-                        { value: 'kai', label: '楷体' },
-                      ].map(font => (
-                        <button
-                          key={font.value}
-                          onClick={() => setTextFont(font.value as any)}
-                          className={`p-2 rounded-sm border transition-all text-center ${
-                            textFont === font.value
-                              ? 'bg-palace-red border-palace-red'
-                              : 'bg-rice-paper border-deep-blue-200 hover:border-palace-red'
-                          }`}
-                          style={{
-                            fontFamily: font.value === 'shufa' ? 'Ma Shan Zheng, cursive' :
-                                       font.value === 'song' ? 'Noto Serif SC, serif' :
-                                       font.value === 'hei' ? 'Noto Sans SC, sans-serif' : 'KaiTi, serif',
-                          }}
-                        >
-                          <div className={`text-sm ${
-                            textFont === font.value ? 'text-ming-yellow' : 'text-deep-blue'
-                          }`}>
-                            {font.label}
-                          </div>
-                        </button>
-                      ))}
+                    <div className="pt-4 border-t border-deep-blue-100">
+                      <label className="block font-song text-deep-blue text-sm mb-3">叠加效果</label>
+                      <BambooToggle
+                        options={[
+                          { value: 'normal', label: '正常' },
+                          { value: 'overlay', label: '叠加' },
+                          { value: 'multiply', label: '正片叠底' },
+                          { value: 'screen', label: '滤色' },
+                        ]}
+                        value={blendMode}
+                        onChange={setBlendMode}
+                      />
                     </div>
                   </div>
-                  
-                  <div className="bg-deep-blue-50/50 rounded-sm p-3">
-                    <p className="hidden sm:block font-song text-xs text-deep-blue-light mb-3 text-center">点击选中文字后，可拖动调整位置，滚轮调整大小</p>
-                    <p className="sm:hidden font-song text-xs text-deep-blue-light mb-3 text-center">点击选中文字后，可拖动调整位置，双指缩放调整大小</p>
+                )}
+
+                {activeTab === 'text' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block font-song text-deep-blue text-xs mb-2">文字内容</label>
+                      <input
+                        type="text"
+                        placeholder="输入文字（20字以内）"
+                        value={textOverlay}
+                        onChange={(e) => setTextOverlay(e.target.value.slice(0, 20))}
+                        className="w-full px-3 py-2 border border-deep-blue-200 rounded-sm bg-rice-paper font-song text-deep-blue focus:outline-none focus:border-palace-red"
+                      />
+                    </div>
                     
                     <div>
-                      <label className="block font-song text-deep-blue text-xs mb-2">字体大小</label>
+                      <label className="block font-song text-deep-blue text-xs mb-2">字体选择</label>
+                      <div className="flex gap-2">
+                        {[
+                          { value: 'shufa', label: '书法体', fontFamily: 'Ma Shan Zheng, cursive' },
+                          { value: 'song', label: '宋体', fontFamily: 'Noto Serif SC, serif' },
+                          { value: 'hei', label: '黑体', fontFamily: 'Noto Sans SC, sans-serif' },
+                          { value: 'kai', label: '楷体', fontFamily: 'KaiTi, STKaiti, serif' },
+                        ].map(font => (
+                          <button
+                            key={font.value}
+                            onClick={() => setTextFont(font.value as any)}
+                            className={`flex-1 px-3 py-1.5 text-xs rounded-sm border transition-all ${
+                              textFont === font.value
+                                ? 'bg-palace-red text-ming-yellow border-palace-red'
+                                : 'bg-rice-paper text-deep-blue border-deep-blue-200 hover:border-palace-red'
+                            }`}
+                            style={{ fontFamily: font.fontFamily }}
+                          >
+                            {font.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block font-song text-deep-blue text-xs mb-2">文字大小</label>
                       <InkSlider
-                        label={`${textSize}px`}
+                        label=""
                         value={textSize}
                         min={8}
-                        max={48}
+                        max={120}
                         onChange={setTextSize}
                         className="w-full"
                       />
                     </div>
                     
-                    <div className="mt-3">
-                    <label className="block font-song text-deep-blue text-xs mb-2">文字位置</label>
-                    <div className="flex gap-4">
-                      <div className="flex-1">
-                        <InkSlider
-                          label="水平"
-                          value={textPositionX}
-                          min={0}
-                          max={100}
-                          onChange={setTextPositionX}
-                          className="w-full"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <InkSlider
-                          label="垂直"
-                          value={textPositionY}
-                          min={0}
-                          max={100}
-                          onChange={setTextPositionY}
-                          className="w-full"
-                        />
-                      </div>
+                    <div>
+                      <label className="block font-song text-deep-blue text-xs mb-2">旋转角度</label>
+                      <InkSlider
+                        label=""
+                        value={textRotation}
+                        min={-180}
+                        max={180}
+                        onChange={setTextRotation}
+                        className="w-full"
+                      />
+                    </div>
+                    
+                    <div className="bg-deep-blue-50 p-3 rounded-sm">
+                      <p className="font-song text-xs text-deep-blue-light text-center">
+                        💡 点击文字可选中，拖动调整位置，滚轮调整大小
+                      </p>
                     </div>
                   </div>
-                  
-                  <div className="mt-3">
-                    <label className="block font-song text-deep-blue text-xs mb-2">旋转角度</label>
-                    <InkSlider
-                      label={`${textRotation}°`}
-                      value={textRotation}
-                      min={-180}
-                      max={180}
-                      onChange={setTextRotation}
-                      className="w-full"
-                    />
-                  </div>
-                </div>
-            )}
-                </>
-            </FrameDecorations>
+                )}
+              </FrameDecorations>
+            </div>
 
             <div className="flex flex-wrap justify-between items-center gap-4 mt-6">
               <div className="flex gap-2">
@@ -1711,11 +1326,11 @@ export default function CustomizeProduct() {
                         数量：{quantity} 件
                       </p>
                     </div>
-                    <span className="font-zhuanke text-palace-red text-xl">¥{(parseFloat(currentProduct?.price || '0') * quantity).toFixed(0)}</span>
+                    <span className="font-song text-palace-red text-xl">¥{(parseFloat(currentProduct?.price || '0') * quantity).toFixed(0)}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="font-song text-deep-blue">订单合计</span>
-                    <span className="font-zhuanke text-palace-red text-xl">¥{(parseFloat(currentProduct?.price || '0') * quantity).toFixed(0)}</span>
+                    <span className="font-song text-palace-red text-xl">¥{(parseFloat(currentProduct?.price || '0') * quantity).toFixed(0)}</span>
                   </div>
                 </div>
 

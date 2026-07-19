@@ -578,11 +578,11 @@ export default function Orders() {
                           数量：{reorderQuantity}件
                         </p>
                       </div>
-                      <span className="font-shufa text-palace-red text-xl">¥{(parseFloat(products[selectedOrder.product_id]?.price || '0') * reorderQuantity).toFixed(0)}</span>
+                      <span className="font-song text-palace-red text-xl">¥{(parseFloat(products[selectedOrder.product_id]?.price || '0') * reorderQuantity).toFixed(0)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="font-song text-deep-blue">订单合计</span>
-                      <span className="font-shufa text-palace-red text-xl">¥{(parseFloat(products[selectedOrder.product_id]?.price || '0') * reorderQuantity).toFixed(0)}</span>
+                      <span className="font-song text-palace-red text-xl">¥{(parseFloat(products[selectedOrder.product_id]?.price || '0') * reorderQuantity).toFixed(0)}</span>
                     </div>
                 </div>
 
