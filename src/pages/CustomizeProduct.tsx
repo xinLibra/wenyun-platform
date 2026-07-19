@@ -1233,7 +1233,8 @@ export default function CustomizeProduct() {
                     
                     <div className="bg-deep-blue-50 p-3 rounded-sm">
                       <p className="font-song text-xs text-deep-blue-light text-center">
-                        💡 点击文字可选中，拖动调整位置，滚轮调整大小
+                        <span className="hidden sm:inline">💡 点击文字可选中，拖动调整位置，滚轮调整大小</span>
+                        <span className="sm:hidden">💡 点击文字可选中，双指缩放旋转</span>
                       </p>
                     </div>
                   </div>
