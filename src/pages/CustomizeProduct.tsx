@@ -264,7 +264,6 @@ export default function CustomizeProduct() {
     return lastPattern || 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20blue%20calico%20pattern%20minimal%20elegant&image_size=square'
   })
   const [patternModalLoading, setPatternModalLoading] = useState(false)
-  const dragRef = useRef<HTMLDivElement>(null)
   const previewContainerRef = useRef<HTMLDivElement>(null)
   const productBoxRef = useRef<HTMLDivElement>(null)   // 新增：拖拽比例计算改用这个更小、更准确的容器
 
