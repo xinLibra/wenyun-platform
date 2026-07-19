@@ -408,7 +408,12 @@ export default function Header({ onAuthOpen }: HeaderProps) {
                             </div>
                           )}
                         </div>
-                        <span className="font-song text-deep-blue">{profile?.nickname || userEmail.split('@')[0]}</span>
+                        <span className="font-song text-deep-blue flex items-center">
+                          {profile?.nickname || userEmail.split('@')[0] || '游客'}
+                          {localStorage.getItem('is_guest') === 'true' && (
+                            <span className="ml-1 px-1.5 py-0.5 bg-ming-yellow/50 text-deep-blue text-xs font-song rounded-sm">游客</span>
+                          )}
+                        </span>
                       </div>
                       <Link to="/profile" onClick={() => setIsMobileMenuOpen(false)} className="block w-full px-4 py-2 font-song text-deep-blue border border-deep-blue-200 rounded-sm text-center">
                         个人中心
