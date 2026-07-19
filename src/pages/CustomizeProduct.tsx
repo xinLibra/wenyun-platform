@@ -948,6 +948,8 @@ export default function CustomizeProduct() {
                                   setTextPositionX(x)
                                   setTextPositionY(y)
                                 }}
+                                onSizeChange={setTextSize}
+                                onRotationChange={setTextRotation}
                                 containerRef={productBoxRef}
                               />
                             )}
@@ -1002,6 +1004,8 @@ export default function CustomizeProduct() {
                                 setTextPositionX(x)
                                 setTextPositionY(y)
                               }}
+                              onSizeChange={setTextSize}
+                              onRotationChange={setTextRotation}
                               containerRef={productBoxRef}
                             />
                           )}

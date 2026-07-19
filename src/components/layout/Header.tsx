@@ -146,7 +146,7 @@ export default function Header({ onAuthOpen }: HeaderProps) {
       
       if (data.session) {
         localStorage.setItem('is_guest', 'true')
-        window.location.reload()
+        window.location.href = '/create'
       } else {
         console.error('[Guest Login] No session returned')
         alert('游客体验登录失败，请重试')
@@ -431,11 +431,12 @@ export default function Header({ onAuthOpen }: HeaderProps) {
                     </>
                   ) : (
                     <>
-                      <Link to="/create" onClick={() => setIsMobileMenuOpen(false)}>
-                        <button className="w-full px-4 py-2 bg-ming-yellow text-deep-blue font-song font-medium rounded-sm">
-                          游客体验
-                        </button>
-                      </Link>
+                      <button
+                        onClick={() => { handleGuestLogin(); setIsMobileMenuOpen(false) }}
+                        className="w-full px-4 py-2 bg-ming-yellow text-deep-blue font-song font-medium rounded-sm"
+                      >
+                        游客体验
+                      </button>
                       <button 
                         onClick={() => { handleLoginOpen(); setIsMobileMenuOpen(false) }}
                         className="block w-full px-4 py-2 font-song text-deep-blue border border-deep-blue-200 rounded-sm text-center"
