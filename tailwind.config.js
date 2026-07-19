@@ -46,7 +46,6 @@ export default {
               'zhuanke': ['ZCOOL KuaiLe', 'cursive'],
               'liujian': ['Liu Jian Mao Cao', 'cursive'],
             },
-      },
       backgroundImage: {
         'rice-paper-texture': "url('data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\" viewBox=\"0 0 100 100\"%3E%3Cfilter id=\"noise\"%3E%3CfeTurbulence type=\"fractalNoise\" baseFrequency=\"0.8\" numOctaves=\"4\" stitchTiles=\"stitch\"/%3E%3C/filter%3E%3Crect width=\"100\" height=\"100\" filter=\"url(%23noise)\" opacity=\"0.08\"/%3E%3C/svg%3E')",
         'ink-wash': "url('data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"400\" height=\"400\" viewBox=\"0 0 400 400\"%3E%3Cdefs%3E%3CradialGradient id=\"ink\" cx=\"50%25\" cy=\"50%25\" r=\"50%25\"%3E%3Cstop offset=\"0%25\" stop-color=\"%231A365D\" stop-opacity=\"0.15\"/%3E%3Cstop offset=\"100%25\" stop-color=\"%231A365D\" stop-opacity=\"0\"/%3E%3C/radialGradient%3E%3C/defs%3E%3Cellipse cx=\"150\" cy=\"250\" rx=\"120\" ry=\"80\" fill=\"url(%23ink)\"/%3E%3Cellipse cx=\"300\" cy=\"150\" rx=\"80\" ry=\"60\" fill=\"url(%23ink)\"/%3E%3Cellipse cx=\"80\" cy=\"100\" rx=\"60\" ry=\"40\" fill=\"url(%23ink)\"/%3E%3C/svg%3E')",
