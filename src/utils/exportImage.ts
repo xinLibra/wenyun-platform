@@ -35,7 +35,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => resolve(img)
-    img.onerror = (err) => reject(new Error(`图片加载失败: ${src}`))
+    img.onerror = () => reject(new Error(`图片加载失败: ${src}`))
     img.src = src
   })
 }
