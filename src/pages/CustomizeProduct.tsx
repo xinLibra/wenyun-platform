@@ -1,3 +1,4 @@
+import { exportAndDownload } from '../utils/exportImage'
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
@@ -159,6 +160,7 @@ export default function CustomizeProduct() {
     return '文创'
   }
 
+  const [isExporting, setIsExporting] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(getInitialProduct())
   const [selectedMaterial, setSelectedMaterial] = useState(() => getInitialMaterial(getInitialProduct()))
   const [scale, setScale] = useState(getInitialParams(getInitialProduct()).scale)
@@ -200,6 +202,39 @@ export default function CustomizeProduct() {
     setToastMessage(message)
     setShowToast(true)
     setTimeout(() => setShowToast(false), 2000)
+  }
+
+  const handleExport = async (format: 'png' | 'jpg') => {
+    setIsExporting(true)
+    try {
+      await exportAndDownload(
+        {
+          productImage: currentProduct?.image || '',
+          patternImage: selectedPatternImage,
+          layoutMode,
+          scale,
+          rotation,
+          positionX,
+          positionY,
+          blendMode,
+          textOverlay,
+          textFont,
+          textSize,
+          textPositionX,
+          textPositionY,
+          textRotation,
+          canvasWidth: 1024,
+          canvasHeight: 1024,
+        },
+        format,
+        currentProduct?.name || '纹韵定制'
+      )
+    } catch (err) {
+      console.error('导出失败', err)
+      alert('导出失败，请稍后重试。如果问题持续，可能是图片跨域权限配置问题。')
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const handleLayoutChange = (mode: LayoutMode) => {
@@ -1251,6 +1286,23 @@ export default function CustomizeProduct() {
                 <Button variant="outline" onClick={handleReset}>重置</Button>
                 <Button variant="outline" onClick={handleSaveConfig}>保存配置</Button>
                 <Button variant="primary" onClick={handleOpenPatternModal}>选择纹样</Button>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleExport('png')}
+                  disabled={isExporting}
+                  className="px-4 py-2 border border-deep-blue-200 rounded-sm font-song text-deep-blue hover:bg-deep-blue-50 disabled:opacity-50"
+                >
+                  {isExporting ? '导出中...' : '下载 PNG'}
+                </button>
+                <button
+                  onClick={() => handleExport('jpg')}
+                  disabled={isExporting}
+                  className="px-4 py-2 border border-deep-blue-200 rounded-sm font-song text-deep-blue hover:bg-deep-blue-50 disabled:opacity-50"
+                >
+                  {isExporting ? '导出中...' : '下载 JPG'}
+                </button>
               </div>
               
               <div className="flex gap-2">

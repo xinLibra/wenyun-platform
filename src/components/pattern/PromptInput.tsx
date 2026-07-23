@@ -1,11 +1,24 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '../ui/Button'
 import { PromptParseResult } from '../../types/pattern'
 
+interface PatternRecommendation {
+  patternId: string
+  patternName: string
+  imageUrl: string
+  meaning: string
+  region: string
+  matchScore: number
+}
+
 interface PromptInputProps {
   onParse: (result: PromptParseResult) => void
   onParseComplete?: (isComplete: boolean) => void
+  onSemanticSearch?: (query: string) => Promise<{
+    matchedTags: string[]
+    recommendations: PatternRecommendation[]
+  }>
 }
 
 const CRAFT_KEYWORDS: Record<string, string> = {
@@ -170,10 +183,18 @@ function parsePrompt(prompt: string): PromptParseResult {
   return result
 }
 
-export function PromptInput({ onParse, onParseComplete }: PromptInputProps) {
+export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: PromptInputProps) {
   const [prompt, setPrompt] = useState('')
   const [isParsing, setIsParsing] = useState(false)
   const [isParsed, setIsParsed] = useState(false)
+
+  const [isSearching, setIsSearching] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
+  const [matchedTags, setMatchedTags] = useState<string[]>([])
+  const [recommendations, setRecommendations] = useState<PatternRecommendation[]>([])
+  const [justSelectedRecommendation, setJustSelectedRecommendation] = useState(false)
+  const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null)
+  const previousPromptRef = useRef('')
 
   const handleParse = async () => {
     if (!prompt.trim()) return
@@ -185,8 +206,39 @@ export function PromptInput({ onParse, onParseComplete }: PromptInputProps) {
     onParse(result)
     setIsParsed(true)
     onParseComplete?.(true)
+    setJustSelectedRecommendation(false)
 
     setIsParsing(false)
+  }
+
+  const handleGetRecommendations = async () => {
+    if (!prompt.trim() || !onSemanticSearch) return
+    setIsSearching(true)
+    setHasSearched(true)
+    try {
+      const result = await onSemanticSearch(prompt.trim())
+      setMatchedTags(result.matchedTags)
+      setRecommendations(result.recommendations)
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  const handleSelectRecommendation = (rec: PatternRecommendation) => {
+    if (selectedRecommendationId === rec.patternId) {
+      setPrompt(previousPromptRef.current)
+      setSelectedRecommendationId(null)
+      setJustSelectedRecommendation(false)
+      return
+    }
+    previousPromptRef.current = prompt
+    setPrompt(`${rec.patternName}，${rec.meaning}`)
+    setJustSelectedRecommendation(true)
+    setSelectedRecommendationId(rec.patternId)
+    if (isParsed) {
+      setIsParsed(false)
+      onParseComplete?.(false)
+    }
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -199,22 +251,34 @@ export function PromptInput({ onParse, onParseComplete }: PromptInputProps) {
   }
 
   return (
-    <div className="bg-rice-paper-light border border-deep-blue-100 rounded-sm p-4">
-      <label className="block font-shufa text-deep-blue mb-2">自然语言描述</label>
-      <div className="relative">
-        <textarea
-          value={prompt}
-          onChange={handleInputChange}
-          placeholder="例如：苗族风格、蓝色调、抽象动物纹，适合印在帆布包上"
-          className="w-full px-4 py-3 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red resize-none"
-          rows={3}
-        />
+    <div className="relative">
+            <textarea
+              value={prompt}
+              onChange={handleInputChange}
+              placeholder="例如：苗族风格、蓝色调、抽象动物纹，适合印在帆布包上；或者输入使用场景如「毕业礼物」获取推荐"
+              className="w-full px-4 py-3 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red resize-none"
+              rows={3}
+            />
+
+          {justSelectedRecommendation && (
+            <motion.div
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 mt-2 px-3 py-2 bg-palace-red/10 border border-palace-red/30 rounded-sm"
+            >
+              <span className="text-palace-red">👉</span>
+              <span className="font-song text-sm text-palace-red">
+                已为您填入推荐描述，请点击下方「解析」按钮，自动勾选对应筛选项
+              </span>
+            </motion.div>
+          )}
+
+          <div className="flex gap-2 mt-2">
         <Button
           variant="primary"
           size="sm"
           onClick={handleParse}
           disabled={isParsing || !prompt.trim()}
-          className="absolute bottom-2 right-2"
         >
           {isParsing ? (
             <motion.div
@@ -226,10 +290,77 @@ export function PromptInput({ onParse, onParseComplete }: PromptInputProps) {
             '解析'
           )}
         </Button>
+
+        {onSemanticSearch && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleGetRecommendations}
+            disabled={isSearching || !prompt.trim()}
+          >
+            {isSearching ? '推荐中...' : '获取场景推荐'}
+          </Button>
+        )}
       </div>
+
       <p className="font-song text-xs text-deep-blue-light mt-2">
-        解析后将自动为您勾选下方对应的筛选项，您仍可手动调整
+        点击「解析」自动为您勾选下方对应的筛选项；点击「获取场景推荐」根据使用场景（如毕业礼物、新婚祝福）推荐现成纹样
       </p>
+
+      {matchedTags.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-3">
+          <span className="font-song text-xs text-deep-blue-light">识别到：</span>
+          {matchedTags.map((tag) => (
+            <span
+              key={tag}
+              className="px-2 py-0.5 bg-ming-yellow/30 text-deep-blue text-xs font-song rounded-sm"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {hasSearched && !isSearching && recommendations.length === 0 && (
+        <p className="font-song text-sm text-deep-blue-light text-center py-4">
+          暂无匹配推荐，试试其他关键词
+        </p>
+      )}
+
+      {recommendations.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {recommendations.map((rec) => {
+            const isApplied = selectedRecommendationId === rec.patternId
+            return (
+            <div
+              key={rec.patternId}
+              onClick={() => handleSelectRecommendation(rec)}
+              className={`flex gap-3 p-3 bg-rice-paper rounded-sm border cursor-pointer transition-colors ${
+                isApplied ? 'border-palace-red bg-palace-red/5' : 'border-deep-blue-100 hover:border-palace-red'
+              }`}
+            >
+              <img
+                src={rec.imageUrl}
+                alt={rec.patternName}
+                className="w-14 h-14 object-cover rounded-sm flex-shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <h4 className="font-song font-medium text-deep-blue text-sm">{rec.patternName}</h4>
+                  <span className="text-xs font-song text-palace-red flex-shrink-0 ml-2">
+                    匹配 {rec.matchScore}%
+                  </span>
+                </div>
+                <p className="font-song text-xs text-deep-blue-light">{rec.meaning}</p>
+                {isApplied && (
+                  <p className="font-song text-xs text-palace-red mt-1">✓ 已应用，再次点击可撤销</p>
+                )}
+              </div>
+            </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

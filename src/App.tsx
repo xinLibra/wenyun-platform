@@ -20,6 +20,8 @@ import Cart from './pages/Cart'
 import Orders from './pages/Orders'
 import OrderConfirm from './pages/OrderConfirm'
 import { ScrollToTop } from './components/ScrollToTop'
+import DnaPreviewTest from './pages/DnaPreviewTest'
+
 
 function App() {
   return (
@@ -48,7 +50,8 @@ function App() {
             <Route path="/cart" element={<Cart />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/order-confirm/:id" element={<OrderConfirm />} />
-          </Routes>
+            <Route path="/dna-test" element={<DnaPreviewTest />} />
+            </Routes>
         </main>
         <Footer />
       </div>

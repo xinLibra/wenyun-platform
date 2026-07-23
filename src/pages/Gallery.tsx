@@ -7,6 +7,8 @@ import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { supabase } from '../lib/supabase'
 import { useFavorites } from '../context/FavoriteContext'
+import { PatternDnaRadar } from '../components/PatternDnaRadar'
+import { mockPatternDna } from '../mock/patternDna'
 
 interface GalleryWork {
   id: string
@@ -142,6 +144,7 @@ export default function Gallery() {
     Object.fromEntries(categoryGroups.map(g => [g.name, false]))
   )
   const [selectedWork, setSelectedWork] = useState<GalleryWork | null>(null)
+  const [showDnaAnalysis, setShowDnaAnalysis] = useState(false)
   const [sortBy, setSortBy] = useState('latest')
   const [page, setPage] = useState(1)
   const [works, setWorks] = useState<GalleryWork[]>([])
@@ -435,7 +438,7 @@ export default function Gallery() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
                 >
-                  <Card hover bordered onClick={() => setSelectedWork(work)}>
+                  <Card hover bordered onClick={() => { setSelectedWork(work); setShowDnaAnalysis(false) }}>
                     <div className="aspect-square bg-rice-paper-dark mb-3 overflow-hidden">
                       <img
                         src={work.image}
@@ -542,7 +545,7 @@ export default function Gallery() {
                   </button>
                 </div>
                 
-                <div className="aspect-square bg-rice-paper-dark rounded-sm overflow-hidden mb-4">
+                <div className="aspect-square max-h-[45vh] w-auto mx-auto bg-rice-paper-dark rounded-sm overflow-hidden mb-4">
                   <img
                     src={selectedWork.image}
                     alt={selectedWork.title}
@@ -550,29 +553,43 @@ export default function Gallery() {
                   />
                 </div>
                 
-                <div className="flex items-center justify-between py-4 border-t border-deep-blue-100">
-                  <div className="flex items-center gap-4">
-                    <span className="font-song text-deep-blue-light">分类:</span>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedWork.tags.length > 0 ? (
-                        selectedWork.tags.map((tag: string, index: number) => (
-                          <span
-                            key={index}
-                            className="px-2 py-1 bg-deep-blue-50 text-deep-blue text-xs font-song rounded-sm"
-                          >
-                            {tag}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-deep-blue-light text-xs font-song">未分类</span>
-                      )}
-                    </div>
-                  </div>
-                  
+                <div className="flex items-center justify-end py-4 border-t border-deep-blue-100">
                   <div className="flex gap-3">
                     <Button variant="outline" size="sm" onClick={() => handleDownload(selectedWork.image)}>下载</Button>
                     <Button variant="outline" size="sm" onClick={() => handleShare(selectedWork)}>分享</Button>
                   </div>
+                </div>
+
+                <div className="mt-4">
+                  <button
+                    onClick={() => setShowDnaAnalysis(!showDnaAnalysis)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-palace-red/10 to-ming-yellow/10 border border-palace-red/30 rounded-sm hover:border-palace-red transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">✦</span>
+                      <div className="text-left">
+                        <span className="font-shufa text-base text-deep-blue block">AI纹样DNA分析</span>
+                        <span className="font-song text-xs text-deep-blue-light">查看这张纹样的智能特征解读</span>
+                      </div>
+                    </div>
+                    <motion.div
+                      animate={{ rotate: showDnaAnalysis ? 180 : 0 }}
+                      className="w-5 h-5 text-palace-red flex-shrink-0"
+                    >
+                      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </motion.div>
+                  </button>
+                  <motion.div
+                    initial={false}
+                    animate={{ height: showDnaAnalysis ? 'auto' : 0, opacity: showDnaAnalysis ? 1 : 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="pt-4">
+                      <PatternDnaRadar dna={mockPatternDna} patternName={selectedWork.title} />
+                    </div>
+                  </motion.div>
                 </div>
               </FrameDecorations>
             </motion.div>

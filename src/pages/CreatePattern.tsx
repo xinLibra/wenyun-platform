@@ -11,6 +11,10 @@ import { PromptInput } from '../components/pattern/PromptInput'
 import { generatePatternWithFallback } from '../services/mockGeneration'
 import { PatternDimension, GenerationParams, PromptParseResult, CRAFT_OPTIONS, ETHNIC_OPTIONS, THEME_OPTIONS, APPLICATION_OPTIONS, ARRANGEMENT_OPTIONS, SYMMETRY_OPTIONS } from '../types/pattern'
 import { supabase } from '../lib/supabase'
+import { mockSemanticSearch } from '../mock/semanticSearch'
+import { PatternDnaRadar } from '../components/PatternDnaRadar'
+import { mockPatternDna } from '../mock/patternDna'
+
 
 const DEFAULT_DIMENSION: PatternDimension = {
   craft: [],
@@ -54,7 +58,7 @@ export default function CreatePattern() {
   const [isStep2Complete, setIsStep2Complete] = useState(false)
   const [isStep3Complete, setIsStep3Complete] = useState(false)
   const [showImagePreview, setShowImagePreview] = useState(false)
-
+  const [showDnaAnalysis, setShowDnaAnalysis] = useState(false)
   const handleDimensionChange = (value: PatternDimension) => {
     setDimension(value)
     setGenerationParams((prev) => ({
@@ -149,11 +153,13 @@ export default function CreatePattern() {
       setGeneratedImage(result.imageUrl)
       localStorage.setItem('last_generated_pattern', result.imageUrl)
       console.log('CreatePattern - Pattern generated and saved to localStorage:', result.imageUrl)
+      setShowDnaAnalysis(true)
     } catch (error) {
       console.error('生成失败:', error)
       const fallbackImage = `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20pattern%20design%20elegant%20minimal&image_size=square`
       setGeneratedImage(fallbackImage)
       localStorage.setItem('last_generated_pattern', fallbackImage)
+      setShowDnaAnalysis(true)
     } finally {
       setIsGenerating(false)
     }
@@ -489,6 +495,7 @@ export default function CreatePattern() {
                         <PromptInput 
                           onParse={handlePromptParse} 
                           onParseComplete={setIsStep1Complete}
+                          onSemanticSearch={mockSemanticSearch}
                         />
                       )}
                       {step.id === 2 && (
@@ -685,6 +692,16 @@ export default function CreatePattern() {
                   分享
                 </Button>
               </div>
+
+              {generatedImage && (
+                <button
+                  onClick={() => setShowDnaAnalysis(true)}
+                  className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-palace-red/10 to-ming-yellow/10 border border-palace-red/30 rounded-sm hover:border-palace-red transition-colors"
+                >
+                  <span className="text-lg">✦</span>
+                  <span className="font-shufa text-base text-deep-blue">查看AI纹样DNA分析</span>
+                </button>
+              )}
             </FrameDecorations>
           </motion.div>
         </div>
@@ -735,6 +752,36 @@ export default function CreatePattern() {
               
               <p className="mt-2 text-center font-song text-rice-paper/60 text-xs">点击任意空白处关闭预览</p>
             </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {showDnaAnalysis && generatedImage && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-ink-black/60 z-[100] flex items-center justify-center p-4"
+          onClick={() => setShowDnaAnalysis(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-md w-full max-h-[90vh] overflow-y-auto"
+          >
+            <FrameDecorations className="bg-rice-paper-light p-6 relative">
+              <button
+                onClick={() => setShowDnaAnalysis(false)}
+                className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center hover:bg-deep-blue-100 rounded-full transition-colors z-10"
+              >
+                <svg className="w-6 h-6 text-deep-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <PatternDnaRadar dna={mockPatternDna} patternName={workTitle || '本次生成纹样'} />
+            </FrameDecorations>
           </motion.div>
         </motion.div>
       )}
