@@ -12,6 +12,7 @@ import { PatternRenderer, layoutPresets } from '../components/PatternRenderer'
 import { DraggableText } from '../components/DraggableText'
 import { useCart } from '../hooks/useCart'
 import { supabase } from '../lib/supabase'
+import { Product3DViewer } from '../components/Product3DViewer'
 
 interface UserPattern {
   id: string
@@ -197,6 +198,10 @@ export default function CustomizeProduct() {
   const [textPositionY, setTextPositionY] = useState(initialTextParams.textPositionY)
   const [textRotation, setTextRotation] = useState(initialTextParams.textRotation || 0)
   const [selectedElement, setSelectedElement] = useState<'pattern' | 'text' | null>('pattern')
+
+  // ===== 3D 预览相关状态 =====
+  const [use3D, setUse3D] = useState(false)
+  const [frameColor, setFrameColor] = useState('#2c3e50')   // 边框默认颜色
 
   const showToastMessage = (message: string) => {
     setToastMessage(message)
@@ -872,6 +877,9 @@ export default function CustomizeProduct() {
                   ))}
               </div>
             </FrameDecorations>
+
+            {/* ===== 新增结束 ===== */}
+
           </motion.div>
 
           <motion.div
@@ -889,198 +897,256 @@ export default function CustomizeProduct() {
                   </h2>
                   
                   <div className="flex gap-2 z-10">
-                    <button
-                      onClick={() => setShowCompare(!showCompare)}
-                      className={`px-3 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
-                        showCompare
-                          ? 'bg-deep-blue text-rice-paper shadow-sm'
-                          : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-deep-blue-light'
-                      }`}
-                      style={{ zIndex: 10 }}
-                    >
-                      {showCompare ? '关闭对比' : '对比原图'}
-                    </button>
-                    {views.map((view) => (
-                      <button
-                        key={view}
-                        onClick={() => setCurrentView(view)}
-                        className={`px-3 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
-                          currentView === view
-                            ? 'bg-palace-red text-rice-paper shadow-sm'
-                            : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                        }`}
-                        style={{ zIndex: 10 }}
-                      >
-                        {view === 'front' ? '正面' : view === 'back' ? '背面' : '侧面'}
-                      </button>
-                    ))}
+                    {/* 手机壳用 3D，不再提供切换；其它产品仍显示对比和视角按钮 */}
+                    {selectedProduct !== 'phonecase' && (
+                      <>
+                        <button
+                          onClick={() => setShowCompare(!showCompare)}
+                          className={`px-3 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
+                            showCompare
+                              ? 'bg-deep-blue text-rice-paper shadow-sm'
+                              : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-deep-blue-light'
+                          }`}
+                          style={{ zIndex: 10 }}
+                        >
+                          {showCompare ? '关闭对比' : '对比原图'}
+                        </button>
+                        {views.map((view) => (
+                          <button
+                            key={view}
+                            onClick={() => setCurrentView(view)}
+                            className={`px-3 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
+                              currentView === view
+                                ? 'bg-palace-red text-rice-paper shadow-sm'
+                                : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                            }`}
+                            style={{ zIndex: 10 }}
+                          >
+                            {view === 'front' ? '正面' : view === 'back' ? '背面' : '侧面'}
+                          </button>
+                        ))}
+                      </>
+                    )}
                   </div>
                 </div>
                 
                 <div className="relative" ref={previewContainerRef} id="preview-container">
                   <div className="absolute -inset-3 border-3 border-deep-blue rounded-sm opacity-10" />
-                  
-                  {showCompare ? (
-                    <div className="flex">
-                      <div className="flex-1 relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden">
-                        <div className="absolute inset-0 bg-ink-wash opacity-10" />
-                        <div className="absolute top-2 left-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
-                          <p className="font-song text-xs text-deep-blue">原图</p>
+
+                  {/* ===== 3D 预览模式（目前仅手机壳） ===== */}
+                  {selectedProduct === 'phonecase' ? (
+                    <div className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden">
+                      <Product3DViewer
+                        modelUrl="/models/phone_case.glb"
+                        textureTargetMaterial="part2"
+                        colorMaterials={[
+                          { name: 'frame', materialName: 'part1', label: '侧边边框' }
+                        ]}
+                        patternImage={selectedPatternImage}
+                        colorMap={{ frame: frameColor }}
+                        cameraPosition={[0, 0.08, 0.35]}
+                      />
+
+                      {/* 底部信息条 */}
+                      <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end pointer-events-none">
+                        <div>
+                          <h3 className="font-shufa text-lg text-deep-blue">{currentProduct?.name}</h3>
+                          <p className="font-song text-palace-red text-base">¥{currentProduct?.price}</p>
                         </div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <img
-                            src={currentProduct?.image}
-                            alt={currentProduct?.name}
-                            className="w-48 h-auto object-contain"
-                            draggable={false}
-                            onDragStart={(e) => e.preventDefault()}
-                          />
+                        <div className="text-right">
+                          <span className="font-song text-xs text-deep-blue-light">
+                            材质：{materials.find(m => m.id === selectedMaterial)?.name}
+                          </span>
                         </div>
                       </div>
-                      
-                      <div className="flex-1 relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden" style={{ touchAction: 'none' }} onClick={() => setSelectedElement(null)}>
-                        <div className="absolute inset-0 bg-ink-wash opacity-10" />
-                        <div className="absolute top-2 left-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
-                          <p className="font-song text-xs text-deep-blue">定制效果</p>
-                        </div>
-                        
-                        <div className="absolute inset-0 flex items-center justify-center" onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}>
-                          <div className="relative" ref={productBoxRef}>
-                            <img
-                              src={currentProduct?.image}
-                              alt={currentProduct?.name}
-                              className="w-48 h-auto object-contain"
-                              draggable={false}
-                              onDragStart={(e) => e.preventDefault()}
-                              onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
-                            />
-                            <PatternRenderer
-                              layoutMode={layoutMode}
-                              patternImage={selectedPatternImage}
-                              scale={scale}
-                              rotation={rotation}
-                              positionX={positionX}
-                              positionY={positionY}
-                              blendMode={blendMode}
-                              isSelected={selectedElement === 'pattern'}
-                              onSelect={() => setSelectedElement('pattern')}
-                              onMouseDown={handleMouseDown}
-                              onTouchStart={handleTouchStart}
-                              onTouchMove={handleTouchMove}
-                              imageSize="small"
-                            />
-                            {textOverlay && (
-                              <DraggableText
-                                text={textOverlay}
-                                font={textFont}
-                                fontSize={textSize}
-                                positionX={textPositionX}
-                                positionY={textPositionY}
-                                rotation={textRotation}
-                                isSelected={selectedElement === 'text'}
-                                onSelect={() => setSelectedElement('text')}
-                                onPositionChange={(x, y) => {
-                                  setTextPositionX(x)
-                                  setTextPositionY(y)
-                                }}
-                                onSizeChange={setTextSize}
-                                onRotationChange={setTextRotation}
-                                containerRef={productBoxRef}
-                              />
-                            )}
-                          </div>
-                        </div>
+
+                      {/* 操作提示 */}
+                      <div className="absolute top-2 right-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
+                        <p className="font-song text-xs text-deep-blue-light">
+                          拖拽旋转 · 滚轮缩放
+                        </p>
                       </div>
                     </div>
                   ) : (
-                    <div
-                      className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden"
-                      style={{ touchAction: 'none' }}
-                      onClick={() => setSelectedElement(null)}
-                    >
-                      <div className="absolute inset-0 bg-ink-wash opacity-10" />
-                      
-                      <div className="absolute inset-0 flex items-center justify-center" onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}>
-                        <div className="relative" ref={productBoxRef}>
-                          <img
-                            src={currentProduct?.image}
-                            alt={currentProduct?.name}
-                            className="w-48 h-auto object-contain"
-                            draggable={false}
-                            onDragStart={(e) => e.preventDefault()}
-                            onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
-                          />
-                          <PatternRenderer
-                            layoutMode={layoutMode}
-                            patternImage={selectedPatternImage}
-                            scale={scale}
-                            rotation={rotation}
-                            positionX={positionX}
-                            positionY={positionY}
-                            blendMode={blendMode}
-                            isSelected={selectedElement === 'pattern'}
-                            onSelect={() => setSelectedElement('pattern')}
-                            onMouseDown={handleMouseDown}
-                            onTouchStart={handleTouchStart}
-                            onTouchMove={handleTouchMove}
-                            imageSize="large"
-                          />
-                          {textOverlay && (
-                            <DraggableText
-                              text={textOverlay}
-                              font={textFont}
-                              fontSize={textSize}
-                              positionX={textPositionX}
-                              positionY={textPositionY}
-                              rotation={textRotation}
-                              isSelected={selectedElement === 'text'}
-                              onSelect={() => setSelectedElement('text')}
-                              onPositionChange={(x, y) => {
-                                setTextPositionX(x)
-                                setTextPositionY(y)
-                              }}
-                              onSizeChange={setTextSize}
-                              onRotationChange={setTextRotation}
-                              containerRef={productBoxRef}
-                            />
-                          )}
+                    /* ===== 原来的 2D 预览逻辑（保持不变） ===== */
+                    <>
+                      {showCompare ? (
+                        <div className="flex">
+                          {/* 原图侧 */}
+                          <div className="flex-1 relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden">
+                            <div className="absolute inset-0 bg-ink-wash opacity-10" />
+                            <div className="absolute top-2 left-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
+                              <p className="font-song text-xs text-deep-blue">原图</p>
+                            </div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <img
+                                src={currentProduct?.image}
+                                alt={currentProduct?.name}
+                                className="w-48 h-auto object-contain"
+                                draggable={false}
+                                onDragStart={(e) => e.preventDefault()}
+                              />
+                            </div>
+                          </div>
+
+                          {/* 定制效果侧 */}
+                          <div
+                            className="flex-1 relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden"
+                            style={{ touchAction: 'none' }}
+                            onClick={() => setSelectedElement(null)}
+                          >
+                            <div className="absolute inset-0 bg-ink-wash opacity-10" />
+                            <div className="absolute top-2 left-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
+                              <p className="font-song text-xs text-deep-blue">定制效果</p>
+                            </div>
+
+                            <div
+                              className="absolute inset-0 flex items-center justify-center"
+                              onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
+                            >
+                              <div className="relative" ref={productBoxRef}>
+                                <img
+                                  src={currentProduct?.image}
+                                  alt={currentProduct?.name}
+                                  className="w-48 h-auto object-contain"
+                                  draggable={false}
+                                  onDragStart={(e) => e.preventDefault()}
+                                  onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
+                                />
+                                <PatternRenderer
+                                  layoutMode={layoutMode}
+                                  patternImage={selectedPatternImage}
+                                  scale={scale}
+                                  rotation={rotation}
+                                  positionX={positionX}
+                                  positionY={positionY}
+                                  blendMode={blendMode}
+                                  isSelected={selectedElement === 'pattern'}
+                                  onSelect={() => setSelectedElement('pattern')}
+                                  onMouseDown={handleMouseDown}
+                                  onTouchStart={handleTouchStart}
+                                  onTouchMove={handleTouchMove}
+                                  imageSize="small"
+                                />
+                                {textOverlay && (
+                                  <DraggableText
+                                    text={textOverlay}
+                                    font={textFont}
+                                    fontSize={textSize}
+                                    positionX={textPositionX}
+                                    positionY={textPositionY}
+                                    rotation={textRotation}
+                                    isSelected={selectedElement === 'text'}
+                                    onSelect={() => setSelectedElement('text')}
+                                    onPositionChange={(x, y) => {
+                                      setTextPositionX(x)
+                                      setTextPositionY(y)
+                                    }}
+                                    onSizeChange={setTextSize}
+                                    onRotationChange={setTextRotation}
+                                    containerRef={productBoxRef}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         </div>
+                      ) : (
+                        <div
+                          className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden"
+                          style={{ touchAction: 'none' }}
+                          onClick={() => setSelectedElement(null)}
+                        >
+                          <div className="absolute inset-0 bg-ink-wash opacity-10" />
+
+                          <div
+                            className="absolute inset-0 flex items-center justify-center"
+                            onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
+                          >
+                            <div className="relative" ref={productBoxRef}>
+                              <img
+                                src={currentProduct?.image}
+                                alt={currentProduct?.name}
+                                className="w-48 h-auto object-contain"
+                                draggable={false}
+                                onDragStart={(e) => e.preventDefault()}
+                                onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
+                              />
+                              <PatternRenderer
+                                layoutMode={layoutMode}
+                                patternImage={selectedPatternImage}
+                                scale={scale}
+                                rotation={rotation}
+                                positionX={positionX}
+                                positionY={positionY}
+                                blendMode={blendMode}
+                                isSelected={selectedElement === 'pattern'}
+                                onSelect={() => setSelectedElement('pattern')}
+                                onMouseDown={handleMouseDown}
+                                onTouchStart={handleTouchStart}
+                                onTouchMove={handleTouchMove}
+                                imageSize="large"
+                              />
+                              {textOverlay && (
+                                <DraggableText
+                                  text={textOverlay}
+                                  font={textFont}
+                                  fontSize={textSize}
+                                  positionX={textPositionX}
+                                  positionY={textPositionY}
+                                  rotation={textRotation}
+                                  isSelected={selectedElement === 'text'}
+                                  onSelect={() => setSelectedElement('text')}
+                                  onPositionChange={(x, y) => {
+                                    setTextPositionX(x)
+                                    setTextPositionY(y)
+                                  }}
+                                  onSizeChange={setTextSize}
+                                  onRotationChange={setTextRotation}
+                                  containerRef={productBoxRef}
+                                />
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 底部信息条（原有） */}
+                          <div className="absolute bottom-3 left-3 right-3 flex flex-col gap-1.5">
+                            {!showCompare && (
+                              <div className="hidden sm:flex sm:items-center sm:gap-4 bg-rice-paper/70 backdrop-blur-sm px-2 py-1 rounded-sm w-fit">
+                                <span className="font-song text-xs text-deep-blue-light">
+                                  <span className="text-deep-blue">大小：{scale}%</span>
+                                </span>
+                                <span className="font-song text-xs text-deep-blue-light">
+                                  <span className="text-deep-blue">位置：X:{positionX} Y:{positionY}</span>
+                                </span>
+                                <span className="font-song text-xs text-deep-blue-light">
+                                  <span className="text-deep-blue">叠加：{blendModeLabels[blendMode] || blendMode}</span>
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex justify-between items-end">
+                              <div>
+                                <h3 className="font-shufa text-lg text-deep-blue">{currentProduct?.name}</h3>
+                                <p className="font-song text-palace-red text-base">¥{currentProduct?.price}</p>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-song text-xs text-deep-blue-light">
+                                  材质：{materials.find(m => m.id === selectedMaterial)?.name}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="absolute top-2 right-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
+                        <p className="font-song text-xs text-deep-blue-light">
+                          <span className="hidden sm:inline">PC：拖拽移动 / 滚轮缩放</span>
+                          <span className="sm:hidden">双指缩放旋转</span>
+                        </p>
                       </div>
-                    
-                    <div className="absolute bottom-3 left-3 right-3 flex flex-col gap-1.5">
-                                            {!showCompare && (
-                                              <div className="hidden sm:flex sm:items-center sm:gap-4 bg-rice-paper/70 backdrop-blur-sm px-2 py-1 rounded-sm w-fit">
-                                                <span className="font-song text-xs text-deep-blue-light">
-                                                  <span className="text-deep-blue">大小：{scale}%</span>
-                                                </span>
-                                                <span className="font-song text-xs text-deep-blue-light">
-                                                  <span className="text-deep-blue">位置：X:{positionX} Y:{positionY}</span>
-                                                </span>
-                                                <span className="font-song text-xs text-deep-blue-light">
-                                                  <span className="text-deep-blue">叠加：{blendModeLabels[blendMode] || blendMode}</span>
-                                                </span>
-                                              </div>
-                                            )}
-                                            <div className="flex justify-between items-end">
-                                              <div>
-                                                <h3 className="font-shufa text-lg text-deep-blue">{currentProduct?.name}</h3>
-                                                <p className="font-song text-palace-red text-base">¥{currentProduct?.price}</p>
-                                              </div>
-                                              <div className="text-right">
-                                                <span className="font-song text-xs text-deep-blue-light">材质：{materials.find(m => m.id === selectedMaterial)?.name}</span>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
+                    </>
                   )}
-                  
-                  <div className="absolute top-2 right-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
-                    <p className="font-song text-xs text-deep-blue-light">
-                      <span className="hidden sm:inline">PC：拖拽移动 / 滚轮缩放</span>
-                      <span className="sm:hidden">双指缩放旋转</span>
-                    </p>
-                  </div>
-                  
                 </div>
               </FrameDecorations>
 
@@ -1144,6 +1210,40 @@ export default function CustomizeProduct() {
                       </div>
                     </div>
 
+                    {/* 手机壳：边框颜色（在定制调节之前） */}
+                    {selectedProduct === 'phonecase' && (
+                      <div className="pt-4 border-t border-deep-blue-100">
+                        <h2 className="font-shufa text-lg text-deep-blue flex items-center mb-3">
+                          <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">色</span>
+                          边框颜色
+                        </h2>
+                        <div className="flex flex-wrap gap-3">
+                          {[
+                            { c: '#2c3e50', name: '黛青' },
+                            { c: '#1a1a1a', name: '墨黑' },
+                            { c: '#8B4513', name: '赭石' },
+                            { c: '#C0C0C0', name: '银灰' },
+                            { c: '#E8D5B7', name: '米金' },
+                            { c: '#800020', name: '绛红' },
+                          ].map(({ c, name }) => (
+                            <button
+                              key={c}
+                              onClick={() => setFrameColor(c)}
+                              title={name}
+                              className={`w-9 h-9 rounded-full border-2 transition-all ${
+                                frameColor === c
+                                  ? 'border-palace-red scale-110 shadow-md'
+                                  : 'border-deep-blue-200 hover:border-deep-blue'
+                              }`}
+                              style={{ backgroundColor: c }}
+                            />
+                          ))}
+                        </div>
+                        <p className="font-song text-xs text-deep-blue-light mt-2">
+                          点击色块更换手机壳边框颜色
+                        </p>
+                      </div>
+                    )}
                     <div className="pt-4 border-t border-deep-blue-100">
                       <h2 className="font-shufa text-lg text-deep-blue flex items-center mb-4">
                         <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">定</span>

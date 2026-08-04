@@ -1,0 +1,32 @@
+[
+  {
+    "productId": "phonecase",
+    "productName": "手机壳",
+    "modelUrl": "/models/phone_case.glb",
+    "meshConfig": {
+      "textureTargetMaterial": "part2",
+      "colorMaterials": [
+        {
+          "name": "frame",
+          "materialName": "part1",
+          "label": "侧边边框"
+        }
+      ]
+    },
+    "modelLimit": {
+      "maxTriFaces": 12000,
+      "forwardAxis": "+Z"
+    },
+    "textureSetting": {
+      "wrapS": "ClampToEdgeWrapping",
+      "wrapT": "ClampToEdgeWrapping",
+      "textureScale": [1, 1],
+      "offset": [0, 0],
+      "rotation": 0
+    },
+    "cameraDefault": {
+      "position": [0, 0.08, 0.35],
+      "lookAt": [0, 0, 0]
+    }
+  }
+]
