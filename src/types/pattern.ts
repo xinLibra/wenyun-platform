@@ -3,7 +3,17 @@ export interface PatternDimension {
   ethnic: string[]
   theme: string[]
   application: string[]
-  style: StyleSliders
+  // ===== 新增 =====
+  mainTheme?: 'floral' | 'beast' | ''
+  subcategory?: string
+  scenes?: string[]
+  // ===== 新增结束 =====
+  style: {
+    figurative: number
+    traditional: number
+    simplicity: number
+    handmade: number
+  }
 }
 
 export interface StyleSliders {

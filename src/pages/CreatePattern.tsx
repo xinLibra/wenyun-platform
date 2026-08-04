@@ -16,6 +16,14 @@ import { PatternDnaRadar } from '../components/PatternDnaRadar'
 import { mockPatternDna } from '../mock/patternDna'
 import { PatternFusionSlider } from '../components/PatternFusionSlider'
 import { PatternPicker } from '../components/PatternPicker'
+import {
+  parsePromptToTags,
+  findSubcategory,
+  PATTERN_THEMES,
+  SCENE_OPTIONS,
+  getSubcategories,
+  type PatternThemeId,
+} from '../data/patternTaxonomy'
 
 
 const DEFAULT_DIMENSION: PatternDimension = {
@@ -23,6 +31,9 @@ const DEFAULT_DIMENSION: PatternDimension = {
   ethnic: [],
   theme: [],
   application: [],
+  mainTheme: '',
+  subcategory: '',
+  scenes: [],
   style: {
     figurative: 50,
     traditional: 70,
@@ -66,30 +77,19 @@ export default function CreatePattern() {
     setGenerationParams((prev) => ({
       ...prev,
       dimension: value,
-      complexity: 100 - value.style.simplicity,
     }))
-    
-    if (value.craft.length > 0) {
-      const craftLabels: Record<string, string> = {
-        dye: '染织风格',
-        embroidery: '刺绣风格',
-        brocade: '织锦风格',
-        carving: '雕刻风格',
-        ceramic: '陶瓷风格',
-        metal: '金属工艺风格',
-      }
-      setSelectedPatternName(craftLabels[value.craft[0]] || '')
-    } else {
-      setSelectedPatternName('')
-    }
-    
-    const craftSelected = value.craft.length > 0
-    const ethnicSelected = value.ethnic.length > 0
-    const themeSelected = value.theme.length > 0
-    const applicationSelected = value.application.length > 0
-    const hasAnySelection = craftSelected || ethnicSelected || themeSelected || applicationSelected
-    
-    setIsStep2Complete(hasAnySelection)
+
+    const sub =
+      value.mainTheme && value.subcategory
+        ? findSubcategory(value.mainTheme as PatternThemeId, value.subcategory)
+        : null
+    setSelectedPatternName(sub?.label || '')
+    setIsStep2Complete(
+      Boolean(
+        (value.mainTheme && value.subcategory) ||
+          (value.scenes && value.scenes.length > 0)
+      )
+    )
   }
 
   const handleParamsChange = (value: GenerationParams) => {
@@ -120,32 +120,74 @@ export default function CreatePattern() {
   }
 
   const handlePromptParse = (result: PromptParseResult) => {
+    const rawText = (
+      (result as any).rawText ||
+      (result as any).prompt ||
+      localStorage.getItem('last_pattern_prompt') ||
+      ''
+    ).trim()
+
+    if (rawText) {
+      localStorage.setItem('last_pattern_prompt', rawText)
+    }
+
+    const auto = parsePromptToTags(rawText)
+
     const newDimension: PatternDimension = {
       ...DEFAULT_DIMENSION,
       ...result.dimension,
-      craft: result.dimension.craft || [],
-      ethnic: result.dimension.ethnic || [],
-      theme: result.dimension.theme || [],
-      application: result.dimension.application || [],
+      craft: result.dimension?.craft || [],
+      ethnic: result.dimension?.ethnic || [],
+      theme: result.dimension?.theme || [],
+      application: result.dimension?.application || [],
+      mainTheme: auto.themeId || (result.dimension as any)?.mainTheme || '',
+      subcategory: auto.subcategoryId || (result.dimension as any)?.subcategory || '',
+      scenes: auto.sceneIds.length
+        ? auto.sceneIds
+        : (result.dimension as any)?.scenes || [],
       style: {
         ...DEFAULT_DIMENSION.style,
-        ...result.dimension.style,
+        ...(result.dimension?.style || {}),
       },
+    }
+    if (newDimension.scenes?.length) {
+      newDimension.application = newDimension.scenes
     }
 
     const newParams: GenerationParams = {
       ...DEFAULT_GENERATION_PARAMS,
       dimension: newDimension,
-      complexity: result.complexity || DEFAULT_GENERATION_PARAMS.complexity,
-      textureDetail: result.textureDetail || DEFAULT_GENERATION_PARAMS.textureDetail,
-      colorScheme: result.colorScheme ? { ...DEFAULT_GENERATION_PARAMS.colorScheme, ...result.colorScheme } : DEFAULT_GENERATION_PARAMS.colorScheme,
+      complexity: result.complexity ?? DEFAULT_GENERATION_PARAMS.complexity,
+      textureDetail: result.textureDetail ?? DEFAULT_GENERATION_PARAMS.textureDetail,
+      colorScheme: result.colorScheme
+        ? { ...DEFAULT_GENERATION_PARAMS.colorScheme, ...result.colorScheme }
+        : DEFAULT_GENERATION_PARAMS.colorScheme,
       arrangement: result.arrangement || DEFAULT_GENERATION_PARAMS.arrangement,
       symmetry: result.symmetry || DEFAULT_GENERATION_PARAMS.symmetry,
-      culturalIntensity: result.culturalIntensity || DEFAULT_GENERATION_PARAMS.culturalIntensity,
+      culturalIntensity:
+        result.culturalIntensity ?? DEFAULT_GENERATION_PARAMS.culturalIntensity,
     }
 
     setDimension(newDimension)
     setGenerationParams(newParams)
+
+    const sub =
+      newDimension.mainTheme && newDimension.subcategory
+        ? findSubcategory(
+            newDimension.mainTheme as PatternThemeId,
+            newDimension.subcategory
+          )
+        : null
+    if (sub) setSelectedPatternName(sub.label)
+
+    setIsStep1Complete(true)
+    setIsStep2Complete(
+      Boolean(
+        (newDimension.mainTheme && newDimension.subcategory) ||
+          (newDimension.scenes && newDimension.scenes.length > 0)
+      )
+    )
+    setExpandedStep(2)
   }
 
   const handleGenerate = async () => {
@@ -401,6 +443,10 @@ return '自定义风格'
     { patternId: 'sample-a', patternName: '云纹', imageUrl: '/placeholder-pattern-a.png' },
     { patternId: 'sample-b', patternName: '海浪纹', imageUrl: '/placeholder-pattern-b.png' },
   ]
+  const [fusionATheme, setFusionATheme] = useState<PatternThemeId | ''>('')
+  const [fusionASub, setFusionASub] = useState('')
+  const [fusionBTheme, setFusionBTheme] = useState<PatternThemeId | ''>('')
+  const [fusionBSub, setFusionBSub] = useState('')
 
   useEffect(() => {
     if (createMode !== 'fusion') return
@@ -723,9 +769,9 @@ return '自定义风格'
               <p className="text-deep-blue font-shufa mb-1">操作提示</p>
               <ul className="text-sm space-y-1 list-disc list-inside">
                 <li>以下三个步骤为递进式操作，您可以依次完成，也可以根据需要跳过某些步骤</li>
-                <li>第一步「描述」为可选操作，使用自然语言描述后点击解析，系统将自动为您勾选下方对应的筛选项</li>
-                <li>第二步「选择灵感参考」和第三步「调整生成效果」建议至少选择一项，以获得更精准的生成结果</li>
-                <li>所有参数设置完成后，点击底部的「生成纹样」按钮即可开始创作</li>
+                <li>第一步「描述」可选；解析后自动勾选主题/子类/场景，描述会进入生成提示词</li>
+                <li>第二步请至少选择「主题 + 子类」</li>
+                <li>第三步可调复杂度、平面化、配色与对称；也可使用默认直接生成</li>
               </ul>
             </div>
           </div>
@@ -1019,78 +1065,202 @@ return '自定义风格'
         </>
         )}
 
-        {createMode === 'fusion' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-6 space-y-6">
-              <PatternPicker
-                label="选择纹样（先选中的作为第一个，后选中的作为第二个，最多选两个）"
-                groups={[
-                  { groupLabel: '示例', options: builtInFusionSamples },
-                  { groupLabel: '我的作品', options: userPatterns },
-                  { groupLabel: '我的收藏', options: favoritePatterns },
-                ]}
-                selectedSlots={[fusionSelectedA, fusionSelectedB]}
-                onSelect={handleSelectFusionPattern}
-                isLoading={isLoadingUserPatterns || isLoadingFavorites}
-              />
-            </div>
+{createMode === 'fusion' && (
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    {/* 左侧：两个纹样分类 */}
+    <div className="space-y-6">
+      <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5">
+        <h3 className="font-shufa text-lg text-deep-blue mb-1">选择两个纹样分类进行融合</h3>
+        <p className="font-song text-xs text-deep-blue-light mb-4">
+          每个位置先选主题，再选一个子类（对应 LoRA）
+        </p>
 
-            <div>
-              <PatternFusionSlider
-                patternA={fusionSelectedA}
-                patternB={fusionSelectedB}
-                onGenerate={handleFusionGenerate}
-                isGenerating={isFusing}
-                resultImage={fusionResultImage}
-              />
-            </div>
-            {fusionResultImage && (
-                <div className="mt-6 bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-3">
-                  <div>
-                    <label className="block font-song text-sm text-deep-blue-light mb-1">作品名称</label>
-                    <input
-                      type="text"
-                      value={fusionWorkTitle}
-                      onChange={(e) => setFusionWorkTitle(e.target.value)}
-                      placeholder="为您的融合作品起个名字"
-                      className="w-full px-3 py-2 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
-                      maxLength={50}
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-song text-sm text-deep-blue-light mb-1">标签</label>
-                    <div className="flex flex-wrap gap-1">
-                      {[fusionSelectedA?.patternName, fusionSelectedB?.patternName, '纹样融合']
-                        .filter(Boolean)
-                        .map((tag, index) => (
-                          <span key={index} className="px-2 py-1 bg-deep-blue-50 text-deep-blue-light text-xs font-song rounded-sm">
-                            #{tag}
-                          </span>
-                        ))}
-                    </div>
-                  </div>
-                  <div className="flex gap-2 pt-1">
-                    <Button variant="outline" size="sm" className="flex-1" onClick={handleFusionSave} disabled={isFusionSaving}>
-                      {isFusionSaving ? '保存中...' : '保存'}
-                    </Button>
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => setShowImagePreview(true)}>
-                      下载
-                    </Button>
-                    <Button variant="outline" size="sm" className="flex-1" onClick={handleFusionShare}>
-                      分享
-                    </Button>
-                  </div>
-                  <button
-                    onClick={() => setShowDnaAnalysis(true)}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-palace-red/10 to-ming-yellow/10 border border-palace-red/30 rounded-sm hover:border-palace-red transition-colors"
-                  >
-                    <span className="text-lg">✦</span>
-                    <span className="font-shufa text-base text-deep-blue">查看AI纹样DNA分析</span>
-                  </button>
-                </div>
-              )}
+        {/* 第一个分类 */}
+        <div className="mb-6 pb-6 border-b border-deep-blue-100">
+          <p className="font-shufa text-deep-blue mb-3 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-sm bg-palace-red text-rice-paper text-xs flex items-center justify-center">1</span>
+            第一个纹样
+          </p>
+          <p className="font-song text-xs text-deep-blue-light mb-2">主题</p>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {PATTERN_THEMES.map((t) => (
+              <button
+                key={`a-theme-${t.id}`}
+                type="button"
+                onClick={() => {
+                  setFusionATheme(t.id)
+                  setFusionASub('')
+                  setFusionSelectedA(null)
+                  setFusionResultImage('')
+                }}
+                className={`px-3 py-1.5 text-sm font-song rounded-sm border transition-all ${
+                  fusionATheme === t.id
+                    ? 'bg-palace-red text-rice-paper border-palace-red'
+                    : 'bg-rice-paper text-deep-blue border-deep-blue-200 hover:border-palace-red'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
-        )}
+          <p className="font-song text-xs text-deep-blue-light mb-2">子类</p>
+          <div className="flex flex-wrap gap-2">
+            {fusionATheme ? (
+              getSubcategories(fusionATheme).map((s) => (
+                <button
+                  key={`a-sub-${s.id}`}
+                  type="button"
+                  onClick={() => {
+                    setFusionASub(s.id)
+                    setFusionSelectedA({
+                      patternId: s.id,
+                      patternName: s.label,
+                      imageUrl: '',
+                    })
+                    setFusionResultImage('')
+                  }}
+                  className={`px-3 py-1.5 text-sm font-song rounded-sm border transition-all ${
+                    fusionASub === s.id
+                      ? 'bg-palace-red text-rice-paper border-palace-red'
+                      : 'bg-rice-paper text-deep-blue border-deep-blue-200 hover:border-palace-red'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))
+            ) : (
+              <p className="font-song text-xs text-deep-blue-light">请先选择主题</p>
+            )}
+          </div>
+        </div>
+
+        {/* 第二个分类 */}
+        <div>
+          <p className="font-shufa text-deep-blue mb-3 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-sm bg-deep-blue text-rice-paper text-xs flex items-center justify-center">2</span>
+            第二个纹样
+          </p>
+          <p className="font-song text-xs text-deep-blue-light mb-2">主题</p>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {PATTERN_THEMES.map((t) => (
+              <button
+                key={`b-theme-${t.id}`}
+                type="button"
+                onClick={() => {
+                  setFusionBTheme(t.id)
+                  setFusionBSub('')
+                  setFusionSelectedB(null)
+                  setFusionResultImage('')
+                }}
+                className={`px-3 py-1.5 text-sm font-song rounded-sm border transition-all ${
+                  fusionBTheme === t.id
+                    ? 'bg-deep-blue text-rice-paper border-deep-blue'
+                    : 'bg-rice-paper text-deep-blue border-deep-blue-200 hover:border-deep-blue'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <p className="font-song text-xs text-deep-blue-light mb-2">子类</p>
+          <div className="flex flex-wrap gap-2">
+            {fusionBTheme ? (
+              getSubcategories(fusionBTheme).map((s) => (
+                <button
+                  key={`b-sub-${s.id}`}
+                  type="button"
+                  onClick={() => {
+                    setFusionBSub(s.id)
+                    setFusionSelectedB({
+                      patternId: s.id,
+                      patternName: s.label,
+                      imageUrl: '',
+                    })
+                    setFusionResultImage('')
+                  }}
+                  className={`px-3 py-1.5 text-sm font-song rounded-sm border transition-all ${
+                    fusionBSub === s.id
+                      ? 'bg-deep-blue text-rice-paper border-deep-blue'
+                      : 'bg-rice-paper text-deep-blue border-deep-blue-200 hover:border-deep-blue'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))
+            ) : (
+              <p className="font-song text-xs text-deep-blue-light">请先选择主题</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* 右侧：融合比例 + 预览（沿用 PatternFusionSlider） */}
+    <div className="space-y-4">
+      <PatternFusionSlider
+        patternA={fusionSelectedA}
+        patternB={fusionSelectedB}
+        onGenerate={handleFusionGenerate}
+        isGenerating={isFusing}
+        resultImage={fusionResultImage}
+      />
+
+      {fusionResultImage && (
+        <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-3">
+          <div>
+            <label className="block font-song text-sm text-deep-blue-light mb-1">作品名称</label>
+            <input
+              type="text"
+              value={fusionWorkTitle}
+              onChange={(e) => setFusionWorkTitle(e.target.value)}
+              placeholder="为您的融合作品起个名字"
+              className="w-full px-3 py-2 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
+              maxLength={50}
+            />
+          </div>
+          <div>
+            <label className="block font-song text-sm text-deep-blue-light mb-1">标签</label>
+            <div className="flex flex-wrap gap-1">
+              {[fusionSelectedA?.patternName, fusionSelectedB?.patternName, '纹样融合']
+                .filter(Boolean)
+                .map((tag, index) => (
+                  <span
+                    key={index}
+                    className="px-2 py-1 bg-deep-blue-50 text-deep-blue-light text-xs font-song rounded-sm"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={handleFusionSave}
+              disabled={isFusionSaving}
+            >
+              {isFusionSaving ? '保存中...' : '保存'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setShowImagePreview(true)}
+            >
+              下载
+            </Button>
+            <Button variant="outline" size="sm" className="flex-1" onClick={handleFusionShare}>
+              分享
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
       </div>
     </div>
 

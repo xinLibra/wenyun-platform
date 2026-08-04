@@ -7,27 +7,29 @@ interface PatternRecommendation {
   matchScore: number
 }
 
-// 简单的关键词匹配规则表，模拟方向4的匹配逻辑
-const semanticRules: Record<string, { matchedTags: string[]; recommendations: PatternRecommendation[] }> = {
+const semanticRules: Record<
+  string,
+  { matchedTags: string[]; recommendations: PatternRecommendation[] }
+> = {
   毕业: {
-    matchedTags: ['毕业', '成长'],
+    matchedTags: ['毕业', '成长', '牡丹纹'],
     recommendations: [
       {
-        patternId: 'mock-zhu-001',
-        patternName: '竹纹',
+        patternId: 'mock-peony-001',
+        patternName: '牡丹纹',
         imageUrl: '/placeholder-pattern-a.png',
-        meaning: '节节高升，寓意成长与坚韧',
+        meaning: '富贵吉祥，寓意圆满美好',
         region: '江南地区传统纹样',
         matchScore: 95,
       },
     ],
   },
   新婚: {
-    matchedTags: ['新婚', '喜庆'],
+    matchedTags: ['新婚', '喜庆', '龙凤纹'],
     recommendations: [
       {
-        patternId: 'mock-feng-001',
-        patternName: '凤凰纹',
+        patternId: 'mock-dragon-phoenix-001',
+        patternName: '龙凤纹',
         imageUrl: '/placeholder-pattern-b.png',
         meaning: '美满姻缘，寓意夫妻和谐',
         region: '传统吉祥纹样',
@@ -35,16 +37,42 @@ const semanticRules: Record<string, { matchedTags: string[]; recommendations: Pa
       },
     ],
   },
-  生日: {
-    matchedTags: ['生日', '祝福'],
+  婚礼: {
+    matchedTags: ['婚礼', '喜庆', '龙凤纹'],
     recommendations: [
       {
-        patternId: 'mock-shi-001',
-        patternName: '石榴纹',
+        patternId: 'mock-dragon-phoenix-002',
+        patternName: '龙凤纹',
+        imageUrl: '/placeholder-pattern-b.png',
+        meaning: '龙凤呈祥，喜庆成双',
+        region: '传统吉祥纹样',
+        matchScore: 93,
+      },
+    ],
+  },
+  生日: {
+    matchedTags: ['生日', '祝福', '鹤纹'],
+    recommendations: [
+      {
+        patternId: 'mock-crane-001',
+        patternName: '鹤纹',
         imageUrl: '/placeholder-pattern-a.png',
-        meaning: '多子多福，寓意长寿吉祥',
+        meaning: '松鹤延年，寓意长寿吉祥',
         region: '传统民俗纹样',
-        matchScore: 88,
+        matchScore: 90,
+      },
+    ],
+  },
+  寿: {
+    matchedTags: ['寿辰', '长寿', '鹤纹'],
+    recommendations: [
+      {
+        patternId: 'mock-crane-002',
+        patternName: '鹤纹',
+        imageUrl: '/placeholder-pattern-a.png',
+        meaning: '仙鹤祥瑞，康宁长寿',
+        region: '传统民俗纹样',
+        matchScore: 91,
       },
     ],
   },

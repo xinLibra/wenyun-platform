@@ -13,7 +13,8 @@ interface PatternRecommendation {
 }
 
 interface PromptInputProps {
-  onParse: (result: PromptParseResult) => void
+  /** 解析结果；result.rawText 为输入框原文，供父组件勾选主题/子类/场景 */
+  onParse: (result: PromptParseResult & { rawText?: string }) => void
   onParseComplete?: (isComplete: boolean) => void
   onSemanticSearch?: (query: string) => Promise<{
     matchedTags: string[]
@@ -67,6 +68,7 @@ const THEME_KEYWORDS: Record<string, string> = {
   '团花': 'plant',
   '花卉': 'plant',
   '花草': 'plant',
+  '牡丹': 'plant',
   '回纹': 'geometric',
   '冰裂纹': 'geometric',
   '锁子纹': 'geometric',
@@ -85,6 +87,7 @@ const APPLICATION_KEYWORDS: Record<string, string> = {
   '周边': 'cultural',
   '帆布包': 'cultural',
   '手提袋': 'cultural',
+  '毕业': 'cultural',
 }
 
 const COLOR_KEYWORDS: Record<string, number> = {
@@ -203,7 +206,9 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
     await new Promise((resolve) => setTimeout(resolve, 500))
 
     const result = parsePrompt(prompt)
-    onParse(result)
+    // 关键：把原文一并传给父组件，用于勾选主题/子类/场景
+    onParse({ ...result, rawText: prompt.trim() })
+    localStorage.setItem('last_pattern_prompt', prompt.trim())
     setIsParsed(true)
     onParseComplete?.(true)
     setJustSelectedRecommendation(false)
@@ -252,28 +257,28 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
 
   return (
     <div className="relative">
-            <textarea
-              value={prompt}
-              onChange={handleInputChange}
-              placeholder="例如：苗族风格、蓝色调、抽象动物纹，适合印在帆布包上；或者输入使用场景如「毕业礼物」获取推荐"
-              className="w-full px-4 py-3 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red resize-none"
-              rows={3}
-            />
+      <textarea
+        value={prompt}
+        onChange={handleInputChange}
+        placeholder="例如：牡丹纹、蓝色调，适合毕业礼物；或输入「鹤纹」自动匹配瑞兽主题"
+        className="w-full px-4 py-3 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red resize-none"
+        rows={3}
+      />
 
-          {justSelectedRecommendation && (
-            <motion.div
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 mt-2 px-3 py-2 bg-palace-red/10 border border-palace-red/30 rounded-sm"
-            >
-              <span className="text-palace-red">👉</span>
-              <span className="font-song text-sm text-palace-red">
-                已为您填入推荐描述，请点击下方「解析」按钮，自动勾选对应筛选项
-              </span>
-            </motion.div>
-          )}
+      {justSelectedRecommendation && (
+        <motion.div
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-2 mt-2 px-3 py-2 bg-palace-red/10 border border-palace-red/30 rounded-sm"
+        >
+          <span className="text-palace-red">👉</span>
+          <span className="font-song text-sm text-palace-red">
+            已为您填入推荐描述，请点击下方「解析」按钮，自动勾选对应筛选项
+          </span>
+        </motion.div>
+      )}
 
-          <div className="flex gap-2 mt-2">
+      <div className="flex gap-2 mt-2">
         <Button
           variant="primary"
           size="sm"
@@ -304,7 +309,7 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
       </div>
 
       <p className="font-song text-xs text-deep-blue-light mt-2">
-        点击「解析」自动为您勾选下方对应的筛选项；点击「获取场景推荐」根据使用场景（如毕业礼物、新婚祝福）推荐现成纹样
+        点击「解析」自动为您勾选下方对应的筛选项；点击「获取场景推荐」根据使用场景推荐纹样
       </p>
 
       {matchedTags.length > 0 && (
@@ -332,31 +337,37 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
           {recommendations.map((rec) => {
             const isApplied = selectedRecommendationId === rec.patternId
             return (
-            <div
-              key={rec.patternId}
-              onClick={() => handleSelectRecommendation(rec)}
-              className={`flex gap-3 p-3 bg-rice-paper rounded-sm border cursor-pointer transition-colors ${
-                isApplied ? 'border-palace-red bg-palace-red/5' : 'border-deep-blue-100 hover:border-palace-red'
-              }`}
-            >
-              <img
-                src={rec.imageUrl}
-                alt={rec.patternName}
-                className="w-14 h-14 object-cover rounded-sm flex-shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <h4 className="font-song font-medium text-deep-blue text-sm">{rec.patternName}</h4>
-                  <span className="text-xs font-song text-palace-red flex-shrink-0 ml-2">
-                    匹配 {rec.matchScore}%
-                  </span>
+              <div
+                key={rec.patternId}
+                onClick={() => handleSelectRecommendation(rec)}
+                className={`flex gap-3 p-3 bg-rice-paper rounded-sm border cursor-pointer transition-colors ${
+                  isApplied
+                    ? 'border-palace-red bg-palace-red/5'
+                    : 'border-deep-blue-100 hover:border-palace-red'
+                }`}
+              >
+                <img
+                  src={rec.imageUrl}
+                  alt={rec.patternName}
+                  className="w-14 h-14 object-cover rounded-sm flex-shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="font-song font-medium text-deep-blue text-sm">
+                      {rec.patternName}
+                    </h4>
+                    <span className="text-xs font-song text-palace-red flex-shrink-0 ml-2">
+                      匹配 {rec.matchScore}%
+                    </span>
+                  </div>
+                  <p className="font-song text-xs text-deep-blue-light">{rec.meaning}</p>
+                  {isApplied && (
+                    <p className="font-song text-xs text-palace-red mt-1">
+                      ✓ 已应用，再次点击可撤销
+                    </p>
+                  )}
                 </div>
-                <p className="font-song text-xs text-deep-blue-light">{rec.meaning}</p>
-                {isApplied && (
-                  <p className="font-song text-xs text-palace-red mt-1">✓ 已应用，再次点击可撤销</p>
-                )}
               </div>
-            </div>
             )
           })}
         </div>
