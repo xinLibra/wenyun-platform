@@ -200,7 +200,7 @@ export default function CustomizeProduct() {
   const [selectedElement, setSelectedElement] = useState<'pattern' | 'text' | null>('pattern')
 
   // ===== 3D 预览相关状态 =====
-  const [use3D, setUse3D] = useState(false)
+  //const [use3D, setUse3D] = useState(false)
   const [frameColor, setFrameColor] = useState('#2c3e50')   // 边框默认颜色
 
   const showToastMessage = (message: string) => {
@@ -937,14 +937,12 @@ export default function CustomizeProduct() {
                   {selectedProduct === 'phonecase' ? (
                     <div className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden">
                       <Product3DViewer
-                        modelUrl="/models/phone_case.glb"
-                        textureTargetMaterial="part2"
-                        colorMaterials={[
-                          { name: 'frame', materialName: 'part1', label: '侧边边框' }
-                        ]}
-                        patternImage={selectedPatternImage}
-                        colorMap={{ frame: frameColor }}
-                        cameraPosition={[0, 0.08, 0.35]}
+                        modelUrl={...}
+                        textureTargetMaterial={...}
+                        colorMaterials={...}
+                        patternImage={...}
+                        colorMap={...}
+                        // cameraPosition={...}   // 删除这一行
                       />
 
                       {/* 底部信息条 */}

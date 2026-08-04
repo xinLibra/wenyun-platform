@@ -15,12 +15,11 @@ import { mockSemanticSearch } from '../mock/semanticSearch'
 import { PatternDnaRadar } from '../components/PatternDnaRadar'
 import { mockPatternDna } from '../mock/patternDna'
 import { PatternFusionSlider } from '../components/PatternFusionSlider'
-import { PatternPicker } from '../components/PatternPicker'
 import {
   parsePromptToTags,
   findSubcategory,
   PATTERN_THEMES,
-  SCENE_OPTIONS,
+  //SCENE_OPTIONS,
   getSubcategories,
   type PatternThemeId,
 } from '../data/patternTaxonomy'
@@ -426,10 +425,10 @@ return '自定义风格'
   }, [dimension.craft])
 
   const [createMode, setCreateMode] = useState<'ai' | 'fusion'>('ai')
-  const [userPatterns, setUserPatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
-  const [isLoadingUserPatterns, setIsLoadingUserPatterns] = useState(false)
-  const [favoritePatterns, setFavoritePatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
-  const [isLoadingFavorites, setIsLoadingFavorites] = useState(false)
+  //const [userPatterns, setUserPatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
+  //const [isLoadingUserPatterns, setIsLoadingUserPatterns] = useState(false)
+  //const [favoritePatterns, setFavoritePatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
+  //const [isLoadingFavorites, setIsLoadingFavorites] = useState(false)
   const [fusionSelectedA, setFusionSelectedA] = useState<{ patternId: string; patternName: string; imageUrl: string } | null>(null)
   const [fusionSelectedB, setFusionSelectedB] = useState<{ patternId: string; patternName: string; imageUrl: string } | null>(null)
   const [isFusing, setIsFusing] = useState(false)
@@ -439,10 +438,10 @@ return '自定义风格'
   const [isFusionSaving, setIsFusionSaving] = useState(false)
   const [lastFusionRatio, setLastFusionRatio] = useState<{ a: number; b: number }>({ a: 50, b: 50 })
 
-  const builtInFusionSamples = [
-    { patternId: 'sample-a', patternName: '云纹', imageUrl: '/placeholder-pattern-a.png' },
-    { patternId: 'sample-b', patternName: '海浪纹', imageUrl: '/placeholder-pattern-b.png' },
-  ]
+  //const builtInFusionSamples = [
+    //{ patternId: 'sample-a', patternName: '云纹', imageUrl: '/placeholder-pattern-a.png' },
+    //{ patternId: 'sample-b', patternName: '海浪纹', imageUrl: '/placeholder-pattern-b.png' },
+  //]
   const [fusionATheme, setFusionATheme] = useState<PatternThemeId | ''>('')
   const [fusionASub, setFusionASub] = useState('')
   const [fusionBTheme, setFusionBTheme] = useState<PatternThemeId | ''>('')
@@ -540,27 +539,6 @@ return '自定义风格'
   // 统一选择逻辑：先选中的进入第一个位置，后选中的进入第二个位置；
   // 再次点击已选中的项目会取消选中（第二个位置会自动补位到第一个位置）；
   // 两个位置都选满后再点新项目，会替换掉第二个位置
-  const handleSelectFusionPattern = (opt: { patternId: string; patternName: string; imageUrl: string }) => {
-    if (fusionSelectedA?.patternId === opt.patternId) {
-      setFusionSelectedA(fusionSelectedB)
-      setFusionSelectedB(null)
-      setFusionResultImage('')
-      return
-    }
-    if (fusionSelectedB?.patternId === opt.patternId) {
-      setFusionSelectedB(null)
-      setFusionResultImage('')
-      return
-    }
-    if (!fusionSelectedA) {
-      setFusionSelectedA(opt)
-    } else if (!fusionSelectedB) {
-      setFusionSelectedB(opt)
-    } else {
-      setFusionSelectedB(opt)
-    }
-    setFusionResultImage('')
-  }
 
   const handleFusionSave = async () => {
     if (!fusionResultImage) {
