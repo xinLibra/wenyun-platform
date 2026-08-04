@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button, StampButton } from '../components/ui/Button'
@@ -14,6 +14,8 @@ import { supabase } from '../lib/supabase'
 import { mockSemanticSearch } from '../mock/semanticSearch'
 import { PatternDnaRadar } from '../components/PatternDnaRadar'
 import { mockPatternDna } from '../mock/patternDna'
+import { PatternFusionSlider } from '../components/PatternFusionSlider'
+import { PatternPicker } from '../components/PatternPicker'
 
 
 const DEFAULT_DIMENSION: PatternDimension = {
@@ -378,8 +380,292 @@ export default function CreatePattern() {
       }
       return craftLabels[dimension.craft[0]] || '自定义风格'
     }
-    return '自定义风格'
+return '自定义风格'
   }, [dimension.craft])
+
+  const [createMode, setCreateMode] = useState<'ai' | 'fusion'>('ai')
+  const [userPatterns, setUserPatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
+  const [isLoadingUserPatterns, setIsLoadingUserPatterns] = useState(false)
+  const [favoritePatterns, setFavoritePatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState(false)
+  const [fusionSelectedA, setFusionSelectedA] = useState<{ patternId: string; patternName: string; imageUrl: string } | null>(null)
+  const [fusionSelectedB, setFusionSelectedB] = useState<{ patternId: string; patternName: string; imageUrl: string } | null>(null)
+  const [isFusing, setIsFusing] = useState(false)
+  // 融合模式的结果预览图，与 AI 生成模式的 generatedImage 完全隔离，互不覆盖
+  const [fusionResultImage, setFusionResultImage] = useState<string>('')
+  const [fusionWorkTitle, setFusionWorkTitle] = useState<string>('')
+  const [isFusionSaving, setIsFusionSaving] = useState(false)
+  const [lastFusionRatio, setLastFusionRatio] = useState<{ a: number; b: number }>({ a: 50, b: 50 })
+
+  const builtInFusionSamples = [
+    { patternId: 'sample-a', patternName: '云纹', imageUrl: '/placeholder-pattern-a.png' },
+    { patternId: 'sample-b', patternName: '海浪纹', imageUrl: '/placeholder-pattern-b.png' },
+  ]
+
+  useEffect(() => {
+    if (createMode !== 'fusion') return
+
+    const fetchUserPatterns = async () => {
+      setIsLoadingUserPatterns(true)
+      try {
+        const { data: { session } } = await supabase.auth?.getSession()
+        if (!session?.user) {
+          setUserPatterns([])
+          return
+        }
+        const { data } = await supabase
+          .from('generations')
+          .select('id, params, image_url')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false })
+          .limit(20)
+
+        setUserPatterns(
+          (data || []).map((g: any) => ({
+            patternId: g.id,
+            patternName: g.params?.title || '未命名纹样',
+            imageUrl: g.image_url,
+          }))
+        )
+      } finally {
+        setIsLoadingUserPatterns(false)
+      }
+    }
+
+    // 收藏的纹样：favorites 表关联 generations 表取标题和图片
+    const fetchFavoritePatterns = async () => {
+      setIsLoadingFavorites(true)
+      try {
+        const { data: { session } } = await supabase.auth?.getSession()
+        if (!session?.user) {
+          setFavoritePatterns([])
+          return
+        }
+        const { data, error } = await supabase
+          .from('favorites')
+          .select('generation_id, generations(id, params, image_url)')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false })
+          .limit(20)
+
+        if (error) {
+          console.error('Fetch favorites error:', error)
+          setFavoritePatterns([])
+          return
+        }
+
+        setFavoritePatterns(
+          (data || [])
+            .map((f: any) => f.generations)
+            .filter(Boolean)
+            .map((g: any) => ({
+              patternId: g.id,
+              patternName: g.params?.title || '未命名纹样',
+              imageUrl: g.image_url,
+            }))
+        )
+      } finally {
+        setIsLoadingFavorites(false)
+      }
+    }
+
+    fetchUserPatterns()
+    fetchFavoritePatterns()
+  }, [createMode])
+
+  const handleFusionGenerate = async (ratioA: number, ratioB: number) => {
+    if (!fusionSelectedA || !fusionSelectedB) return
+    setIsFusing(true)
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      console.log('融合请求：', fusionSelectedA.patternId, fusionSelectedB.patternId, ratioA, ratioB)
+      // 注意：只写 fusionResultImage，绝不写 generatedImage —— 后者是 AI 生成模式
+      // 「实时预览」面板专用的 state，两个模式的预览必须互不影响。
+      // TODO(Wu): 这里目前仍是 mock（取权重较高一方的图作为占位结果），
+      // 等真实的融合接口/模型接好后，把这行换成接口返回的融合图 URL。
+      setFusionResultImage(ratioA >= ratioB ? fusionSelectedA.imageUrl : fusionSelectedB.imageUrl)
+      setLastFusionRatio({ a: ratioA, b: ratioB })
+      setShowDnaAnalysis(true)
+    } finally {
+      setIsFusing(false)
+    }
+  }
+
+  // 统一选择逻辑：先选中的进入第一个位置，后选中的进入第二个位置；
+  // 再次点击已选中的项目会取消选中（第二个位置会自动补位到第一个位置）；
+  // 两个位置都选满后再点新项目，会替换掉第二个位置
+  const handleSelectFusionPattern = (opt: { patternId: string; patternName: string; imageUrl: string }) => {
+    if (fusionSelectedA?.patternId === opt.patternId) {
+      setFusionSelectedA(fusionSelectedB)
+      setFusionSelectedB(null)
+      setFusionResultImage('')
+      return
+    }
+    if (fusionSelectedB?.patternId === opt.patternId) {
+      setFusionSelectedB(null)
+      setFusionResultImage('')
+      return
+    }
+    if (!fusionSelectedA) {
+      setFusionSelectedA(opt)
+    } else if (!fusionSelectedB) {
+      setFusionSelectedB(opt)
+    } else {
+      setFusionSelectedB(opt)
+    }
+    setFusionResultImage('')
+  }
+
+  const handleFusionSave = async () => {
+    if (!fusionResultImage) {
+      alert('请先生成融合纹样后再保存')
+      return
+    }
+
+    const { data: { session } } = await supabase.auth?.getSession()
+    if (!session?.user) {
+      alert('请先登录后再保存作品')
+      navigate('/login')
+      return
+    }
+
+    setIsFusionSaving(true)
+
+    try {
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('nickname')
+        .eq('id', session.user.id)
+        .single()
+
+      if (profileError) {
+        console.error('Get profile error:', profileError)
+      }
+
+      const isGuest = localStorage.getItem('is_guest') === 'true'
+      const nickname = isGuest ? '游客' : (profileData?.nickname || session.user.email?.split('@')[0] || '用户')
+
+      if (fusionWorkTitle) {
+        const { data: existingWorks, error: worksError } = await supabase
+          .from('generations')
+          .select('params')
+          .eq('user_id', session.user.id)
+
+        if (!worksError && existingWorks) {
+          const existingTitles = existingWorks.map(w => (w as any).params?.title).filter(Boolean)
+          if (existingTitles.includes(fusionWorkTitle)) {
+            setIsFusionSaving(false)
+            alert('该名称已被使用，请换一个')
+            return
+          }
+        }
+      }
+
+      const autoTags = ['纹样融合', fusionSelectedA?.patternName, fusionSelectedB?.patternName].filter(Boolean) as string[]
+      const uniqueTags = [...new Set(autoTags)]
+      const title = fusionWorkTitle || `融合纹样 #${Date.now().toString(36).toUpperCase()}`
+
+      const { error } = await supabase.from('generations').insert({
+        user_id: session.user.id,
+        style_id: null,
+        params: {
+          tags: uniqueTags,
+          title,
+          fusion: {
+            patternAId: fusionSelectedA?.patternId,
+            patternBId: fusionSelectedB?.patternId,
+            ratioA: lastFusionRatio.a,
+            ratioB: lastFusionRatio.b,
+          },
+        },
+        image_url: fusionResultImage,
+        author_nickname: nickname,
+        is_public: false,
+      })
+
+      if (error) {
+        console.error('Save error:', error)
+        alert(`保存失败: ${error.message}`)
+      } else {
+        alert('已保存至我的作品')
+      }
+    } catch (err: any) {
+      console.error('Save error:', err)
+      alert(`保存失败: ${err.message || '未知错误'}`)
+    } finally {
+      setIsFusionSaving(false)
+    }
+  }
+
+  const handleFusionShare = async () => {
+    if (!fusionResultImage) {
+      alert('请先生成融合纹样后再分享')
+      return
+    }
+
+    const { data: { session } } = await supabase.auth?.getSession()
+
+    let shareUrl = `${window.location.origin}/gallery`
+
+    if (session?.user) {
+      const confirmed = window.confirm('分享前会自动保存这件作品并设为公开可见，是否继续？')
+      if (!confirmed) return
+
+      try {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('nickname')
+          .eq('id', session.user.id)
+          .single()
+
+        const isGuest = localStorage.getItem('is_guest') === 'true'
+        const nickname = isGuest ? '游客' : (profileData?.nickname || session.user.email?.split('@')[0] || '用户')
+
+        const autoTags = ['纹样融合', fusionSelectedA?.patternName, fusionSelectedB?.patternName].filter(Boolean) as string[]
+        const uniqueTags = [...new Set(autoTags)]
+        const title = fusionWorkTitle || `融合纹样 #${Date.now().toString(36).toUpperCase()}`
+
+        const { data: savedData } = await supabase.from('generations').insert({
+          user_id: session.user.id,
+          style_id: null,
+          params: {
+            tags: uniqueTags,
+            title,
+            fusion: {
+              patternAId: fusionSelectedA?.patternId,
+              patternBId: fusionSelectedB?.patternId,
+              ratioA: lastFusionRatio.a,
+              ratioB: lastFusionRatio.b,
+            },
+          },
+          image_url: fusionResultImage,
+          author_nickname: nickname,
+          is_public: true,
+        }).select('id').single()
+
+        if (savedData?.id) {
+          shareUrl = `${window.location.origin}/gallery/${savedData.id}`
+        }
+      } catch (error) {
+        console.error('Share save error:', error)
+      }
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: '我在纹韵设计的融合纹样',
+          text: '快来看看我融合设计的非遗纹样！',
+          url: shareUrl
+        })
+      } catch {
+        // 用户取消分享，忽略
+      }
+    } else {
+      await navigator.clipboard.writeText(shareUrl)
+      alert('链接已复制到剪贴板')
+    }
+  }
 
   return (
     <><div className="min-h-screen py-8 px-4">
@@ -396,6 +682,31 @@ export default function CreatePattern() {
           <p className="font-song text-deep-blue-light mt-4">多维度筛选非遗元素，智能调节AI参数，创造独一无二的纹样作品</p>
         </div>
 
+        <div className="flex justify-center gap-3 mb-8">
+          <button
+            onClick={() => setCreateMode('ai')}
+            className={`px-6 py-2 rounded-sm font-song transition-colors ${
+              createMode === 'ai'
+                ? 'bg-palace-red text-rice-paper'
+                : 'bg-rice-paper-light border border-deep-blue-200 text-deep-blue'
+            }`}
+          >
+            AI生成
+          </button>
+          <button
+            onClick={() => setCreateMode('fusion')}
+            className={`px-6 py-2 rounded-sm font-song transition-colors ${
+              createMode === 'fusion'
+                ? 'bg-palace-red text-rice-paper'
+                : 'bg-rice-paper-light border border-deep-blue-200 text-deep-blue'
+            }`}
+          >
+            ✦ 纹样融合
+          </button>
+        </div>
+
+        {createMode === 'ai' && (
+        <>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -705,11 +1016,86 @@ export default function CreatePattern() {
             </FrameDecorations>
           </motion.div>
         </div>
+        </>
+        )}
+
+        {createMode === 'fusion' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-6 space-y-6">
+              <PatternPicker
+                label="选择纹样（先选中的作为第一个，后选中的作为第二个，最多选两个）"
+                groups={[
+                  { groupLabel: '示例', options: builtInFusionSamples },
+                  { groupLabel: '我的作品', options: userPatterns },
+                  { groupLabel: '我的收藏', options: favoritePatterns },
+                ]}
+                selectedSlots={[fusionSelectedA, fusionSelectedB]}
+                onSelect={handleSelectFusionPattern}
+                isLoading={isLoadingUserPatterns || isLoadingFavorites}
+              />
+            </div>
+
+            <div>
+              <PatternFusionSlider
+                patternA={fusionSelectedA}
+                patternB={fusionSelectedB}
+                onGenerate={handleFusionGenerate}
+                isGenerating={isFusing}
+                resultImage={fusionResultImage}
+              />
+            </div>
+            {fusionResultImage && (
+                <div className="mt-6 bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-3">
+                  <div>
+                    <label className="block font-song text-sm text-deep-blue-light mb-1">作品名称</label>
+                    <input
+                      type="text"
+                      value={fusionWorkTitle}
+                      onChange={(e) => setFusionWorkTitle(e.target.value)}
+                      placeholder="为您的融合作品起个名字"
+                      className="w-full px-3 py-2 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
+                      maxLength={50}
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-song text-sm text-deep-blue-light mb-1">标签</label>
+                    <div className="flex flex-wrap gap-1">
+                      {[fusionSelectedA?.patternName, fusionSelectedB?.patternName, '纹样融合']
+                        .filter(Boolean)
+                        .map((tag, index) => (
+                          <span key={index} className="px-2 py-1 bg-deep-blue-50 text-deep-blue-light text-xs font-song rounded-sm">
+                            #{tag}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <Button variant="outline" size="sm" className="flex-1" onClick={handleFusionSave} disabled={isFusionSaving}>
+                      {isFusionSaving ? '保存中...' : '保存'}
+                    </Button>
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => setShowImagePreview(true)}>
+                      下载
+                    </Button>
+                    <Button variant="outline" size="sm" className="flex-1" onClick={handleFusionShare}>
+                      分享
+                    </Button>
+                  </div>
+                  <button
+                    onClick={() => setShowDnaAnalysis(true)}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-palace-red/10 to-ming-yellow/10 border border-palace-red/30 rounded-sm hover:border-palace-red transition-colors"
+                  >
+                    <span className="text-lg">✦</span>
+                    <span className="font-shufa text-base text-deep-blue">查看AI纹样DNA分析</span>
+                  </button>
+                </div>
+              )}
+          </div>
+        )}
       </div>
     </div>
 
     <AnimatePresence>
-      {showImagePreview && generatedImage && (
+      {showImagePreview && (createMode === 'fusion' ? fusionResultImage : generatedImage) && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -727,7 +1113,7 @@ export default function CreatePattern() {
             <div className="relative">
               <div className="aspect-square bg-rice-paper-dark rounded-sm overflow-hidden shadow-2xl">
                 <img
-                  src={generatedImage}
+                  src={createMode === 'fusion' ? fusionResultImage : generatedImage}
                   alt="纹样预览"
                   className="w-full h-full object-contain"
                 />
@@ -736,7 +1122,8 @@ export default function CreatePattern() {
               <div className="mt-4 flex justify-center">
                 <button
                   onClick={() => {
-                    const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(generatedImage)}`
+                    const imgUrl = createMode === 'fusion' ? fusionResultImage : generatedImage
+                    const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(imgUrl)}`
                     const link = document.createElement('a')
                     link.href = proxyUrl
                     link.download = `纹韵纹样_${Date.now()}.png`
@@ -756,7 +1143,7 @@ export default function CreatePattern() {
         </motion.div>
       )}
 
-      {showDnaAnalysis && generatedImage && (
+      {showDnaAnalysis && (createMode === 'fusion' ? fusionResultImage : generatedImage) && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -780,7 +1167,7 @@ export default function CreatePattern() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-              <PatternDnaRadar dna={mockPatternDna} patternName={workTitle || '本次生成纹样'} />
+              <PatternDnaRadar dna={mockPatternDna} patternName={(createMode === 'fusion' ? fusionWorkTitle : workTitle) || '本次生成纹样'} />
             </FrameDecorations>
           </motion.div>
         </motion.div>
