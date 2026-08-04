@@ -15,6 +15,7 @@ interface Product3DViewerProps {
   colorMaterials?: ColorMaterial[]
   patternImage?: string | null
   colorMap?: Record<string, string>
+  cameraPosition?: [number, number, number];
   className?: string
 }
 

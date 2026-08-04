@@ -937,12 +937,18 @@ export default function CustomizeProduct() {
                   {selectedProduct === 'phonecase' ? (
                     <div className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden">
                       <Product3DViewer
-                        modelUrl={...}
-                        textureTargetMaterial={...}
-                        colorMaterials={...}
-                        patternImage={...}
-                        colorMap={...}
-                        // cameraPosition={...}   // 删除这一行
+                        modelUrl="/models/phone_case.glb"
+                        textureTargetMaterial="back"
+                        colorMaterials={[
+                          { name: '边框', materialName: 'frame', label: '边框颜色' },
+                          { name: '机身', materialName: 'body', label: '机身颜色' },
+                        ]}
+                        patternImage={selectedPatternImage}
+                        colorMap={{
+                          '边框': frameColor,
+                          '机身': selectedMaterial === 'plastic' ? '#f5f5f5' : '#e8e8e8',
+                        }}
+                        cameraPosition={[0, 0.05, 2.4]}
                       />
 
                       {/* 底部信息条 */}

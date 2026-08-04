@@ -425,10 +425,11 @@ return '自定义风格'
   }, [dimension.craft])
 
   const [createMode, setCreateMode] = useState<'ai' | 'fusion'>('ai')
-  //const [userPatterns, setUserPatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
-  //const [isLoadingUserPatterns, setIsLoadingUserPatterns] = useState(false)
-  //const [favoritePatterns, setFavoritePatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
-  //const [isLoadingFavorites, setIsLoadingFavorites] = useState(false)
+  const [userPatterns, setUserPatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
+  const [isLoadingUserPatterns, setIsLoadingUserPatterns] = useState(false)
+  const [favoritePatterns, setFavoritePatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState(false)
+  void userPatterns; void isLoadingUserPatterns; void favoritePatterns; void isLoadingFavorites;
   const [fusionSelectedA, setFusionSelectedA] = useState<{ patternId: string; patternName: string; imageUrl: string } | null>(null)
   const [fusionSelectedB, setFusionSelectedB] = useState<{ patternId: string; patternName: string; imageUrl: string } | null>(null)
   const [isFusing, setIsFusing] = useState(false)
