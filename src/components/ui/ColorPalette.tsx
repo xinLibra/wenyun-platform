@@ -46,47 +46,43 @@ export function ColorPalette({ hue, brightness, onChange }: ColorPaletteProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-4"
+      className="space-y-2 w-full"
     >
-      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-        {traditionalColors.map((color, index) => (
-          <motion.button
+      {/* 固定正方形 + 自动换行：一行排满再排下一行，不拉伸变形 */}
+      <div className="flex flex-wrap gap-1.5 w-full">
+        {traditionalColors.map((color) => (
+          <button
             key={color.name}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: index * 0.03 }}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
+            type="button"
+            title={color.name}
             onClick={() => handleColorClick(color.hue, color.brightness)}
-            className={`relative aspect-square rounded-sm transition-all duration-200 ${
+            className={`w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-sm transition-all ${
               isSelected(color.hue, color.brightness)
-                ? 'ring-2 ring-palace-red ring-offset-2'
-                : 'hover:shadow-md'
+                ? 'ring-2 ring-palace-red ring-offset-1 scale-110 z-10'
+                : 'border border-deep-blue-200/40 hover:border-deep-blue'
             }`}
             style={{
               backgroundColor: `hsl(${color.hue}, 70%, ${color.brightness}%)`,
             }}
-          >
-            <span className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[8px] font-song text-center py-0.5 rounded-b-sm opacity-0 hover:opacity-100 transition-opacity">
-              {color.name}
-            </span>
-          </motion.button>
+          />
         ))}
       </div>
 
-      <div className="flex items-center justify-center gap-4">
+      <div className="flex items-center gap-3 pt-0.5">
         <div
-          className="w-16 h-16 rounded-sm shadow-lg border-2 border-deep-blue-200"
+          className="w-7 h-7 rounded-sm border border-deep-blue-200 shrink-0 shadow-sm"
           style={{ background: colorPreview }}
         />
-        <div className="text-left">
-          <div className="font-song text-sm text-deep-blue-light">
-            <span className="text-deep-blue">色相：</span>{hue}°
+        <div className="text-left font-song text-xs text-deep-blue-light leading-relaxed">
+          <div>
+            <span className="text-deep-blue">色相：</span>
+            {hue}°
           </div>
-          <div className="font-song text-sm text-deep-blue-light">
-            <span className="text-deep-blue">明度：</span>{brightness}%
+          <div>
+            <span className="text-deep-blue">明度：</span>
+            {brightness}%
           </div>
         </div>
       </div>

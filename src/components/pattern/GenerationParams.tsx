@@ -284,11 +284,11 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-2">
+    <div className="space-y-2">
+      <div className="flex gap-1.5">
         <button
           onClick={() => onChange({ ...value, mode: 'hue' })}
-          className={`flex-1 py-2 rounded-sm font-song text-sm transition-all ${
+          className={`flex-1 py-1.5 rounded-sm font-song text-xs transition-all ${
             value.mode === 'hue'
               ? 'bg-palace-red text-rice-paper'
               : 'bg-rice-paper border border-deep-blue-200 text-deep-blue'
@@ -298,7 +298,7 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
         </button>
         <button
           onClick={() => onChange({ ...value, mode: 'pantone' })}
-          className={`flex-1 py-2 rounded-sm font-song text-sm transition-all ${
+          className={`flex-1 py-1.5 rounded-sm font-song text-xs transition-all ${
             value.mode === 'pantone'
               ? 'bg-palace-red text-rice-paper'
               : 'bg-rice-paper border border-deep-blue-200 text-deep-blue'
@@ -308,7 +308,7 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
         </button>
         <button
           onClick={() => onChange({ ...value, mode: 'image' })}
-          className={`flex-1 py-2 rounded-sm font-song text-sm transition-all ${
+          className={`flex-1 py-1.5 rounded-sm font-song text-xs transition-all ${
             value.mode === 'image'
               ? 'bg-palace-red text-rice-paper'
               : 'bg-rice-paper border border-deep-blue-200 text-deep-blue'
@@ -322,14 +322,14 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
-          className="space-y-4"
+          className="space-y-2"
         >
           <ColorPalette
             hue={value.hue || 0}
             brightness={value.brightness || 50}
             onChange={(h, b) => onChange({ ...value, hue: h, brightness: b })}
           />
-          <div className="space-y-3">
+          <div className="space-y-2">
             <InkSlider
               label="色相"
               value={value.hue || 0}
@@ -359,9 +359,9 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
             placeholder="输入潘通色号，如 18-1662 TCX"
             value={value.pantone || ''}
             onChange={(e) => onChange({ ...value, pantone: e.target.value })}
-            className="w-full px-4 py-3 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
+            className="w-full px-3 py-2 text-sm bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
           />
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-4 gap-1">
             {['18-1662 TCX', '16-0541 TCX', '19-4052 TCX', '14-1324 TCX'].map((code) => (
               <button
                 key={code}
@@ -376,7 +376,7 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
             <div className="mt-2">
               {getPantoneColor(value.pantone || '') ? (
                 <div className="flex items-center gap-3">
-                  <div className="flex-1 h-12 rounded-sm border border-deep-blue-200 shadow-md" style={{ backgroundColor: getPantoneColor(value.pantone || '') }} />
+                  <div className="flex-1 h-8 rounded-sm border border-deep-blue-200 shadow-sm" style={{ backgroundColor: getPantoneColor(value.pantone || '') }} />
                   <span className="font-song text-sm text-deep-blue-light whitespace-nowrap">{value.pantone}</span>
                 </div>
               ) : (
@@ -402,11 +402,11 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
             type="file"
             accept="image/*"
             onChange={handleImageUpload}
-            className="w-full px-4 py-3 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue cursor-pointer"
+            className="w-full px-3 py-2 text-sm bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue cursor-pointer"
           />
           {imagePreview && (
             <div className="relative">
-              <div className="w-full h-48 bg-rice-paper-dark rounded-sm border border-deep-blue-200 overflow-hidden relative">
+              <div className="w-full h-28 bg-rice-paper-dark rounded-sm border border-deep-blue-200 overflow-hidden relative">
                 <img
                   ref={imageRef}
                   src={imagePreview}
@@ -428,7 +428,7 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
                   {sampledColors.map((color, idx) => (
                     <div
                       key={idx}
-                      className="w-8 h-8 rounded-sm border border-deep-blue-200 shadow-md"
+                      className="w-6 h-6 rounded-sm border border-deep-blue-200 shadow-sm"
                       style={{ background: color }}
                       title={color}
                     />
