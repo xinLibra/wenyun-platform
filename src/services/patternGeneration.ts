@@ -25,6 +25,54 @@ export interface PatternGenerationResult {
   fallback: boolean
   /** 失败原因（fallback=true 时填充，便于页面提示） */
   fallbackReason?: string
+  /** 真实生成返回的 seed；fallback 时为 -1 */
+  seed?: number
+  /** 真实生成耗时（毫秒）；fallback 时为 undefined */
+  elapsedMs?: number
+  /** 真实生成落盘路径（若 sd_proxy 配置了 SD_PROXY_OUTPUT_DIR）；fallback 时为 undefined */
+  filePath?: string
+}
+
+/**
+ * 规范化潘通色号：trim + 大写；可选去掉 TCX 后缀
+ *
+ * 用于解决「用户输入 18-1662 与库内 18-1662 TCX 比较失败」的 bug。
+ * 严格相等比较 `pantoneCode === p` 会因后缀不同而落兜底分支，
+ * 让颜色加权退化成 "pantone 18-1662 color" 弱描述。
+ */
+function normalizePantone(code: string, opts: { stripTcx?: boolean } = {}): string {
+  let s = (code || '').trim().toUpperCase()
+  if (opts.stripTcx) {
+    s = s.replace(/\s*TCX\s*$/, '').trim()
+  }
+  return s
+}
+
+/**
+ * 潘通色号 → HEX 映射（与 GenerationParams.tsx pantoneColors 保持一致）
+ *
+ * 这里只录入 SUBCATEGORY_PANTONE_MAP 用到的 12 条瑞兽子类色号，
+ * 不照搬完整 200+ 条表，避免数据冗余维护负担。
+ * 如有缺失，buildColorWeightedClause 会优雅降级（不写 HEX，只写色名）。
+ */
+const PANTONE_HEX_MAP: Record<string, string> = {
+  '18-1662 TCX': '#C3423F', // 宫墙红 dragon/phoenix_bird/dragon_phoenix/beast_other
+  '19-4052 TCX': '#26364B', // 深藏青 crane
+  '16-1450 TCX': '#E8B4B8', // 藕粉 butterfly
+  '16-4725 TCX': '#1565C0', // 钴蓝 peacock
+  '18-1150 TCX': '#CD853F', // 栗棕 deer
+  '12-0752 TCX': '#D4AF37', // 金色 lion
+  '17-1462 TCX': '#FF6F00', // 橙红 tiger
+}
+
+/** 根据潘通色号查 HEX；支持 '18-1662' 与 '18-1662 TCX' 两种写法匹配到同一色 */
+function getPantoneHex(pantone: string): string | null {
+  const norm = normalizePantone(pantone)
+  if (PANTONE_HEX_MAP[norm]) return PANTONE_HEX_MAP[norm]
+  // 去 TCX 后缀再补回 TCX 后查（如 '18-1662' → '18-1662 TCX'）
+  const stripped = normalizePantone(pantone, { stripTcx: true })
+  if (PANTONE_HEX_MAP[stripped + ' TCX']) return PANTONE_HEX_MAP[stripped + ' TCX']
+  return null
 }
 
 /** WebUI 推理默认参数（与 spec 一致） */
@@ -189,31 +237,40 @@ function buildColorWeightedClause(params: GenerationParams): string {
 
     // 1. 语义关键词：直接映射
     if (p === 'monochrome-black') {
-      return 'monochrome black, black color scheme, ink black'
+      return 'monochrome black, black color scheme, ink black, #1A1A1A'
     }
     if (p === 'multicolor') {
       return 'multicolor, colorful palette, vibrant colors'
     }
 
     // 2. 真实潘通色号 → 查 SUBCATEGORY_PANTONE_MAP 取英文名 + 中文名
+    //    使用 normalizePantone + stripTcx 比较：
+    //    - 用户输入 '18-1662' 与库内 '18-1662 TCX' 视为同一色
+    //    - 旧代码用严格相等 pantoneCode === p 会让手动输入落兜底分支
+    //      （颜色加权退化成 "pantone 18-1662 color" 弱描述）
     const subId = params.dimension?.subcategory
     if (subId) {
       const pantoneInfo = getPantoneForSubcategory(subId)
-      if (pantoneInfo && pantoneInfo.pantoneCode === p) {
+      if (pantoneInfo && normalizePantone(pantoneInfo.pantoneCode, { stripTcx: true }) === normalizePantone(p, { stripTcx: true })) {
         const en = pantoneInfo.englishName
         const zh = pantoneInfo.label
         const tag = pantoneInfo.promptTag
+        const hex = getPantoneHex(p)
+        // HEX 写入 prompt：SD 模型对 "#RRGGBB" 比纯英文色名更敏感，是锁色的硬约束
+        const hexPart = hex ? `, ${hex.toLowerCase()}` : ''
         // 根据 promptTag 决定重复方式：multicolor 时强调多彩，mono 时强调单色
         if (tag === 'multicolor') {
-          return `${en} color, ${en} color scheme, ${zh}色调, multicolor palette`
+          return `${en} color, ${en} color scheme, ${zh}色调, multicolor palette${hexPart}`
         }
-        return `${en} color, ${en} color scheme, ${zh}色调`
+        return `${en} color, ${en} color scheme, ${zh}色调${hexPart}`
       }
     }
 
-    // 3. 兜底：未知色号，用色号本身 + 基础颜色描述
+    // 3. 兜底：未知色号，用色号本身 + HEX（若查到）+ 基础颜色描述
     const baseCode = p.split(' ')[0] // e.g. "18-1662"
-    return `pantone ${baseCode} color, custom color scheme`
+    const hex = getPantoneHex(p)
+    const hexPart = hex ? `, ${hex.toLowerCase()}` : ''
+    return `pantone ${baseCode} color, custom color scheme${hexPart}`
   }
 
   // 色相模式：hue → 英文名 + 亮度修饰
@@ -253,10 +310,11 @@ function buildColorClause(params: GenerationParams): string {
     if (p === 'multicolor') return 'multicolor palette'
 
     // 2. 真实潘通色号 → 按当前子类查 prompt 语义标签
+    //    使用 normalizePantone + stripTcx 比较，与 buildColorWeightedClause 保持一致
     const subId = params.dimension?.subcategory
     if (subId) {
       const pantoneInfo = getPantoneForSubcategory(subId)
-      if (pantoneInfo && pantoneInfo.pantoneCode === p) {
+      if (pantoneInfo && normalizePantone(pantoneInfo.pantoneCode, { stripTcx: true }) === normalizePantone(p, { stripTcx: true })) {
         if (pantoneInfo.promptTag === 'monochrome-black') return 'monochrome black palette'
         if (pantoneInfo.promptTag === 'multicolor') return 'multicolor palette'
       }
@@ -314,8 +372,121 @@ function hexToColorName(hex: string): string {
 }
 
 /**
+ * 根据主色 hue 返回应抑制的"抢色背景"列表
+ *
+ * 设计原则：只抑制 *background / dominant wrong hue*，不抑制 accent，
+ * 避免误伤纹样本身需要的少量对比色（如龙纹身上的金色鳞片）。
+ * multicolor / monochrome-black 不返回抑制列表，避免与多彩诉求冲突。
+ */
+function hueToSuppressedBackgrounds(hue: number): string[] {
+  const h = ((hue % 360) + 360) % 360
+  // red (宫墙红)
+  if (h < 15 || h >= 345) {
+    return ['blue background', 'cyan background', 'green background', 'yellow background', 'grey background']
+  }
+  // orange (橙红/栗棕)
+  if (h < 45) {
+    return ['blue background', 'cyan background', 'green background', 'purple background']
+  }
+  // yellow (金色)
+  if (h < 70) {
+    return ['blue background', 'cyan background', 'purple background', 'pink background']
+  }
+  // green
+  if (h < 165) {
+    return ['red background', 'pink background', 'purple background', 'orange background']
+  }
+  // cyan
+  if (h < 200) {
+    return ['red background', 'orange background', 'pink background']
+  }
+  // blue (深藏青/钴蓝)
+  if (h < 255) {
+    return ['red background', 'orange background', 'yellow background', 'pink background']
+  }
+  // purple
+  if (h < 290) {
+    return ['yellow background', 'green background', 'orange background']
+  }
+  // pink (藕粉)
+  return ['green background', 'cyan background', 'blue background']
+}
+
+/**
+ * 从当前 colorScheme 推断主色 hue（用于偏色抑制）
+ * 返回 null 表示无明确主色（如 multicolor），调用方应跳过抑制
+ */
+function inferDominantHue(params: GenerationParams): number | null {
+  const cs = params.colorScheme
+  if (!cs) return null
+
+  if (cs.mode === 'hue') {
+    return cs.hue ?? null
+  }
+
+  if (cs.mode === 'image' && cs.colors && cs.colors.length > 0) {
+    // 用第一个吸色作为主色
+    const m = /^#?([0-9a-fA-F]{6})$/.exec(cs.colors[0].trim())
+    if (!m) return null
+    const num = parseInt(m[1], 16)
+    const r = (num >> 16) & 0xff, g = (num >> 8) & 0xff, b = num & 0xff
+    const rn = r / 255, gn = g / 255, bn = b / 255
+    const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn)
+    let h = 0
+    const d = max - min
+    if (d !== 0) {
+      if (max === rn) h = ((gn - bn) / d) % 6
+      else if (max === gn) h = (bn - rn) / d + 2
+      else h = (rn - gn) / d + 4
+      h *= 60
+      if (h < 0) h += 360
+    }
+    return h
+  }
+
+  if (cs.mode === 'pantone' && cs.pantone) {
+    const p = cs.pantone.trim()
+    // 语义关键词不参与偏色抑制（multicolor/mono-black 不应抑制任何色）
+    if (p === 'multicolor' || p === 'monochrome-black') return null
+    // 真实色号：按子类反查 promptTag，multicolor 不抑制
+    const subId = params.dimension?.subcategory
+    if (subId) {
+      const pantoneInfo = getPantoneForSubcategory(subId)
+      if (pantoneInfo && normalizePantone(pantoneInfo.pantoneCode, { stripTcx: true }) === normalizePantone(p, { stripTcx: true })) {
+        if (pantoneInfo.promptTag === 'multicolor') return null
+      }
+    }
+    // 单色：查 HEX → hue
+    const hex = getPantoneHex(p)
+    if (!hex) return null
+    const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim())
+    if (!m) return null
+    const num = parseInt(m[1], 16)
+    const r = (num >> 16) & 0xff, g = (num >> 8) & 0xff, b = num & 0xff
+    const rn = r / 255, gn = g / 255, bn = b / 255
+    const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn)
+    let h = 0
+    const d = max - min
+    if (d !== 0) {
+      if (max === rn) h = ((gn - bn) / d) % 6
+      else if (max === gn) h = (bn - rn) / d + 2
+      else h = (rn - gn) / d + 4
+      h *= 60
+      if (h < 0) h += 360
+    }
+    return h
+  }
+
+  return null
+}
+
+/**
  * Negative prompt 固定模板
- * 注意：除非当前子类就是鹿纹（deer），否则把 "deer" 列入排除
+ * 注意：
+ *   1. 除非当前子类就是鹿纹（deer），否则把 "deer" 列入排除（瑞兽串味）
+ *   2. 除非当前子类就是狮纹（lion），否则把 "lion" 列入排除
+ *   3. 选中单色主色时，按 hue 抑制"抢色背景"，避免 SD 默认补蓝/灰背景
+ *      （仅抑制 background，不抑制 accent，保留纹样本身少量对比色）
  */
 export function buildNegativePrompt(params: GenerationParams): string {
   const base = [
@@ -342,12 +513,24 @@ export function buildNegativePrompt(params: GenerationParams): string {
   if (subId !== 'lion') {
     base.push('lion')
   }
+
+  // 偏色背景抑制：按主色 hue 抑制非选中色 background
+  const hue = inferDominantHue(params)
+  if (hue !== null) {
+    const suppressed = hueToSuppressedBackgrounds(hue)
+    base.push(...suppressed)
+  }
+
   return base.join(', ')
 }
 
 /**
  * 调用本地代理 → A1111 /sdapi/v1/txt2img
  * 失败时抛错，由上层 generatePatternWithFallback 捕获并降级 mock
+ *
+ * 超时策略：10 分钟（与 sd_proxy.py 端 urlopen timeout=10*60 对齐）
+ * 旧值 5 分钟会先于后端 abort，造成前端降级 mock 时 Python 仍在跑下一笔请求，
+ * 反而把 WebUI 队列堵死 → "一直 Generating"。
  */
 async function callSdProxy(payload: {
   prompt: string
@@ -358,10 +541,9 @@ async function callSdProxy(payload: {
   cfg_scale: number
   sampler_name: string
   seed: number
-}): Promise<{ imageUrl: string; generationId: string; seed: number }> {
+}): Promise<{ imageUrl: string; generationId: string; seed: number; elapsedMs?: number; filePath?: string }> {
   const ctrl = new AbortController()
-  // CPU 推理慢，给 5 分钟超时（28 steps @ 512 大约 1-3 分钟，留足缓冲）
-  const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000)
+  const timer = setTimeout(() => ctrl.abort(), 10 * 60 * 1000)
 
   try {
     const resp = await fetch(PROXY_URL, {
@@ -380,6 +562,8 @@ async function callSdProxy(payload: {
       image_url?: string
       generation_id?: string
       seed?: number
+      elapsed_ms?: number
+      file_path?: string | null
       error?: string
     }
     if (!data.image_url) {
@@ -389,6 +573,8 @@ async function callSdProxy(payload: {
       imageUrl: data.image_url,
       generationId: data.generation_id || `sd-${Date.now()}`,
       seed: data.seed ?? -1,
+      elapsedMs: typeof data.elapsed_ms === 'number' ? data.elapsed_ms : undefined,
+      filePath: data.file_path || undefined,
     }
   } finally {
     clearTimeout(timer)
@@ -402,12 +588,21 @@ async function callSdProxy(payload: {
 export async function generatePatternWithFallback(
   params: GenerationParams
 ): Promise<PatternGenerationResult> {
-  const { prompt, negativePrompt, loraFile, trigger, subLabelEn } = buildPromptParts(params)
+  const { prompt, negativePrompt, loraFile, loraWeight, trigger, subLabelEn } = buildPromptParts(params)
 
   // 控制台打印最终 prompt，便于排查
+  console.log('[patternGeneration] ===== 生成请求 =====')
   console.log('[patternGeneration] final prompt:', prompt)
   console.log('[patternGeneration] negative prompt:', negativePrompt)
-  console.log('[patternGeneration] lora:', loraFile ? `<lora:${loraFile}:0.7>` : 'none', '| trigger:', trigger, '| sub:', subLabelEn)
+  console.log(
+    '[patternGeneration] lora:',
+    loraFile ? `<lora:${loraFile}:${loraWeight}>` : 'none',
+    '| trigger:', trigger,
+    '| sub:', subLabelEn,
+    '| steps:', SD_DEFAULTS.steps,
+    '| cfg:', SD_DEFAULTS.cfgScale,
+    '| sampler:', SD_DEFAULTS.samplerName,
+  )
 
   try {
     const result = await callSdProxy({
@@ -421,18 +616,33 @@ export async function generatePatternWithFallback(
       seed: SD_DEFAULTS.seed,
     })
 
+    console.log(
+      '[patternGeneration] ===== 真实生成成功 =====',
+      '| seed:', result.seed,
+      '| elapsed:', result.elapsedMs ? `${result.elapsedMs}ms` : 'n/a',
+      '| file:', result.filePath || 'n/a',
+      '| fallback: false',
+    )
+
     return {
       imageUrl: result.imageUrl,
       generationId: result.generationId,
       prompt,
       negativePrompt,
       fallback: false,
+      seed: result.seed,
+      elapsedMs: result.elapsedMs,
+      filePath: result.filePath,
     }
   } catch (err: any) {
     const reason = err?.name === 'AbortError'
-      ? 'SD 生成超时（CPU 推理较慢，5 分钟仍未返回）'
+      ? 'SD 生成超时（CPU 推理较慢，10 分钟仍未返回）'
       : (err?.message || String(err))
-    console.warn('[patternGeneration] SD call failed, falling back to mock:', reason)
+    console.warn(
+      '[patternGeneration] ===== 真实生成失败，降级 mock =====',
+      '| fallback: true',
+      '| reason:', reason,
+    )
 
     // mock 兜底：保证页面不白屏
     const mock = await mockGeneratePattern(params)
@@ -442,8 +652,10 @@ export async function generatePatternWithFallback(
       // mockGeneratePattern 导出类型不含 prompt 字段，这里直接用本地拼好的 prompt
       // （上面 console.log 已打印过），保证 fallback 结果也有可读 prompt
       prompt,
+      negativePrompt,
       fallback: true,
       fallbackReason: reason,
+      seed: -1,
     }
   }
 }

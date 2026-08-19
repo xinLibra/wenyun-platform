@@ -72,6 +72,8 @@ export default function CreatePattern() {
   const [isStep3Complete, setIsStep3Complete] = useState(false)
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [showDnaAnalysis, setShowDnaAnalysis] = useState(false)
+  /** 真实生成失败时的降级提示信息；为 null 表示最近一次生成是真实成功（或尚未生成） */
+  const [fallbackInfo, setFallbackInfo] = useState<{ reason: string } | null>(null)
 
   const handleDimensionChange = (value: PatternDimension) => {
     setDimension(value)
@@ -216,17 +218,19 @@ export default function CreatePattern() {
       if (result.fallback) {
         // 真实链路失败 → 已自动降级 mock，给出明确原因便于排查
         console.warn('[CreatePattern] 真实生成失败，降级到 mock:', result.fallbackReason)
+        setFallbackInfo({ reason: result.fallbackReason || '未知原因' })
       } else {
         console.log('[CreatePattern] 真实生成成功, prompt=', result.prompt)
+        setFallbackInfo(null)
       }
       setShowDnaAnalysis(true)
     } catch (error) {
-      // 兜底保险：generatePatternWithFallback 内部已带降级，理论上不该走到这里
+      // 兜底保险：generatePatternWithFallback 内部已带 mock 降级，理论上不该走到这里
+      // 走到这里说明 mock 也炸了 → 不再静默兜底 trae-api，让用户看到真实失败状态 + 重试按钮
       console.error('[CreatePattern] 生成彻底失败:', error)
-      const fallbackImage = `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20pattern%20design%20elegant%20minimal&image_size=square`
-      setGeneratedImage(fallbackImage)
-      localStorage.setItem('last_generated_pattern', fallbackImage)
-      setShowDnaAnalysis(true)
+      const reason = (error as Error)?.message || '生成彻底失败，请检查服务后重试'
+      setFallbackInfo({ reason })
+      setShowDnaAnalysis(false)
     } finally {
       setIsGenerating(false)
     }
@@ -873,6 +877,45 @@ return '自定义风格'
                 </motion.div>
               ))}
             </div>
+
+            {/* 真实生成失败降级提示：fallback=true 时显示，提供「重试真实生成」按钮 */}
+            <AnimatePresence>
+              {fallbackInfo && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="p-3 bg-warning-50 border border-warning-200 rounded-sm">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-warning mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-song text-sm text-warning-dark font-semibold">
+                          真实生成失败，已降级为占位 mock
+                        </div>
+                        <div className="font-song text-xs text-deep-blue-light mt-1 break-words">
+                          原因：{fallbackInfo.reason}
+                        </div>
+                        <div className="font-song text-xs text-deep-blue-light mt-1">
+                          请确认 WebUI（端口 7860）与 sd_proxy（端口 8787）已启动，然后点击重试
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleGenerate}
+                        disabled={isGenerating}
+                        className="px-3 py-1.5 text-xs font-song bg-palace-red text-rice-paper rounded-sm hover:bg-palace-red-dark disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                      >
+                        {isGenerating ? '重试中...' : '重试真实生成'}
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <motion.div
               initial={{ opacity: 0, x: -30 }}
