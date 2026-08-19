@@ -8,7 +8,8 @@ import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { DimensionFilter } from '../components/pattern/DimensionFilter'
 import { GenerationParamsPanel } from '../components/pattern/GenerationParams'
 import { PromptInput } from '../components/pattern/PromptInput'
-import { generatePatternWithFallback } from '../services/mockGeneration'
+import { generatePatternWithFallback } from '../services/patternGeneration'
+import { applyPreset } from '../config/generationPresets'
 import { PatternDimension, GenerationParams, PromptParseResult, CRAFT_OPTIONS, ETHNIC_OPTIONS, THEME_OPTIONS, APPLICATION_OPTIONS, ARRANGEMENT_OPTIONS, SYMMETRY_OPTIONS } from '../types/pattern'
 import { supabase } from '../lib/supabase'
 import { mockSemanticSearch } from '../mock/semanticSearch'
@@ -71,18 +72,35 @@ export default function CreatePattern() {
   const [isStep3Complete, setIsStep3Complete] = useState(false)
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [showDnaAnalysis, setShowDnaAnalysis] = useState(false)
+
   const handleDimensionChange = (value: PatternDimension) => {
     setDimension(value)
-    setGenerationParams((prev) => ({
-      ...prev,
-      dimension: value,
-    }))
+
+    // 检测 subcategory 是否发生变化：仅在「切换到新子类」时 applyPreset，
+    // 用户拖滑条/改色触发的 handleParamsChange 不会走这里，所以不会盖回预设。
+    // 这里读 state 拿到的是「本次事件之前」的值（React 会异步刷新），作 prevSubId 正确。
+    const prevSubId = generationParams.dimension.subcategory
+    const newSubId = value.subcategory
+    const subChanged = !!newSubId && newSubId !== prevSubId
 
     const sub =
       value.mainTheme && value.subcategory
         ? findSubcategory(value.mainTheme as PatternThemeId, value.subcategory)
         : null
+
+    setGenerationParams((prev) => {
+      // 仅在子类变化时应用 preset；其他 dimension 字段变化（mainTheme / scenes / style）不重置滑条
+      if (subChanged) {
+        const next = applyPreset(prev, newSubId)
+        next.dimension = value
+        return next
+      }
+      return { ...prev, dimension: value }
+    })
+
     setSelectedPatternName(sub?.label || '')
+    // GenerationParamsPanel 里有现成的 selectedPatternName 提示
+    // 「已根据你选择的参考纹样「xxx」预设了初始参数，可自由调整」，无需重复实现
     setIsStep2Complete(
       Boolean(
         (value.mainTheme && value.subcategory) ||
@@ -195,10 +213,16 @@ export default function CreatePattern() {
       const result = await generatePatternWithFallback(generationParams)
       setGeneratedImage(result.imageUrl)
       localStorage.setItem('last_generated_pattern', result.imageUrl)
-      console.log('CreatePattern - Pattern generated and saved to localStorage:', result.imageUrl)
+      if (result.fallback) {
+        // 真实链路失败 → 已自动降级 mock，给出明确原因便于排查
+        console.warn('[CreatePattern] 真实生成失败，降级到 mock:', result.fallbackReason)
+      } else {
+        console.log('[CreatePattern] 真实生成成功, prompt=', result.prompt)
+      }
       setShowDnaAnalysis(true)
     } catch (error) {
-      console.error('生成失败:', error)
+      // 兜底保险：generatePatternWithFallback 内部已带降级，理论上不该走到这里
+      console.error('[CreatePattern] 生成彻底失败:', error)
       const fallbackImage = `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20pattern%20design%20elegant%20minimal&image_size=square`
       setGeneratedImage(fallbackImage)
       localStorage.setItem('last_generated_pattern', fallbackImage)

@@ -4,6 +4,7 @@ import { InkSlider } from '../ui/InkSlider'
 import { BambooToggle } from '../ui/Select'
 import { ColorPalette } from '../ui/ColorPalette'
 import { GenerationParams as GenerationParamsType, ARRANGEMENT_OPTIONS, SYMMETRY_OPTIONS, ColorSchemeParams } from '../../types/pattern'
+import { SUBCATEGORY_PANTONE_MAP, getPantoneForSubcategory } from '../../config/generationPresets'
 
 interface GenerationParamsProps {
   value: GenerationParamsType
@@ -14,6 +15,8 @@ interface GenerationParamsProps {
 interface ColorPickerProps {
   value: ColorSchemeParams
   onChange: (value: ColorSchemeParams) => void
+  /** 当前选中的纹样子类 ID，用于高亮对应的默认潘通色号 */
+  subcategoryId?: string
 }
 
 const pantoneColors: Record<string, string> = {
@@ -214,20 +217,25 @@ const pantoneColors: Record<string, string> = {
 
 const getPantoneColor = (pantone: string): string | undefined => {
   const normalized = pantone.trim().toUpperCase()
-  
+
+  // generationPresets 里硬编码的两个语义关键词（monochrome-black / multicolor）
+  // 不是真正的潘通色号，给它们一个视觉占位色，避免 UI 弹"未找到色号"误报
+  if (normalized === 'MONOCHROME-BLACK') return '#1a1a1a'
+  if (normalized === 'MULTICOLOR') return 'linear-gradient(135deg, #d32f2f 0%, #fbc02d 25%, #388e3c 50%, #1976d2 75%, #7b1fa2 100%)'
+
   if (pantoneColors[normalized]) {
     return pantoneColors[normalized]
   }
-  
+
   const baseCode = normalized.split(' ')[0]
   if (pantoneColors[baseCode]) {
     return pantoneColors[baseCode]
   }
-  
+
   return undefined
 }
 
-function ColorPicker({ value, onChange }: ColorPickerProps) {
+function ColorPicker({ value, onChange, subcategoryId }: ColorPickerProps) {
   const [imagePreview, setImagePreview] = useState<string>('')
   const [sampledColors, setSampledColors] = useState<string[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -359,25 +367,31 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
             placeholder="输入潘通色号，如 18-1662 TCX"
             value={value.pantone || ''}
             onChange={(e) => onChange({ ...value, pantone: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
+            className="w-full px-3 py-2 text-sm bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red cursor-text"
           />
-          <div className="grid grid-cols-4 gap-1">
-            {['18-1662 TCX', '16-0541 TCX', '19-4052 TCX', '14-1324 TCX'].map((code) => (
-              <button
-                key={code}
-                onClick={() => onChange({ ...value, pantone: code })}
-                className="px-2 py-1 bg-deep-blue-50 rounded-sm text-xs font-song text-deep-blue-light hover:bg-deep-blue-100"
-              >
-                {code.split(' ')[0]}
-              </button>
-            ))}
-          </div>
+          <div className="text-[11px] font-song text-deep-blue-300 mt-1">支持手动输入潘通色号，如 18-1662 TCX 或 18-1662</div>
+
+          {/* 颜色预览条 + 错误提示：紧跟输入框，匹配成功时显示色块长条，失败时显示错误 */}
           {(value.pantone || '').trim() && (
             <div className="mt-2">
               {getPantoneColor(value.pantone || '') ? (
                 <div className="flex items-center gap-3">
-                  <div className="flex-1 h-8 rounded-sm border border-deep-blue-200 shadow-sm" style={{ backgroundColor: getPantoneColor(value.pantone || '') }} />
-                  <span className="font-song text-sm text-deep-blue-light whitespace-nowrap">{value.pantone}</span>
+                  <div
+                    className="flex-1 h-8 rounded-sm border border-deep-blue-200 shadow-sm"
+                    style={{ background: getPantoneColor(value.pantone || '') }}
+                  />
+                  <span className="font-song text-sm text-deep-blue-light whitespace-nowrap">
+                    {value.pantone === 'monochrome-black'
+                      ? '单色黑预设'
+                      : value.pantone === 'multicolor'
+                        ? '多色预设'
+                        : (() => {
+                            const entry = Object.values(SUBCATEGORY_PANTONE_MAP).find(
+                              (p) => p.pantoneCode.toUpperCase() === (value.pantone || '').trim().toUpperCase()
+                            )
+                            return entry ? `${entry.label} · ${value.pantone}` : value.pantone
+                          })()}
+                  </span>
                 </div>
               ) : (
                 <div className="flex items-center gap-3 px-4 py-3 bg-warning-50 border border-warning-200 rounded-sm">
@@ -389,6 +403,82 @@ function ColorPicker({ value, onChange }: ColorPickerProps) {
               )}
             </div>
           )}
+
+          {/* 子类默认色号：高亮显示当前子类对应的潘通色 */}
+          {subcategoryId && (() => {
+            const defaultPantone = getPantoneForSubcategory(subcategoryId)
+            if (!defaultPantone) return null
+            const hex = getPantoneColor(defaultPantone.pantoneCode)
+            const isActive = value.pantone?.trim().toUpperCase() === defaultPantone.pantoneCode.toUpperCase()
+            return (
+              <div className="mt-2 p-2 bg-ming-yellow/15 border border-ming-yellow/40 rounded-sm">
+                <div className="flex items-center gap-2 text-xs font-song text-deep-blue-light mb-1.5">
+                  <span className="text-ming-yellow">✦</span>
+                  <span>当前子类推荐色</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onChange({ ...value, pantone: defaultPantone.pantoneCode })}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-sm transition-all ${
+                    isActive
+                      ? 'bg-palace-red text-rice-paper border border-palace-red shadow-sm'
+                      : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red'
+                  }`}
+                >
+                  <div
+                    className="w-6 h-6 rounded-sm border border-deep-blue-200 flex-shrink-0"
+                    style={{ background: hex || '#ccc' }}
+                  />
+                  <div className="text-left flex-1 min-w-0">
+                    <div className={`text-sm font-song truncate ${isActive ? 'text-rice-paper' : 'text-deep-blue'}`}>
+                      {defaultPantone.label}
+                    </div>
+                    <div className={`text-xs font-song truncate ${isActive ? 'text-rice-paper/80' : 'text-deep-blue-light'}`}>
+                      {defaultPantone.pantoneCode}
+                    </div>
+                  </div>
+                  {isActive && (
+                    <svg className="w-4 h-4 text-rice-paper flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            )
+          })()}
+
+          {/* 全部子类默认色号快捷选择 */}
+          <div className="mt-2">
+            <div className="text-xs font-song text-deep-blue-light mb-1.5">瑞兽纹样常用色</div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {Array.from(new Set(Object.values(SUBCATEGORY_PANTONE_MAP).map((p) => p.pantoneCode))).map((code) => {
+                const info = Object.values(SUBCATEGORY_PANTONE_MAP).find((p) => p.pantoneCode === code)
+                const hex = getPantoneColor(code) || '#ccc'
+                const isActive = value.pantone?.trim().toUpperCase() === code.toUpperCase()
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => onChange({ ...value, pantone: code })}
+                    className={`flex flex-col items-center gap-0.5 py-1 px-0.5 rounded-sm border transition-all ${
+                      isActive
+                        ? 'border-palace-red bg-palace-red/10 shadow-sm'
+                        : 'border-deep-blue-200 bg-rice-paper hover:border-palace-red'
+                    }`}
+                    title={`${info?.label || ''} ${code}`}
+                  >
+                    <div
+                      className="w-7 h-7 rounded-sm border border-deep-blue-200"
+                      style={{ background: hex }}
+                    />
+                    <span className={`text-[10px] font-song leading-tight ${isActive ? 'text-palace-red font-semibold' : 'text-deep-blue-light'}`}>
+                      {info?.label || code.split(' ')[0]}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </motion.div>
       )}
 
@@ -486,6 +576,7 @@ export function GenerationParamsPanel({ value, onChange, selectedPatternName }: 
         <ColorPicker
           value={value.colorScheme}
           onChange={(v) => onChange({ ...value, colorScheme: v })}
+          subcategoryId={value.dimension?.subcategory}
         />
       </div>
 
