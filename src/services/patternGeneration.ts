@@ -11,6 +11,7 @@
 
 import { GenerationParams } from '../types/pattern'
 import { getLoraEntry, DEFAULT_LORA_WEIGHT } from '../config/loraMap'
+import { getPantoneForSubcategory } from '../config/generationPresets'
 import { mockGeneratePattern } from './mockGeneration'
 
 export interface PatternGenerationResult {
@@ -43,10 +44,11 @@ const PROXY_URL = '/sd-api/generate'
  * 拼装统一 caption prompt（顺序固定，禁止乱序）
  *
  * 模板：
- *   {触发词}, Chinese traditional {子类英文} pattern, decorative motif,
+ *   {触发词}, Chinese traditional {子类英文} pattern, {颜色加权前缀}, decorative motif,
  *   {平面/肌理}, {疏密}, {排布}, {对称}, {文化符号强度}, {配色},
  *   traditional ICH style, <lora:...:w>
  *
+ * 颜色加权前缀：在 prompt 前半部分重复颜色词 2-3 次，增强模型对颜色的响应。
  * 子类未选时，触发词与子类英文段省略，但其余装饰段保留。
  */
 export function buildPromptParts(params: GenerationParams): {
@@ -76,21 +78,28 @@ export function buildPromptParts(params: GenerationParams): {
     parts.push('Chinese traditional pattern')
   }
 
-  // 3) decorative motif（固定）
+  // 3) 颜色加权前缀：在 prompt 前半部分重复颜色词，增强模型对颜色的响应
+  //    这是修复"选色后生成颜色不匹配"的核心改动——把颜色词放在 prompt 前半段
+  //    并重复 2-3 次，让模型优先关注颜色描述。
+  const colorWeighted = buildColorWeightedClause(params)
+  if (colorWeighted) {
+    parts.push(colorWeighted)
+  }
+
+  // 4) decorative motif（固定）
   parts.push('decorative motif')
 
-  // 4) 平面/肌理：textureDetail 0–100
+  // 5) 平面/肌理：textureDetail 0–100
   const tex = params.textureDetail ?? 50
   if (tex < 40) {
     parts.push('flat pattern design, clean lines, no texture')
   } else if (tex < 70) {
     parts.push('flat pattern design, subtle surface hint')
   } else {
-    // 默认 embroidery texture；刺绣类子类（embroidery craft）保持一致
     parts.push('embroidery texture')
   }
 
-  // 5) 疏密：complexity 0–100
+  // 6) 疏密：complexity 0–100
   const cmp = params.complexity ?? 50
   if (cmp < 30) {
     parts.push('minimal geometric, simple sparse detail')
@@ -100,7 +109,7 @@ export function buildPromptParts(params: GenerationParams): {
     parts.push('dense elaborate full pattern, intricate detail')
   }
 
-  // 6) 排布：arrangement
+  // 7) 排布：arrangement
   switch (params.arrangement) {
     case 'single':
       parts.push('single motif, centered medallion')
@@ -113,7 +122,7 @@ export function buildPromptParts(params: GenerationParams): {
       break
   }
 
-  // 7) 对称：symmetry
+  // 8) 对称：symmetry
   switch (params.symmetry) {
     case 'mirror':
       parts.push('bilateral mirror symmetry')
@@ -126,7 +135,7 @@ export function buildPromptParts(params: GenerationParams): {
       break
   }
 
-  // 8) 文化符号强度：culturalIntensity 0–100
+  // 9) 文化符号强度：culturalIntensity 0–100
   const ci = params.culturalIntensity ?? 50
   if (ci < 35) {
     parts.push('simplified abstract interpretation of traditional symbol')
@@ -136,13 +145,13 @@ export function buildPromptParts(params: GenerationParams): {
     parts.push('classic authentic traditional form, clearly recognizable')
   }
 
-  // 9) 配色：colorScheme
+  // 10) 配色：colorClause（保留在末尾，双重保险）
   parts.push(buildColorClause(params))
 
   // 末尾固定加 traditional ICH style
   parts.push('traditional ICH style')
 
-  // LoRA 标签：放在末尾（A1111 解析时不影响 prompt 语义）
+  // LoRA 标签：放在末尾
   if (loraFile) {
     parts.push(`<lora:${loraFile}:${loraWeight}>`)
   }
@@ -153,7 +162,73 @@ export function buildPromptParts(params: GenerationParams): {
   return { prompt, negativePrompt, loraFile, loraWeight, trigger, subLabelEn }
 }
 
-/** 根据 colorScheme 写自然语言颜色段 */
+/**
+ * 颜色加权前缀：在 prompt 前半段重复颜色词 2-3 次，增强模型对颜色的响应。
+ *
+ * 设计思路：
+ *   - SD 模型对 prompt 前半段的 token 权重更高（attention 机制），把颜色词放在前面
+ *   - 重复 2-3 次（如 "light pink color, pink color, 藕粉色调"）进一步强化
+ *   - 末尾的 buildColorClause 仍保留配色描述，形成首尾呼应的双重保险
+ *
+ * 返回空字符串表示无有效颜色信息。
+ */
+function buildColorWeightedClause(params: GenerationParams): string {
+  const cs = params.colorScheme
+  if (!cs) return ''
+
+  // 图片吸色：取第一个颜色的英文名
+  if (cs.mode === 'image' && cs.colors && cs.colors.length > 0) {
+    const name = hexToColorName(cs.colors[0])
+    if (!name) return ''
+    return `${name} color, ${name} color scheme`
+  }
+
+  // 潘通色号
+  if (cs.mode === 'pantone' && cs.pantone) {
+    const p = cs.pantone.trim()
+
+    // 1. 语义关键词：直接映射
+    if (p === 'monochrome-black') {
+      return 'monochrome black, black color scheme, ink black'
+    }
+    if (p === 'multicolor') {
+      return 'multicolor, colorful palette, vibrant colors'
+    }
+
+    // 2. 真实潘通色号 → 查 SUBCATEGORY_PANTONE_MAP 取英文名 + 中文名
+    const subId = params.dimension?.subcategory
+    if (subId) {
+      const pantoneInfo = getPantoneForSubcategory(subId)
+      if (pantoneInfo && pantoneInfo.pantoneCode === p) {
+        const en = pantoneInfo.englishName
+        const zh = pantoneInfo.label
+        const tag = pantoneInfo.promptTag
+        // 根据 promptTag 决定重复方式：multicolor 时强调多彩，mono 时强调单色
+        if (tag === 'multicolor') {
+          return `${en} color, ${en} color scheme, ${zh}色调, multicolor palette`
+        }
+        return `${en} color, ${en} color scheme, ${zh}色调`
+      }
+    }
+
+    // 3. 兜底：未知色号，用色号本身 + 基础颜色描述
+    const baseCode = p.split(' ')[0] // e.g. "18-1662"
+    return `pantone ${baseCode} color, custom color scheme`
+  }
+
+  // 色相模式：hue → 英文名 + 亮度修饰
+  if (cs.mode === 'hue') {
+    const hueName = hueToColorName(cs.hue ?? 0)
+    const b = cs.brightness ?? 50
+    const brightWord = b < 35 ? 'dark' : b > 70 ? 'bright' : ''
+    const prefix = brightWord ? `${brightWord} ` : ''
+    return `${prefix}${hueName} color, ${hueName} color scheme`
+  }
+
+  return ''
+}
+
+/** 根据 colorScheme 写自然语言颜色段（放在 prompt 末尾，双重保险） */
 function buildColorClause(params: GenerationParams): string {
   const cs = params.colorScheme
   if (!cs) return 'limited color palette'
@@ -167,9 +242,28 @@ function buildColorClause(params: GenerationParams): string {
     return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} color palette`
   }
 
-  // 潘通色号：用 pantone 字符串作为限定词
+  // 潘通色号：区分语义关键词（monochrome-black / multicolor）和真实色号
+  // 真实色号（如 '18-1662 TCX'）需要根据当前子类反查 prompt 语义标签，
+  // 因为同一个色号在不同子类下可能对应不同语义（如 18-1662 TCX 对 dragon 是 mono，
+  // 对 dragon_phoenix 是 multicolor）。
   if (cs.mode === 'pantone' && cs.pantone) {
-    return `pantone ${cs.pantone} inspired color palette`
+    const p = cs.pantone.trim()
+    // 1. 语义关键词（直接识别）
+    if (p === 'monochrome-black') return 'monochrome black palette'
+    if (p === 'multicolor') return 'multicolor palette'
+
+    // 2. 真实潘通色号 → 按当前子类查 prompt 语义标签
+    const subId = params.dimension?.subcategory
+    if (subId) {
+      const pantoneInfo = getPantoneForSubcategory(subId)
+      if (pantoneInfo && pantoneInfo.pantoneCode === p) {
+        if (pantoneInfo.promptTag === 'monochrome-black') return 'monochrome black palette'
+        if (pantoneInfo.promptTag === 'multicolor') return 'multicolor palette'
+      }
+    }
+
+    // 3. 兜底：未知色号，直接拼描述性文本
+    return `pantone ${p} inspired color palette`
   }
 
   // 色相模式：hue 0-360 → 英文色名 + brightness 影响明暗
@@ -345,7 +439,9 @@ export async function generatePatternWithFallback(
     return {
       imageUrl: mock.imageUrl,
       generationId: mock.generationId,
-      prompt: mock.prompt || prompt,
+      // mockGeneratePattern 导出类型不含 prompt 字段，这里直接用本地拼好的 prompt
+      // （上面 console.log 已打印过），保证 fallback 结果也有可读 prompt
+      prompt,
       fallback: true,
       fallbackReason: reason,
     }
