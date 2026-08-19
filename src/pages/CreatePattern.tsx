@@ -8,7 +8,7 @@ import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { DimensionFilter } from '../components/pattern/DimensionFilter'
 import { GenerationParamsPanel } from '../components/pattern/GenerationParams'
 import { PromptInput } from '../components/pattern/PromptInput'
-import { generatePatternWithFallback } from '../services/mockGeneration'
+import { generatePatternWithFallback } from '../services/patternGeneration'
 import { PatternDimension, GenerationParams, PromptParseResult, CRAFT_OPTIONS, ETHNIC_OPTIONS, THEME_OPTIONS, APPLICATION_OPTIONS, ARRANGEMENT_OPTIONS, SYMMETRY_OPTIONS } from '../types/pattern'
 import { supabase } from '../lib/supabase'
 import { mockSemanticSearch } from '../mock/semanticSearch'
@@ -195,10 +195,16 @@ export default function CreatePattern() {
       const result = await generatePatternWithFallback(generationParams)
       setGeneratedImage(result.imageUrl)
       localStorage.setItem('last_generated_pattern', result.imageUrl)
-      console.log('CreatePattern - Pattern generated and saved to localStorage:', result.imageUrl)
+      if (result.fallback) {
+        // 真实链路失败 → 已自动降级 mock，给出明确原因便于排查
+        console.warn('[CreatePattern] 真实生成失败，降级到 mock:', result.fallbackReason)
+      } else {
+        console.log('[CreatePattern] 真实生成成功, prompt=', result.prompt)
+      }
       setShowDnaAnalysis(true)
     } catch (error) {
-      console.error('生成失败:', error)
+      // 兜底保险：generatePatternWithFallback 内部已带降级，理论上不该走到这里
+      console.error('[CreatePattern] 生成彻底失败:', error)
       const fallbackImage = `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20pattern%20design%20elegant%20minimal&image_size=square`
       setGeneratedImage(fallbackImage)
       localStorage.setItem('last_generated_pattern', fallbackImage)

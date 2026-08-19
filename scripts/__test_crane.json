@@ -1,0 +1,10 @@
+{
+  "prompt": "ichpattern_crane, Chinese traditional crane pattern, decorative motif, flat pattern design, clean lines, no texture, medium detail, balanced density, single motif, centered medallion, bilateral mirror symmetry, recognizable traditional form with design refinement, blue and white color palette, traditional ICH style",
+  "negative_prompt": "realistic photo, 3d render, blurry, deformed, extra limbs, text, watermark, logo, letters, words, cartoon, anime, elephant, deer, lion, low quality",
+  "steps": 10,
+  "width": 512,
+  "height": 512,
+  "cfg_scale": 7,
+  "sampler_name": "Euler a",
+  "seed": -1
+}

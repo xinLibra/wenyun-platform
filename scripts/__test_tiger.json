@@ -1,0 +1,10 @@
+{
+  "prompt": "ichpattern_tiger, Chinese traditional tiger pattern, decorative motif, flat pattern design, embroidery texture, dense elaborate full pattern, intricate detail, single motif, centered medallion, bilateral mirror symmetry, classic authentic traditional form, clearly recognizable, red and white color palette, traditional ICH style, <lora:ICH_tiger_pattern_lora_v5:0.7>",
+  "negative_prompt": "realistic photo, 3d render, blurry, deformed, extra limbs, text, watermark, logo, letters, words, cartoon, anime, elephant, deer, lion, low quality",
+  "steps": 10,
+  "width": 512,
+  "height": 512,
+  "cfg_scale": 7,
+  "sampler_name": "Euler a",
+  "seed": -1
+}
