@@ -23,19 +23,19 @@ interface UserPattern {
 }
 
 const products = [
-  { id: 'bookmark', name: '书签', price: '19', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wooden%20bookmark%20blank%20minimal%20elegant%20product%20photography&image_size=portrait_4_3', category: '文创' },
-  { id: 'phonecase', name: '手机壳·白', price: '49', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=smartphone%20case%20blank%20white%20minimal%20product%20photography&image_size=portrait_4_3', category: '文创' },
-  { id: 'phonecase_green', name: '手机壳·绿', price: '49', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=smartphone%20case%20blank%20green%20minimal%20product%20photography&image_size=portrait_4_3', category: '文创' },
-  { id: 'notebook', name: '笔记本', price: '39', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=notebook%20blank%20elegant%20minimal%20product%20photography&image_size=portrait_4_3', category: '文创' },
+  { id: 'bookmark', name: '书签', price: '19', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20bookmark%20with%20metal%20ring%20and%20silk%20tassel%20on%20wooden%20stick%20blank%20elegant%20product%20photography%20on%20white%20background&image_size=portrait_4_3', category: '文创' },
+  { id: 'phonecase', name: '手机壳·白', price: '49', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20white%20smartphone%20case%20with%20detachable%20side%20frame%20minimal%20product%20photography%20on%20light%20background&image_size=portrait_4_3', category: '文创' },
+  { id: 'phonecase_green', name: '手机壳·绿', price: '49', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20jade%20green%20smartphone%20case%20with%20detachable%20side%20frame%20minimal%20product%20photography%20on%20light%20background&image_size=portrait_4_3', category: '文创' },
+  { id: 'notebook', name: '笔记本', price: '39', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=spiral%20coil%20notebook%20blank%20kraft%20cover%20with%20silver%20metal%20binding%20rings%20minimal%20product%20photography&image_size=portrait_4_3', category: '文创' },
   { id: 'postcard', name: '明信片', price: '12', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=postcard%20blank%20white%20minimal%20product%20photography&image_size=landscape_4_3', category: '文创' },
-  { id: 'tote', name: '托特包', price: '59', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=canvas%20tote%20bag%20blank%20white%20minimal%20product%20photography&image_size=square', category: '文创' },
-  { id: 'paper_bag', name: '纸袋', price: '29', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=kraft%20paper%20bag%20blank%20minimal%20product%20photography&image_size=square', category: '文创' },
-  { id: 'cushion', name: '抱枕', price: '89', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=cushion%20pillow%20blank%20white%20minimal%20product%20photography&image_size=square', category: '文创' },
-  { id: 'handkerchief', name: '手帕', price: '19', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=handkerchief%20blank%20white%20minimal%20product%20photography&image_size=square', category: '文创' },
+  { id: 'tote', name: '托特包', price: '59', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=canvas%20tote%20bag%20blank%20natural%20beige%20with%20brown%20leather%20handles%20upright%20front%20view%20product%20photography&image_size=square', category: '文创' },
+  { id: 'paper_bag', name: '纸袋', price: '29', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=kraft%20paper%20shopping%20bag%20with%20twisted%20paper%20handles%20upright%20front%20view%20blank%20product%20photography&image_size=square', category: '文创' },
+  { id: 'cushion', name: '抱枕', price: '89', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=square%20cushion%20pillow%20blank%20white%20with%20decorative%20border%20edge%20front%20view%20product%20photography&image_size=square', category: '文创' },
+  { id: 'handkerchief', name: '手帕', price: '19', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=folded%20cotton%20handkerchief%20blank%20white%20minimal%20product%20photography%20on%20light%20background&image_size=square', category: '文创' },
   { id: 'scarf', name: '围巾', price: '299', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20wool%20scarf%20elegant%20minimal%20product%20photography&image_size=square', category: '服饰' },
   { id: 'silkscarf', name: '丝巾', price: '199', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=silk%20scarf%20blank%20white%20elegant%20product%20photography&image_size=square', category: '服饰' },
   { id: 'square_scarf', name: '方巾', price: '149', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=silk%20square%20scarf%20blank%20white%20elegant%20product%20photography&image_size=square', category: '服饰' },
-  { id: 'tshirt', name: 'T恤', price: '89', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20white%20cotton%20t-shirt%20minimal%20product%20photography&image_size=portrait_4_3', category: '服饰' },
+  { id: 'tshirt', name: 'T恤', price: '89', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20white%20cotton%20t-shirt%20front%20view%20with%20collar%20sleeve%20and%20hem%20trim%20minimal%20product%20photography&image_size=portrait_4_3', category: '服饰' },
 ]
 
 const materials = [
@@ -251,6 +251,8 @@ export default function CustomizeProduct() {
   // ===== 3D 预览相关状态 =====
   const [frameColor, setFrameColor] = useState('#2c3e50')   // 边框默认颜色
   const [product3DConfig, setProduct3DConfig] = useState<Product3DConfig | null>(null)
+  // 右侧面板折叠状态
+  const [panelExpanded, setPanelExpanded] = useState<{ layout: boolean; adjust: boolean }>({ layout: true, adjust: true })
   // 通用换色：colorMaterial.name → HEX 色值
   const [productColors, setProductColors] = useState<Record<string, string>>({})
 
@@ -979,8 +981,8 @@ export default function CustomizeProduct() {
                   </h2>
                   
                   <div className="flex gap-2 z-10">
-                    {/* 手机壳用 3D，不再提供切换；其它产品仍显示对比和视角按钮 */}
-                    {selectedProduct !== 'phonecase' && (
+                    {/* 有 3D 配置的产品不显示对比/视角按钮 */}
+                    {!has3DConfig(selectedProduct) && (
                       <>
                         <button
                           onClick={() => setShowCompare(!showCompare)}
@@ -1025,6 +1027,8 @@ export default function CustomizeProduct() {
                         patternImage={selectedPatternImage}
                         colorMap={productColors}
                         cameraPosition={product3DConfig.cameraDefault?.position}
+                        modelRotation={product3DConfig.modelRotation}
+                        modelScale={product3DConfig.modelScale}
                       />
 
                       {/* 底部信息条 */}
@@ -1268,134 +1272,157 @@ export default function CustomizeProduct() {
                 </div>
 
                 {activeTab === 'pattern' && (
-                  <div className="space-y-6">
-                    <div>
-                      <h2 className="font-shufa text-lg text-deep-blue flex items-center mb-4">
-                        <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">排</span>
-                        纹样排版
-                      </h2>
-                      <div className="grid grid-cols-4 gap-2">
-                        {(Object.keys(layoutPresets) as LayoutMode[]).map((mode) => {
-                          const preset = layoutPresets[mode]
-                          return (
-                            <button
-                              key={mode}
-                              onClick={() => handleLayoutChange(mode)}
-                              className={`relative p-3 rounded-sm transition-all duration-300 ${
-                                layoutMode === mode
-                                  ? 'bg-palace-red text-rice-paper shadow-md'
-                                  : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                              }`}
-                            >
-                              <div className="text-xl mb-1">{preset.icon}</div>
-                              <div className="font-song text-xs">{preset.name}</div>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    {/* 通用换色面板：按当前产品 colorMaterials 动态渲染 */}
-                    {product3DConfig?.meshConfig?.colorMaterials?.length ? (
-                      <div className="pt-4 border-t border-deep-blue-100">
-                        <h2 className="font-shufa text-lg text-deep-blue flex items-center mb-3">
-                          <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">色</span>
-                          {product3DConfig.meshConfig.colorMaterials.length === 1
-                            ? product3DConfig.meshConfig.colorMaterials[0].label
-                            : '部件配色'}
-                        </h2>
-                        {product3DConfig.meshConfig.colorMaterials.map((cm) => (
-                          <div key={cm.name} className="mb-3">
-                            {product3DConfig.meshConfig.colorMaterials.length > 1 && (
-                              <p className="font-song text-xs text-deep-blue-light mb-2">{cm.label}</p>
-                            )}
-                            <div className="flex flex-wrap gap-3">
-                              {COLOR_PALETTE.map(({ c, name }) => (
-                                <button
-                                  key={c}
-                                  onClick={() => {
-                                    setProductColors((prev) => ({ ...prev, [cm.name]: c }))
-                                    if (cm.name === 'frame' || product3DConfig.meshConfig!.colorMaterials.indexOf(cm) === 0) {
-                                      setFrameColor(c)
-                                    }
-                                  }}
-                                  title={name}
-                                  className={`w-9 h-9 rounded-full border-2 transition-all ${
-                                    productColors[cm.name] === c
-                                      ? 'border-palace-red scale-110 shadow-md'
-                                      : 'border-deep-blue-200 hover:border-deep-blue'
-                                  }`}
-                                  style={{ backgroundColor: c }}
-                                />
-                              ))}
+                  <div className="space-y-4">
+                    {/* ===== 区块一：纹样排版 + 部件配色 ===== */}
+                    <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
+                      <button
+                        onClick={() => setPanelExpanded(p => ({ ...p, layout: !p.layout }))}
+                        className="w-full flex items-center justify-between px-4 py-2.5 bg-deep-blue/5 hover:bg-deep-blue/10 transition-colors"
+                      >
+                        <span className="font-shufa text-sm text-deep-blue flex items-center">
+                          <span className="w-5 h-5 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">排</span>
+                          纹样排版 + 部件配色
+                        </span>
+                        <span className="text-deep-blue text-xs">{panelExpanded.layout ? '收起 ▲' : '展开 ▼'}</span>
+                      </button>
+                      {panelExpanded.layout && (
+                        <div className="p-4 space-y-4">
+                          <div>
+                            <div className="grid grid-cols-4 gap-2">
+                              {(Object.keys(layoutPresets) as LayoutMode[]).map((mode) => {
+                                const preset = layoutPresets[mode]
+                                return (
+                                  <button
+                                    key={mode}
+                                    onClick={() => handleLayoutChange(mode)}
+                                    className={`relative p-3 rounded-sm transition-all duration-300 ${
+                                      layoutMode === mode
+                                        ? 'bg-palace-red text-rice-paper shadow-md'
+                                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                                    }`}
+                                  >
+                                    <div className="text-xl mb-1">{preset.icon}</div>
+                                    <div className="font-song text-xs">{preset.name}</div>
+                                  </button>
+                                )
+                              })}
                             </div>
                           </div>
-                        ))}
-                        <p className="font-song text-xs text-deep-blue-light mt-2">
-                          点击色块更换{currentProduct?.name}部件颜色
-                        </p>
-                      </div>
-                    ) : null}
-                    <div className="pt-4 border-t border-deep-blue-100">
-                      <h2 className="font-shufa text-lg text-deep-blue flex items-center mb-4">
-                        <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">定</span>
-                        定制调节
-                      </h2>
-                      <div className="space-y-4">
-                        <InkSlider
-                          label="纹样大小"
-                          value={scale}
-                          min={10}
-                          max={200}
-                          onChange={setScale}
-                          className="w-full"
-                        />
-                        
-                        {layoutMode !== 'tile' && (
-                          <InkSlider
-                            label="左右偏移"
-                            value={positionX}
-                            min={0}
-                            max={100}
-                            onChange={setPositionX}
-                            className="w-full"
-                          />
-                        )}
-                        
-                        {layoutMode !== 'tile' && (
-                          <InkSlider
-                            label="上下偏移"
-                            value={positionY}
-                            min={0}
-                            max={100}
-                            onChange={setPositionY}
-                            className="w-full"
-                          />
-                        )}
-                        
-                        <InkSlider
-                          label="旋转角度"
-                          value={rotation}
-                          min={-180}
-                          max={180}
-                          onChange={setRotation}
-                          className="w-full"
-                        />
-                      </div>
+
+                          {/* 通用换色面板：按当前产品 colorMaterials 动态渲染 */}
+                          {product3DConfig?.meshConfig?.colorMaterials?.length ? (
+                            <div className="pt-3 border-t border-deep-blue-100">
+                              <h2 className="font-shufa text-sm text-deep-blue flex items-center mb-2">
+                                <span className="w-5 h-5 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">色</span>
+                                {product3DConfig.meshConfig.colorMaterials.length === 1
+                                  ? product3DConfig.meshConfig.colorMaterials[0].label
+                                  : '部件配色'}
+                              </h2>
+                              {product3DConfig.meshConfig.colorMaterials.map((cm) => (
+                                <div key={cm.name} className="mb-2">
+                                  {product3DConfig.meshConfig.colorMaterials.length > 1 && (
+                                    <p className="font-song text-xs text-deep-blue-light mb-1">{cm.label}</p>
+                                  )}
+                                  <div className="flex flex-wrap gap-2">
+                                    {COLOR_PALETTE.map(({ c, name }) => (
+                                      <button
+                                        key={c}
+                                        onClick={() => {
+                                          setProductColors((prev) => ({ ...prev, [cm.name]: c }))
+                                          if (cm.name === 'frame' || product3DConfig.meshConfig!.colorMaterials.indexOf(cm) === 0) {
+                                            setFrameColor(c)
+                                          }
+                                        }}
+                                        title={name}
+                                        className={`w-8 h-8 rounded-full border-2 transition-all ${
+                                          productColors[cm.name] === c
+                                            ? 'border-palace-red scale-110 shadow-md'
+                                            : 'border-deep-blue-200 hover:border-deep-blue'
+                                        }`}
+                                        style={{ backgroundColor: c }}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                              <p className="font-song text-xs text-deep-blue-light mt-1">
+                                点击色块更换{currentProduct?.name}部件颜色
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
 
-                    <div className="pt-4 border-t border-deep-blue-100">
-                      <label className="block font-song text-deep-blue text-sm mb-3">叠加效果</label>
-                      <BambooToggle
-                        options={[
-                          { value: 'normal', label: '正常' },
-                          { value: 'overlay', label: '叠加' },
-                          { value: 'multiply', label: '正片叠底' },
-                          { value: 'screen', label: '滤色' },
-                        ]}
-                        value={blendMode}
-                        onChange={setBlendMode}
-                      />
+                    {/* ===== 区块二：定制调节 ===== */}
+                    <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
+                      <button
+                        onClick={() => setPanelExpanded(p => ({ ...p, adjust: !p.adjust }))}
+                        className="w-full flex items-center justify-between px-4 py-2.5 bg-deep-blue/5 hover:bg-deep-blue/10 transition-colors"
+                      >
+                        <span className="font-shufa text-sm text-deep-blue flex items-center">
+                          <span className="w-5 h-5 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">定</span>
+                          定制调节
+                        </span>
+                        <span className="text-deep-blue text-xs">{panelExpanded.adjust ? '收起 ▲' : '展开 ▼'}</span>
+                      </button>
+                      {panelExpanded.adjust && (
+                        <div className="p-4 space-y-4">
+                          <InkSlider
+                            label="纹样大小"
+                            value={scale}
+                            min={10}
+                            max={200}
+                            onChange={setScale}
+                            className="w-full"
+                          />
+
+                          {layoutMode !== 'tile' && (
+                            <InkSlider
+                              label="左右偏移"
+                              value={positionX}
+                              min={0}
+                              max={100}
+                              onChange={setPositionX}
+                              className="w-full"
+                            />
+                          )}
+
+                          {layoutMode !== 'tile' && (
+                            <InkSlider
+                              label="上下偏移"
+                              value={positionY}
+                              min={0}
+                              max={100}
+                              onChange={setPositionY}
+                              className="w-full"
+                            />
+                          )}
+
+                          <InkSlider
+                            label="旋转角度"
+                            value={rotation}
+                            min={-180}
+                            max={180}
+                            onChange={setRotation}
+                            className="w-full"
+                          />
+
+                          <div className="pt-3 border-t border-deep-blue-100">
+                            <label className="block font-song text-deep-blue text-sm mb-2">叠加效果</label>
+                            <BambooToggle
+                              options={[
+                                { value: 'normal', label: '正常' },
+                                { value: 'overlay', label: '叠加' },
+                                { value: 'multiply', label: '正片叠底' },
+                                { value: 'screen', label: '滤色' },
+                              ]}
+                              value={blendMode}
+                              onChange={setBlendMode}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

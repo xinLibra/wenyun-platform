@@ -4,7 +4,7 @@
     "productName": "帆布托特包",
     "modelUrl": "tote_bag.glb",
     "meshConfig": {
-      "textureTargetMaterial": "tripo_part_1",
+      "textureTargetMaterial": "tripo_part_0",
       "colorMaterials": [
         {
           "name": "handle",
@@ -13,7 +13,7 @@
         },
         {
           "name": "bag_body",
-          "materialName": "tripo_part_0",
+          "materialName": "tripo_part_new_0_0",
           "label": "帆布包身"
         }
       ]
@@ -29,6 +29,8 @@
       "offset": [0, 0],
       "rotation": 0
     },
+    "modelRotation": [3.14159, -1.5708, 0],
+    "modelScale": 0.6,
     "cameraDefault": {
       "position": [0, 0.12, 0.42],
       "lookAt": [0, 0, 0]

@@ -4,11 +4,11 @@
     "productName": "方形抱枕",
     "modelUrl": "cushion.glb",
     "meshConfig": {
-      "textureTargetMaterial": "tripo_part_1",
+      "textureTargetMaterial": "cushion",
       "colorMaterials": [
         {
           "name": "edge_border",
-          "materialName": "tripo_part_0",
+          "materialName": "cushion",
           "label": "抱枕包边"
         }
       ]
@@ -24,6 +24,8 @@
       "offset": [0, 0],
       "rotation": 0
     },
+    "modelRotation": [0, -1.5708, 0],
+    "modelScale": 0.5,
     "cameraDefault": {
       "position": [0, 0.18, 0.45],
       "lookAt": [0, 0, 0]

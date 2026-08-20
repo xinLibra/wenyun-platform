@@ -32,6 +32,8 @@
     "cameraDefault": {
       "position": [0, 0.12, 0.42],
       "lookAt": [0, 0, 0]
-    }
+    },
+    "modelRotation": [0, -1.5708, 0],
+    "modelScale": 0.85
   }
 ]

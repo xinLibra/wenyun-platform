@@ -4,7 +4,7 @@
     "productName": "线圈笔记本",
     "modelUrl": "notebook.glb",
     "meshConfig": {
-      "textureTargetMaterial": "Object_5_001",
+      "textureTargetMaterial": "Object_5.001",
       "colorMaterials": [
         {
           "name": "coil",
@@ -24,6 +24,8 @@
       "offset": [0, 0],
       "rotation": 0
     },
+    "modelRotation": [0, -1.5708, 0],
+    "modelScale": 0.85,
     "cameraDefault": {
       "position": [2.2, 0, 2.8],
       "lookAt": [0, 0, 0]

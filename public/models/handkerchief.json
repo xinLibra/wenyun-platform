@@ -4,7 +4,7 @@
     "productName": "手帕",
     "modelUrl": "handkerchief.glb",
     "meshConfig": {
-      "textureTargetMaterial": "Material.001",
+      "textureTargetMaterial": "bandana",
       "colorMaterials": []
     },
     "modelLimit": {
@@ -18,8 +18,10 @@
       "offset": [0, 0],
       "rotation": 0
     },
+    "modelRotation": [0, -1.5708, 0],
+    "modelScale": 0.3,
     "cameraDefault": {
-      "position": [0, 0.08, 0.35],
+      "position": [0, 0.08, 0.5],
       "lookAt": [0, 0, 0]
     }
   }

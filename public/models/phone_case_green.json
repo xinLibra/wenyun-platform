@@ -4,11 +4,11 @@
     "productName": "手机壳（绿）",
     "modelUrl": "phone_case_green.glb",
     "meshConfig": {
-      "textureTargetMaterial": "part2",
+      "textureTargetMaterial": "Cube_002_Material_001_0",
       "colorMaterials": [
         {
           "name": "frame",
-          "materialName": "part1",
+          "materialName": "Cube_002_Material_003_0",
           "label": "侧边边框"
         }
       ]
@@ -24,6 +24,8 @@
       "offset": [0, 0],
       "rotation": 0
     },
+    "modelRotation": [0, -1.5708, 0],
+    "modelScale": 0.85,
     "cameraDefault": {
       "position": [0, 0.08, 0.35],
       "lookAt": [0, 0, 0]

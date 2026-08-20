@@ -24,6 +24,8 @@
       "offset": [0, 0],
       "rotation": 0
     },
+    "modelRotation": [3.14159, -1.5708, 0],
+    "modelScale": 0.6,
     "cameraDefault": {
       "position": [0, 0.15, 0.45],
       "lookAt": [0, 0, 0]

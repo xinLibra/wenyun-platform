@@ -33,6 +33,8 @@ export interface Product3DConfig {
     position: [number, number, number]
     lookAt: [number, number, number]
   }
+  modelRotation?: [number, number, number]
+  modelScale?: number
 }
 
 /** 产品 ID → json 配置路径（public 下相对路径） */

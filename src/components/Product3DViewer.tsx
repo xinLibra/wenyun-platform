@@ -15,8 +15,16 @@ interface Product3DViewerProps {
   colorMaterials?: ColorMaterial[]
   patternImage?: string | null
   colorMap?: Record<string, string>
-  cameraPosition?: [number, number, number];
+  cameraPosition?: [number, number, number]
+  modelRotation?: [number, number, number]
+  modelScale?: number
   className?: string
+}
+
+/** 判断 name 列表中是否任一项匹配 target（相等或包含） */
+function matchesAnyName(names: string[], target: string): boolean {
+  const t = target.toLowerCase()
+  return names.some(n => n.length > 0 && (n === t || n.includes(t)))
 }
 
 function Model({
@@ -25,12 +33,16 @@ function Model({
   colorMaterials = [],
   patternImage,
   colorMap = {},
+  modelRotation = [0, -Math.PI / 2, 0],
+  modelScale = 0.85,
 }: {
   modelUrl: string
   textureTargetMaterial: string
   colorMaterials?: ColorMaterial[]
   patternImage?: string | null
   colorMap?: Record<string, string>
+  modelRotation?: [number, number, number]
+  modelScale?: number
 }) {
   const { scene } = useGLTF(modelUrl)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
@@ -72,22 +84,26 @@ function Model({
         const mat = oldMat.clone()
         mesh.material = mat
 
-        const matName = (mat.name || mesh.name || '').toLowerCase()
+        // 收集所有可能的名字：节点名 + 材质名 + mesh 名
+        const childName = (child.name || '').toLowerCase()
+        const matNameStr = (mat.name || '').toLowerCase()
+        const meshNameStr = (mesh.name || '').toLowerCase()
+        const allNames = [childName, matNameStr, meshNameStr].filter(n => n.length > 0)
 
-        if (
-          texture &&
-          (matName === textureTargetMaterial.toLowerCase() ||
-            matName.includes(textureTargetMaterial.toLowerCase()))
-        ) {
+        // 防止纯黑材质：克隆后若颜色为 #000000 则重置为白
+        if (mat.color && mat.color.getHex() === 0x000000) {
+          mat.color.set('#f5f5f5')
+        }
+
+        // 贴纹样：只对 textureTargetMaterial 匹配的 mesh 贴图
+        if (texture && textureTargetMaterial && matchesAnyName(allNames, textureTargetMaterial)) {
           mat.map = texture
           mat.needsUpdate = true
         }
 
+        // 换色：只对 colorMaterials 匹配的 mesh 改色，不影响其他部件
         colorMaterials.forEach((cm) => {
-          if (
-            matName === cm.materialName.toLowerCase() ||
-            matName.includes(cm.materialName.toLowerCase())
-          ) {
+          if (matchesAnyName(allNames, cm.materialName)) {
             const hex = colorMap[cm.name]
             if (hex) {
               mat.color.set(hex)
@@ -99,10 +115,9 @@ function Model({
     })
   }, [clonedScene, texture, textureTargetMaterial, colorMaterials, colorMap])
 
-  // 稍微旋转，让正面朝向相机（若仍侧对，可改 rotation-y 数值）
   return (
     <Center>
-      <group rotation={[0, -Math.PI / 2, 0]} scale={0.85}>
+      <group rotation={modelRotation} scale={modelScale}>
         <primitive object={clonedScene} />
       </group>
     </Center>
@@ -124,6 +139,9 @@ export function Product3DViewer({
   colorMaterials = [],
   patternImage,
   colorMap = {},
+  cameraPosition,
+  modelRotation,
+  modelScale,
   className = '',
 }: Product3DViewerProps) {
   return (
@@ -132,8 +150,7 @@ export function Product3DViewer({
       style={{ height: 480, minHeight: 480, background: '#f7f3eb' }}
     >
       <Canvas
-        // 拉远相机，尽量看全机身
-        camera={{ position: [0, 0.05, 2.4], fov: 28 }}
+        camera={{ position: cameraPosition || [0, 0.05, 2.4], fov: 28 }}
         gl={{ antialias: true, alpha: true }}
         onCreated={({ gl }) => {
           gl.setClearColor(0x000000, 0)
@@ -151,6 +168,8 @@ export function Product3DViewer({
             colorMaterials={colorMaterials}
             patternImage={patternImage}
             colorMap={colorMap}
+            modelRotation={modelRotation}
+            modelScale={modelScale}
           />
         </Suspense>
 
@@ -158,12 +177,10 @@ export function Product3DViewer({
           makeDefault
           enablePan={false}
           minDistance={0.8}
-          maxDistance={3.5}
+          maxDistance={5}
           target={[0, 0, 0]}
         />
       </Canvas>
     </div>
   )
 }
-
-useGLTF.preload('/models/phone_case.glb')
