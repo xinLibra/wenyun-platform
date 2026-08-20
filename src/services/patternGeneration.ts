@@ -56,6 +56,7 @@ function normalizePantone(code: string, opts: { stripTcx?: boolean } = {}): stri
  * 如有缺失，buildColorWeightedClause 会优雅降级（不写 HEX，只写色名）。
  */
 const PANTONE_HEX_MAP: Record<string, string> = {
+  // 瑞兽
   '18-1662 TCX': '#C3423F', // 宫墙红 dragon/phoenix_bird/dragon_phoenix/beast_other
   '19-4052 TCX': '#26364B', // 深藏青 crane
   '16-1450 TCX': '#E8B4B8', // 藕粉 butterfly
@@ -63,6 +64,10 @@ const PANTONE_HEX_MAP: Record<string, string> = {
   '18-1150 TCX': '#CD853F', // 栗棕 deer
   '12-0752 TCX': '#D4AF37', // 金色 lion
   '17-1462 TCX': '#FF6F00', // 橙红 tiger
+  // 花卉
+  '18-1555 TCX': '#E63946', // 朱红 flower_bird
+  '15-1260 TCX': '#7CB342', // 嫩绿 gourd/plant
+  '16-0541 TCX': '#5F9E6E', // 松石绿 interlocking_floral
 }
 
 /** 根据潘通色号查 HEX；支持 '18-1662' 与 '18-1662 TCX' 两种写法匹配到同一色 */
@@ -85,8 +90,18 @@ const SD_DEFAULTS = {
   seed: -1,
 } as const
 
-/** 代理地址：Vite dev 下会被 server.proxy 转发到本地 sd_proxy.py（默认 http://127.0.0.1:8787） */
-const PROXY_URL = '/sd-api/generate'
+/**
+ * 代理地址：
+ *   - 生产：读 VITE_SD_API_URL（如 https://your-backend.example.com/sd-api），
+ *     拼成 `${VITE_SD_API_URL}/generate`，由后端处理 CORS。
+ *   - dev：若未设环境变量，fallback 到 '/sd-api/generate'，
+ *     由 vite.config.ts 的 server.proxy 转发到本地 sd_proxy.py (http://127.0.0.1:8787)。
+ *
+ * 注：不硬编码 127.0.0.1，避免部署站误连本机。
+ */
+const PROXY_URL = import.meta.env.VITE_SD_API_URL
+  ? `${String(import.meta.env.VITE_SD_API_URL).replace(/\/+$/, '')}/generate`
+  : '/sd-api/generate'
 
 /**
  * 拼装统一 caption prompt（顺序固定，禁止乱序）
@@ -106,17 +121,24 @@ export function buildPromptParts(params: GenerationParams): {
   loraWeight: number
   trigger: string
   subLabelEn: string | null
+  subcategoryId: string
 } {
   const sub = getLoraEntry(params.dimension.subcategory)
-  const trigger = sub?.trigger ?? ''
+  // 多 trigger 兼容：loraMap.trigger 支持逗号分隔字符串（比如牡丹：'ich_flower_pattern, ich_peony_pattern'）
+  // 逐项写入 prompt 前部，保证每个触发词都被模型作为独立 token 单元处理
+  const triggers: string[] = (sub?.trigger ?? '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean)
   const subLabelEn = sub?.subLabelEn ?? null
   const loraFile = sub?.loraFile ?? null
   const loraWeight = sub?.loraWeight ?? DEFAULT_LORA_WEIGHT
+  const subcategoryId = params.dimension.subcategory ?? 'n/a'
 
   const parts: string[] = []
 
-  // 1) 触发词（有子类才加）
-  if (trigger) parts.push(trigger)
+  // 1) 触发词（牡丹/莲花/花鸟 双 trigger 都会完整入列）
+  for (const t of triggers) parts.push(t)
 
   // 2) Chinese traditional {子类英文} pattern
   if (subLabelEn) {
@@ -207,7 +229,7 @@ export function buildPromptParts(params: GenerationParams): {
   const prompt = parts.join(', ')
   const negativePrompt = buildNegativePrompt(params)
 
-  return { prompt, negativePrompt, loraFile, loraWeight, trigger, subLabelEn }
+  return { prompt, negativePrompt, loraFile, loraWeight, trigger: triggers.join(', '), subLabelEn, subcategoryId }
 }
 
 /**
@@ -588,20 +610,19 @@ async function callSdProxy(payload: {
 export async function generatePatternWithFallback(
   params: GenerationParams
 ): Promise<PatternGenerationResult> {
-  const { prompt, negativePrompt, loraFile, loraWeight, trigger, subLabelEn } = buildPromptParts(params)
+  const { prompt, negativePrompt, loraFile, loraWeight, trigger, subLabelEn, subcategoryId } = buildPromptParts(params)
 
   // 控制台打印最终 prompt，便于排查
   console.log('[patternGeneration] ===== 生成请求 =====')
+  console.log('[patternGeneration] subcategoryId:', subcategoryId, `(${subLabelEn ?? 'n/a'})`)
+  console.log('[patternGeneration] triggers:', trigger)
+  console.log('[patternGeneration] lora:', loraFile ? `<lora:${loraFile}:${loraWeight}>` : 'none', '| weight:', loraWeight)
   console.log('[patternGeneration] final prompt:', prompt)
   console.log('[patternGeneration] negative prompt:', negativePrompt)
   console.log(
-    '[patternGeneration] lora:',
-    loraFile ? `<lora:${loraFile}:${loraWeight}>` : 'none',
-    '| trigger:', trigger,
-    '| sub:', subLabelEn,
-    '| steps:', SD_DEFAULTS.steps,
-    '| cfg:', SD_DEFAULTS.cfgScale,
-    '| sampler:', SD_DEFAULTS.samplerName,
+    '[patternGeneration] params: steps=', SD_DEFAULTS.steps,
+    'cfg=', SD_DEFAULTS.cfgScale,
+    'sampler=', SD_DEFAULTS.samplerName,
   )
 
   try {

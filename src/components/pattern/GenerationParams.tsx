@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { InkSlider } from '../ui/InkSlider'
 import { BambooToggle } from '../ui/Select'
 import { ColorPalette } from '../ui/ColorPalette'
 import { GenerationParams as GenerationParamsType, ARRANGEMENT_OPTIONS, SYMMETRY_OPTIONS, ColorSchemeParams } from '../../types/pattern'
 import { SUBCATEGORY_PANTONE_MAP, getPantoneForSubcategory } from '../../config/generationPresets'
+import { getLoraEntry } from '../../config/loraMap'
 
 interface GenerationParamsProps {
   value: GenerationParamsType
@@ -447,37 +448,61 @@ function ColorPicker({ value, onChange, subcategoryId }: ColorPickerProps) {
             )
           })()}
 
-          {/* 全部子类默认色号快捷选择 */}
+          {/* 全部子类默认色号快捷选择：按主题显示瑞兽色或花卉色 */}
           <div className="mt-2">
-            <div className="text-xs font-song text-deep-blue-light mb-1.5">瑞兽纹样常用色</div>
-            <div className="grid grid-cols-4 gap-1.5">
-              {Array.from(new Set(Object.values(SUBCATEGORY_PANTONE_MAP).map((p) => p.pantoneCode))).map((code) => {
-                const info = Object.values(SUBCATEGORY_PANTONE_MAP).find((p) => p.pantoneCode === code)
-                const hex = getPantoneColor(code) || '#ccc'
-                const isActive = value.pantone?.trim().toUpperCase() === code.toUpperCase()
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => onChange({ ...value, pantone: code })}
-                    className={`flex flex-col items-center gap-0.5 py-1 px-0.5 rounded-sm border transition-all ${
-                      isActive
-                        ? 'border-palace-red bg-palace-red/10 shadow-sm'
-                        : 'border-deep-blue-200 bg-rice-paper hover:border-palace-red'
-                    }`}
-                    title={`${info?.label || ''} ${code}`}
-                  >
-                    <div
-                      className="w-7 h-7 rounded-sm border border-deep-blue-200"
-                      style={{ background: hex }}
-                    />
-                    <span className={`text-[10px] font-song leading-tight ${isActive ? 'text-palace-red font-semibold' : 'text-deep-blue-light'}`}>
-                      {info?.label || code.split(' ')[0]}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+            {(() => {
+              const entry = subcategoryId ? getLoraEntry(subcategoryId) : null
+              const isFloral = entry?.themeId === 'floral'
+              const isBeast = entry?.themeId === 'beast'
+              // 瑞兽色号集合
+              const beastCodes = new Set<string>(['19-4052 TCX', '16-1450 TCX', '16-4725 TCX', '18-1150 TCX', '18-1662 TCX', '12-0752 TCX', '17-1462 TCX'])
+              // 花卉色号集合
+              const flowerCodes = new Set<string>(['16-1450 TCX', '12-0752 TCX', '18-1662 TCX', '18-1555 TCX', '15-1260 TCX', '16-0541 TCX'])
+
+              // 根据主题过滤：只显示当前主题的色号；无主题时全部显示
+              const allCodes = Array.from(new Set(Object.values(SUBCATEGORY_PANTONE_MAP).map((p) => p.pantoneCode)))
+              const filteredCodes = isBeast
+                ? allCodes.filter((c) => beastCodes.has(c))
+                : isFloral
+                  ? allCodes.filter((c) => flowerCodes.has(c))
+                  : allCodes
+
+              const gridLabel = isFloral ? '花卉纹样常用色' : isBeast ? '瑞兽纹样常用色' : '纹样常用色'
+
+              return (
+                <>
+                  <div className="text-xs font-song text-deep-blue-light mb-1.5">{gridLabel}</div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {filteredCodes.map((code) => {
+                      const info = Object.values(SUBCATEGORY_PANTONE_MAP).find((p) => p.pantoneCode === code)
+                      const hex = getPantoneColor(code) || '#ccc'
+                      const isActive = value.pantone?.trim().toUpperCase() === code.toUpperCase()
+                      return (
+                        <button
+                          key={code}
+                          type="button"
+                          onClick={() => onChange({ ...value, pantone: code })}
+                          className={`flex flex-col items-center gap-0.5 py-1 px-0.5 rounded-sm border transition-all ${
+                            isActive
+                              ? 'border-palace-red bg-palace-red/10 shadow-sm'
+                              : 'border-deep-blue-200 bg-rice-paper hover:border-palace-red'
+                          }`}
+                          title={`${info?.label || ''} ${code}`}
+                        >
+                          <div
+                            className="w-7 h-7 rounded-sm border border-deep-blue-200"
+                            style={{ background: hex }}
+                          />
+                          <span className={`text-[10px] font-song leading-tight ${isActive ? 'text-palace-red font-semibold' : 'text-deep-blue-light'}`}>
+                            {info?.label || code.split(' ')[0]}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )
+            })()}
           </div>
         </motion.div>
       )}

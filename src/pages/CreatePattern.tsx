@@ -211,6 +211,8 @@ export default function CreatePattern() {
 
   const handleGenerate = async () => {
     setIsGenerating(true)
+    // 重新生成时自动清空作品名称，避免旧名称与新纹样不匹配
+    setWorkTitle('')
     try {
       const result = await generatePatternWithFallback(generationParams)
       setGeneratedImage(result.imageUrl)
