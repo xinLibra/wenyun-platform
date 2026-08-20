@@ -32,7 +32,7 @@ from urllib import request, error
 
 # ---------- 配置 ----------
 SDAPI_URL = os.environ.get("SDAPI_URL", "http://127.0.0.1:7860").rstrip("/")
-HOST = os.environ.get("SD_PROXY_HOST", "127.0.0.1")
+HOST = os.environ.get("SD_PROXY_HOST", "0.0.0.0")
 try:
     PORT = int(os.environ.get("SD_PROXY_PORT", "8787"))
 except ValueError:
