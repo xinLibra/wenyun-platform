@@ -78,10 +78,50 @@ const blendModeLabels: Record<string, string> = {
   screen: '滤色',
 }
 
+/** 安全写入 localStorage：配额满时 warn 不 throw */
+function safeSetItem(key: string, value: string): boolean {
+  try {
+    localStorage.setItem(key, value)
+    return true
+  } catch (err) {
+    console.warn(`[localStorage] 写入失败（可能配额已满）: ${key}`, err)
+    return false
+  }
+}
+
+/** 安全读取 localStorage：坏数据返回 null */
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch (err) {
+    console.warn(`[localStorage] 读取失败: ${key}`, err)
+    return null
+  }
+}
+
+/** 清理过期的 product_config_draft_* 键，只保留当前产品草稿 */
+function pruneOldDrafts(keepProductId: string) {
+  const keepKey = `product_config_draft_${keepProductId}`
+  const keysToRemove: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)
+    if (k && k.startsWith('product_config_draft_') && k !== keepKey) {
+      keysToRemove.push(k)
+    }
+  }
+  keysToRemove.forEach((k) => {
+    try { localStorage.removeItem(k) } catch { /* ignore */ }
+  })
+}
+
+/** 判断 patternImage 是否为 base64 大数据（不存入草稿） */
+function isBase64DataUrl(url: string): boolean {
+  return typeof url === 'string' && url.startsWith('data:')
+}
 
 
 const getInitialProduct = () => {
-  const savedProduct = localStorage.getItem('selected_product_id')
+  const savedProduct = safeGetItem('selected_product_id')
   if (savedProduct && products.find(p => p.id === savedProduct)) {
     return savedProduct
   }
@@ -90,7 +130,7 @@ const getInitialProduct = () => {
 
 const getInitialMaterial = (productId: string) => {
   const draftKey = `product_config_draft_${productId}`
-  const savedDraft = localStorage.getItem(draftKey)
+  const savedDraft = safeGetItem(draftKey)
   if (savedDraft) {
     try {
       const draft = JSON.parse(savedDraft)
@@ -108,7 +148,7 @@ export default function CustomizeProduct() {
 
   const getInitialParams = (productId: string) => {
     const draftKey = `product_config_draft_${productId}`
-    const savedDraft = localStorage.getItem(draftKey)
+    const savedDraft = safeGetItem(draftKey)
     if (savedDraft) {
       try {
         const draft = JSON.parse(savedDraft)
@@ -134,7 +174,7 @@ export default function CustomizeProduct() {
 
   const getInitialTextParams = (productId: string) => {
     const draftKey = `product_config_draft_${productId}`
-    const savedDraft = localStorage.getItem(draftKey)
+    const savedDraft = safeGetItem(draftKey)
     if (savedDraft) {
       try {
         const draft = JSON.parse(savedDraft)
@@ -163,7 +203,7 @@ export default function CustomizeProduct() {
   }
 
   const getInitialCategory = () => {
-    const savedCategory = localStorage.getItem('selected_product_category')
+    const savedCategory = safeGetItem('selected_product_category')
     if (savedCategory && ['文创', '服饰'].includes(savedCategory)) {
       return savedCategory
     }
@@ -181,9 +221,9 @@ export default function CustomizeProduct() {
   const [blendMode, setBlendMode] = useState(getInitialParams(getInitialProduct()).blendMode)
   const [selectedCategory, setSelectedCategory] = useState(getInitialCategory())
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
-    const savedProduct = localStorage.getItem('selected_product_id') || 'scarf_front'
+    const savedProduct = safeGetItem('selected_product_id') || 'scarf_front'
     const draftKey = `product_config_draft_${savedProduct}`
-    const savedDraft = localStorage.getItem(draftKey)
+    const savedDraft = safeGetItem(draftKey)
     if (savedDraft) {
       try {
         const draft = JSON.parse(savedDraft)
@@ -291,10 +331,11 @@ export default function CustomizeProduct() {
   }
 
   const handleProductChange = (productId: string) => {
-    localStorage.setItem('selected_product_id', productId)
-    
+    safeSetItem('selected_product_id', productId)
+    pruneOldDrafts(productId)
+
     const draftKey = `product_config_draft_${productId}`
-    const savedDraft = localStorage.getItem(draftKey)
+    const savedDraft = safeGetItem(draftKey)
     
     if (savedDraft) {
       try {
@@ -336,7 +377,7 @@ export default function CustomizeProduct() {
   const [showPatternModal, setShowPatternModal] = useState(false)
   const [userPatterns, setUserPatterns] = useState<UserPattern[]>([])
   const [selectedPatternImage, setSelectedPatternImage] = useState<string>(() => {
-    const lastPattern = localStorage.getItem('last_generated_pattern')
+    const lastPattern = safeGetItem('last_generated_pattern')
     return lastPattern || 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20blue%20calico%20pattern%20minimal%20elegant&image_size=square'
   })
   const [patternModalLoading, setPatternModalLoading] = useState(false)
@@ -344,7 +385,7 @@ export default function CustomizeProduct() {
   const productBoxRef = useRef<HTMLDivElement>(null)   // 新增：拖拽比例计算改用这个更小、更准确的容器
 
   useEffect(() => {
-    const reorderProduct = localStorage.getItem('reorder_product')
+    const reorderProduct = safeGetItem('reorder_product')
     
     if (reorderProduct) {
       try {
@@ -356,7 +397,7 @@ export default function CustomizeProduct() {
         setPositionX(customization?.positionX || 50)
         setPositionY(customization?.positionY || 50)
         setBlendMode(customization?.blendMode || 'normal')
-        localStorage.removeItem('reorder_product')
+        try { localStorage.removeItem('reorder_product') } catch { /* ignore */ }
         return
       } catch {
         // 解析失败，继续尝试读取草稿
@@ -364,7 +405,7 @@ export default function CustomizeProduct() {
     }
 
     const draftKey = `product_config_draft_${selectedProduct}`
-    const savedDraft = localStorage.getItem(draftKey)
+    const savedDraft = safeGetItem(draftKey)
     
     if (savedDraft) {
       try {
@@ -397,16 +438,18 @@ export default function CustomizeProduct() {
 
   useEffect(() => {
     const draftKey = `product_config_draft_${selectedProduct}`
+    // base64 大图不写入草稿，避免撑爆 localStorage 配额；仅存 URL 或标记
+    const patternImageForDraft = isBase64DataUrl(selectedPatternImage) ? null : selectedPatternImage
     const draft = {
       productId: selectedProduct,
       materialId: selectedMaterial,
-      patternImage: selectedPatternImage,
+      patternImage: patternImageForDraft,
       layoutMode,
       params: { scale, rotation, positionX, positionY, blendMode },
       text: { textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
       updatedAt: new Date().toISOString()
     }
-    localStorage.setItem(draftKey, JSON.stringify(draft))
+    safeSetItem(draftKey, JSON.stringify(draft))
   }, [selectedProduct, selectedMaterial, selectedPatternImage, layoutMode, scale, rotation, positionX, positionY, blendMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation])
 
   const handleReset = () => {
@@ -511,16 +554,19 @@ export default function CustomizeProduct() {
 
   const saveDraft = () => {
     const draftKey = `product_config_draft_${selectedProduct}`
+    const patternImageForDraft = isBase64DataUrl(selectedPatternImage) ? null : selectedPatternImage
     const draft = {
       productId: selectedProduct,
       materialId: selectedMaterial,
-      patternImage: selectedPatternImage,
+      patternImage: patternImageForDraft,
       layoutMode,
       params: { scale, rotation, positionX, positionY, blendMode },
       text: { textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
       updatedAt: new Date().toISOString()
     }
-    localStorage.setItem(draftKey, JSON.stringify(draft))
+    if (!safeSetItem(draftKey, JSON.stringify(draft))) {
+      showToastMessage('本地缓存已满，配置仅本次有效')
+    }
   }
 
   const handleSaveConfig = () => {
@@ -832,7 +878,7 @@ export default function CustomizeProduct() {
                   <button
                     key={category}
                     onClick={() => {
-                      localStorage.setItem('selected_product_category', category)
+                      safeSetItem('selected_product_category', category)
                       setSelectedCategory(category)
                       setCurrentPage(0)
                     }}
