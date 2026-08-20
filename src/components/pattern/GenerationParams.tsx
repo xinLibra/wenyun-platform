@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { InkSlider } from '../ui/InkSlider'
 import { BambooToggle } from '../ui/Select'
