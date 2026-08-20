@@ -2,20 +2,26 @@
  * 纹样子类 → LoRA 文件映射表
  *
  * 数据来源：
- *  1) trigger 取自 src/data/patternTaxonomy.ts 中各 PatternSubcategory.trigger
+ *  1) trigger 来自训练 caption 中的触发词（与 DELIVERY.md 中交付的 trigger 严格一致）
+ *     支持多 trigger 逗号分隔（如牡丹 trigger = 'ich_flower_pattern, ich_peony_pattern'），
+ *     buildPrompt 会逐项拼入 prompt 前部。
  *  2) loraFile 仅录入「最终应存在于本机 WebUI 的 models/Lora/ 目录」的文件名（不含路径、不含扩展名）
- *     这些文件原本分散在 C:\LoraTraining\outputs\<subdir>\ 下，需用户手动复制（COPY，非移动）
- *     到 stable-diffusion-webui\models\Lora\ 后，A1111 才能在推理时加载到。
+ *     这些文件由用户手动放置（瑞兽部分来自 C:\LoraTraining\outputs\<subdir>\，花卉部分来自朋友交付）
  *  3) 找不到 LoRA 的子类：loraFile 留空（null），prompt 仍然会带 trigger，只是不追加 <lora:...:w> 标签
  *
- * 默认权重 0.7（与训练验证时一致），如需统一调整改 DEFAULT_LORA_WEIGHT 即可。
- * 推荐权重区间 0.70–0.85（虎纹 0.65–0.80），如需按子类微调可在对应 entry 设 loraWeight 字段覆盖。
+ * 默认权重：
+ *   - 瑞兽 DEFAULT_LORA_WEIGHT = 0.7（与训练验证时一致，推荐 0.70–0.85，虎纹建议 0.65–0.80）
+ *   - 花卉统一 0.8（按 DELIVERY.md 要求，显式覆盖，避免被 DEFAULT_LORA_WEIGHT=0.7 误压低）
+ * 如需统一调整改 DEFAULT_LORA_WEIGHT / FLOWER_LORA_WEIGHT 即可。
  */
 
 import type { PatternThemeId } from '../data/patternTaxonomy'
 
-/** 默认 LoRA 权重，方便全局调节 */
+/** 瑞兽默认 LoRA 权重，方便全局调节 */
 export const DEFAULT_LORA_WEIGHT = 0.7
+
+/** 花卉默认 LoRA 权重（按 DELIVERY.md，瑞兽与花卉权重不同，所以独立常量） */
+export const FLOWER_LORA_WEIGHT = 0.8
 
 /** 子类英文标签：用于拼 prompt 中的 "Chinese traditional {en} pattern" */
 export interface LoraMapEntry {
@@ -27,116 +33,134 @@ export interface LoraMapEntry {
   subLabelZh: string
   /** 英文标签，会拼入 prompt 中的 "Chinese traditional {subLabelEn} pattern" */
   subLabelEn: string
-  /** 触发词（来自 patternTaxonomy.trigger） */
+  /**
+   * 训练触发词（来自训练 caption）。
+   * 支持多触发词：逗号分隔，buildPrompt 会逐项写入 prompt 前部。
+   * 例：牡丹 = 'ich_flower_pattern, ich_peony_pattern' → prompt 中同时出现两者。
+   */
   trigger: string
   /** LoRA 文件名（不含扩展名）。null 表示本机未部署该 LoRA，只写 trigger */
   loraFile: string | null
-  /** LoRA 权重，默认走 DEFAULT_LORA_WEIGHT */
+  /** LoRA 权重 */
   loraWeight: number
 }
 
 /**
  * 映射表
  *
- * 2026-08-18 更新：10 个瑞兽子类 LoRA 已确认源文件存在于 C:\LoraTraining\outputs\<subdir>\
- * 用户需手动把下列 9 份 safetensors 复制到 stable-diffusion-webui\models\Lora\ 后重启或 refresh A1111：
- *   - ICH_crane_pattern_lora_v1           ← outputs/crane_v4/         （鹤纹，v4 E5 loss 0.0867）
- *   - ICH_butterfly_pattern_lora_v4       ← outputs/butterfly_v4/     （蝴蝶纹，v4 E4 loss 0.0904）
- *   - ICH_peacock_pattern_lora_v6         ← outputs/peacock_v6/       （孔雀纹，v6 最新版）
- *   - ICH_tiger_pattern_lora_v5            ← outputs/tiger_v5/         （虎纹，v5 E5 loss 0.0867；ControlNet 锁形仍不理想）
- *   - ICH_deer_pattern_lora_v1             ← outputs/deer_v1/          （鹿纹，E6 最低 loss）
- *   - ICH_dragon_pattern_lora_v1           ← outputs/dragon_v3/        （龙纹，v3 最新有报告版）
- *   - ICH_phoenix_pattern_lora_v4          ← outputs/phoenix_v4/       （凤鸟纹，v4 最新有报告版）
- *   - ICH_lion_pattern_lora_v1             ← outputs/lion_v1/          （狮纹，v1 有报告）
- *   - ICH_dragon_phoenix_pattern_lora_v7   ← outputs/dragon_phoenix_v7/（龙凤纹，v7 最新有报告版）
+ * ===== 瑞兽 10 个子类 =====
+ * （2026-08-18 确认源文件存在于 C:\LoraTraining\outputs\<subdir>\）
+ *   - ICH_crane_pattern_lora_v1           ← outputs/crane_v4/
+ *   - ICH_butterfly_pattern_lora_v4       ← outputs/butterfly_v4/
+ *   - ICH_peacock_pattern_lora_v6         ← outputs/peacock_v6/
+ *   - ICH_tiger_pattern_lora_v5           ← outputs/tiger_v5/
+ *   - ICH_deer_pattern_lora_v1            ← outputs/deer_v1/
+ *   - ICH_dragon_pattern_lora_v1          ← outputs/dragon_v3/
+ *   - ICH_phoenix_pattern_lora_v4         ← outputs/phoenix_v4/
+ *   - ICH_lion_pattern_lora_v1            ← outputs/lion_v1/
+ *   - ICH_dragon_phoenix_pattern_lora_v7  ← outputs/dragon_phoenix_v7/
  *
- * 注：ICH_qilin_pattern_lora_v1（麒麟纹，源 outputs/qilin_v1/）已训练但因 patternTaxonomy
- * 中暂无 qilin 子类，此处不挂载。如需启用，需先在 patternTaxonomy.ts 增 qilin 子类。
+ * ===== 花卉 6 个专属子类 + 通用花卉 fallback =====
+ * （2026-08-20 朋友按 DELIVERY.md 交付，已复制到 WebUI models/Lora）
+ *   - peony          → ICH_peony_pattern_lora_v7_clear    trigger: ich_flower_pattern + ich_peony_pattern
+ *   - chrysanthemum  → ICH_chrysanthemum_pattern_lora_v3   trigger: ichpattern_chrysanthemum
+ *   - plum           → ICH_plum_blossom_pattern_lora_v2    trigger: ichpattern_plum_blossom（训练原词）+ 兼容旧 ichpattern_plum
+ *   - lotus          → ICH_lotus_pattern_lora_v3_attr      trigger: ich_flower_pattern + ich_lotus_pattern
+ *   - flower_bird    → ICH_flower_bird_pattern_lora_v3     trigger: ich_flower_pattern + ich_flower_bird_pattern
+ *   - floral_other   → ICH_flower_general_final            trigger: ich_flower_pattern
+ *   - gourd / interlocking_floral / plant                  → 无专属模型 → 通用花卉 ICH_flower_general_final
  *
- * 花卉子类（缠枝/葫芦/花鸟/菊/莲/梅/牡丹/植物/其他花卉）暂无训练 LoRA，仅写 trigger。
+ * 注：ICH_qilin_pattern_lora_v1（麒麟纹）源文件已训练，但 patternTaxonomy 中暂无 qilin 子类，
+ *     此处不挂载。如需启用，需先在 patternTaxonomy.ts 增 qilin 子类。
  */
 export const LORA_MAP: LoraMapEntry[] = [
-  // ============ 花卉（暂无 LoRA，仅 trigger） ============
-  {
-    subcategoryId: 'interlocking_floral',
-    themeId: 'floral',
-    subLabelZh: '缠枝花纹',
-    subLabelEn: 'interlocking floral',
-    trigger: 'ichpattern_interlocking_floral',
-    loraFile: null,
-    loraWeight: DEFAULT_LORA_WEIGHT,
-  },
+  // ============ 花卉（6 专属 + 3 通用 fallback 共 9 条）============
+  // 通用花卉 fallback：无专属模型的花卉子类统一走 ICH_flower_general_final + ich_flower_pattern
   {
     subcategoryId: 'gourd',
     themeId: 'floral',
     subLabelZh: '葫芦纹',
     subLabelEn: 'gourd',
-    trigger: 'ichpattern_gourd',
-    loraFile: null,
-    loraWeight: DEFAULT_LORA_WEIGHT,
+    trigger: 'ich_flower_pattern',
+    loraFile: 'ICH_flower_general_final',
+    loraWeight: FLOWER_LORA_WEIGHT,
   },
   {
-    subcategoryId: 'flower_bird',
+    subcategoryId: 'interlocking_floral',
     themeId: 'floral',
-    subLabelZh: '花鸟纹',
-    subLabelEn: 'flower and bird',
-    trigger: 'ichpattern_flower_bird',
-    loraFile: null,
-    loraWeight: DEFAULT_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'chrysanthemum',
-    themeId: 'floral',
-    subLabelZh: '菊花纹',
-    subLabelEn: 'chrysanthemum',
-    trigger: 'ichpattern_chrysanthemum',
-    loraFile: null,
-    loraWeight: DEFAULT_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'lotus',
-    themeId: 'floral',
-    subLabelZh: '莲花纹',
-    subLabelEn: 'lotus',
-    trigger: 'ichpattern_lotus',
-    loraFile: null,
-    loraWeight: DEFAULT_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'plum',
-    themeId: 'floral',
-    subLabelZh: '梅花纹',
-    subLabelEn: 'plum blossom',
-    trigger: 'ichpattern_plum',
-    loraFile: null,
-    loraWeight: DEFAULT_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'peony',
-    themeId: 'floral',
-    subLabelZh: '牡丹纹',
-    subLabelEn: 'peony',
-    trigger: 'ichpattern_peony',
-    loraFile: null,
-    loraWeight: DEFAULT_LORA_WEIGHT,
+    subLabelZh: '缠枝花纹',
+    subLabelEn: 'interlocking floral',
+    trigger: 'ich_flower_pattern',
+    loraFile: 'ICH_flower_general_final',
+    loraWeight: FLOWER_LORA_WEIGHT,
   },
   {
     subcategoryId: 'plant',
     themeId: 'floral',
     subLabelZh: '植物纹',
     subLabelEn: 'plant',
-    trigger: 'ichpattern_plant',
-    loraFile: null,
-    loraWeight: DEFAULT_LORA_WEIGHT,
+    trigger: 'ich_flower_pattern',
+    loraFile: 'ICH_flower_general_final',
+    loraWeight: FLOWER_LORA_WEIGHT,
   },
   {
     subcategoryId: 'floral_other',
     themeId: 'floral',
     subLabelZh: '其他花卉',
     subLabelEn: 'floral',
-    trigger: 'ichpattern_floral',
-    loraFile: null,
-    loraWeight: DEFAULT_LORA_WEIGHT,
+    trigger: 'ich_flower_pattern',
+    loraFile: 'ICH_flower_general_final',
+    loraWeight: FLOWER_LORA_WEIGHT,
+  },
+  // 专属花卉 LoRA 1: 花鸟（双 trigger）
+  {
+    subcategoryId: 'flower_bird',
+    themeId: 'floral',
+    subLabelZh: '花鸟纹',
+    subLabelEn: 'flower and bird',
+    trigger: 'ich_flower_pattern, ich_flower_bird_pattern',
+    loraFile: 'ICH_flower_bird_pattern_lora_v3',
+    loraWeight: FLOWER_LORA_WEIGHT,
+  },
+  // 专属花卉 LoRA 2: 菊花（单 trigger）
+  {
+    subcategoryId: 'chrysanthemum',
+    themeId: 'floral',
+    subLabelZh: '菊花纹',
+    subLabelEn: 'chrysanthemum',
+    trigger: 'ichpattern_chrysanthemum',
+    loraFile: 'ICH_chrysanthemum_pattern_lora_v3',
+    loraWeight: FLOWER_LORA_WEIGHT,
+  },
+  // 专属花卉 LoRA 3: 莲花（双 trigger）
+  {
+    subcategoryId: 'lotus',
+    themeId: 'floral',
+    subLabelZh: '莲花纹',
+    subLabelEn: 'lotus',
+    trigger: 'ich_flower_pattern, ich_lotus_pattern',
+    loraFile: 'ICH_lotus_pattern_lora_v3_attr',
+    loraWeight: FLOWER_LORA_WEIGHT,
+  },
+  // 专属花卉 LoRA 4: 梅花（训练原词 ichpattern_plum_blossom 在前，兼容旧 ichpattern_plum 在后）
+  {
+    subcategoryId: 'plum',
+    themeId: 'floral',
+    subLabelZh: '梅花纹',
+    subLabelEn: 'plum blossom',
+    trigger: 'ichpattern_plum_blossom, ichpattern_plum',
+    loraFile: 'ICH_plum_blossom_pattern_lora_v2',
+    loraWeight: FLOWER_LORA_WEIGHT,
+  },
+  // 专属花卉 LoRA 5: 牡丹（双 trigger）
+  {
+    subcategoryId: 'peony',
+    themeId: 'floral',
+    subLabelZh: '牡丹纹',
+    subLabelEn: 'peony',
+    trigger: 'ich_flower_pattern, ich_peony_pattern',
+    loraFile: 'ICH_peony_pattern_lora_v7_clear',
+    loraWeight: FLOWER_LORA_WEIGHT,
   },
 
   // ============ 瑞兽（9 个子类挂载专属 LoRA） ============
