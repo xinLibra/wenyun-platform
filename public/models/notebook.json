@@ -1,15 +1,15 @@
 [
   {
-    "productId": "phone_case_white",
-    "productName": "手机壳（白）",
-    "modelUrl": "phone_case.glb",
+    "productId": "notebook_01",
+    "productName": "线圈笔记本",
+    "modelUrl": "notebook.glb",
     "meshConfig": {
-      "textureTargetMaterial": "Cube_002_Material_001_0",
+      "textureTargetMaterial": "Object_5_001",
       "colorMaterials": [
         {
-          "name": "frame",
-          "materialName": "Cube_002_Material_005_0",
-          "label": "侧边边框"
+          "name": "coil",
+          "materialName": "Object_4",
+          "label": "线圈颜色"
         }
       ]
     },
@@ -25,7 +25,7 @@
       "rotation": 0
     },
     "cameraDefault": {
-      "position": [0, 0.08, 0.35],
+      "position": [2.2, 0, 2.8],
       "lookAt": [0, 0, 0]
     }
   }

@@ -1,17 +1,11 @@
 [
   {
-    "productId": "phone_case_white",
-    "productName": "手机壳（白）",
-    "modelUrl": "phone_case.glb",
+    "productId": "handkerchief_01",
+    "productName": "手帕",
+    "modelUrl": "handkerchief.glb",
     "meshConfig": {
-      "textureTargetMaterial": "Cube_002_Material_001_0",
-      "colorMaterials": [
-        {
-          "name": "frame",
-          "materialName": "Cube_002_Material_005_0",
-          "label": "侧边边框"
-        }
-      ]
+      "textureTargetMaterial": "Material.001",
+      "colorMaterials": []
     },
     "modelLimit": {
       "maxTriFaces": 12000,

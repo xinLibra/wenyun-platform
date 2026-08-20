@@ -1,0 +1,47 @@
+[
+  {
+    "productId": "t_shirt_01",
+    "productName": "短袖T恤",
+    "modelUrl": "t_shirt.glb",
+    "meshConfig": {
+      "textureTargetMaterial": "Object_1",
+      "colorMaterials": [
+        {
+          "name": "body",
+          "materialName": "Object_6",
+          "label": "衣身主体"
+        },
+        {
+          "name": "collar",
+          "materialName": "Object_8",
+          "label": "领口"
+        },
+        {
+          "name": "sleeve_trim",
+          "materialName": "Object_7",
+          "label": "袖口包边"
+        },
+        {
+          "name": "hem_trim",
+          "materialName": "Object_5",
+          "label": "下摆包边"
+        }
+      ]
+    },
+    "modelLimit": {
+      "maxTriFaces": 18000,
+      "forwardAxis": "+Z"
+    },
+    "textureSetting": {
+      "wrapS": "ClampToEdgeWrapping",
+      "wrapT": "ClampToEdgeWrapping",
+      "textureScale": [1, 1],
+      "offset": [0, 0],
+      "rotation": 0
+    },
+    "cameraDefault": {
+      "position": [2.4, 0.6, 2.6],
+      "lookAt": [0, 0, 0]
+    }
+  }
+]

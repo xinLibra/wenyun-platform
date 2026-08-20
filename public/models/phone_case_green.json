@@ -1,14 +1,14 @@
 [
   {
-    "productId": "phone_case_white",
-    "productName": "手机壳（白）",
-    "modelUrl": "phone_case.glb",
+    "productId": "phone_case_green",
+    "productName": "手机壳（绿）",
+    "modelUrl": "phone_case_green.glb",
     "meshConfig": {
-      "textureTargetMaterial": "Cube_002_Material_001_0",
+      "textureTargetMaterial": "part2",
       "colorMaterials": [
         {
           "name": "frame",
-          "materialName": "Cube_002_Material_005_0",
+          "materialName": "part1",
           "label": "侧边边框"
         }
       ]

@@ -13,6 +13,7 @@ import { DraggableText } from '../components/DraggableText'
 import { useCart } from '../hooks/useCart'
 import { supabase } from '../lib/supabase'
 import { Product3DViewer } from '../components/Product3DViewer'
+import { loadProduct3DConfig, has3DConfig, COLOR_PALETTE, type Product3DConfig } from '../config/product3D'
 
 interface UserPattern {
   id: string
@@ -23,10 +24,14 @@ interface UserPattern {
 
 const products = [
   { id: 'bookmark', name: '书签', price: '19', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=wooden%20bookmark%20blank%20minimal%20elegant%20product%20photography&image_size=portrait_4_3', category: '文创' },
-  { id: 'phonecase', name: '手机壳', price: '49', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=smartphone%20case%20blank%20white%20minimal%20product%20photography&image_size=portrait_4_3', category: '文创' },
+  { id: 'phonecase', name: '手机壳·白', price: '49', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=smartphone%20case%20blank%20white%20minimal%20product%20photography&image_size=portrait_4_3', category: '文创' },
+  { id: 'phonecase_green', name: '手机壳·绿', price: '49', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=smartphone%20case%20blank%20green%20minimal%20product%20photography&image_size=portrait_4_3', category: '文创' },
   { id: 'notebook', name: '笔记本', price: '39', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=notebook%20blank%20elegant%20minimal%20product%20photography&image_size=portrait_4_3', category: '文创' },
   { id: 'postcard', name: '明信片', price: '12', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=postcard%20blank%20white%20minimal%20product%20photography&image_size=landscape_4_3', category: '文创' },
-  { id: 'tote', name: '手提袋', price: '59', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=canvas%20tote%20bag%20blank%20white%20minimal%20product%20photography&image_size=square', category: '文创' },
+  { id: 'tote', name: '托特包', price: '59', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=canvas%20tote%20bag%20blank%20white%20minimal%20product%20photography&image_size=square', category: '文创' },
+  { id: 'paper_bag', name: '纸袋', price: '29', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=kraft%20paper%20bag%20blank%20minimal%20product%20photography&image_size=square', category: '文创' },
+  { id: 'cushion', name: '抱枕', price: '89', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=cushion%20pillow%20blank%20white%20minimal%20product%20photography&image_size=square', category: '文创' },
+  { id: 'handkerchief', name: '手帕', price: '19', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=handkerchief%20blank%20white%20minimal%20product%20photography&image_size=square', category: '文创' },
   { id: 'scarf', name: '围巾', price: '299', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20wool%20scarf%20elegant%20minimal%20product%20photography&image_size=square', category: '服饰' },
   { id: 'silkscarf', name: '丝巾', price: '199', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=silk%20scarf%20blank%20white%20elegant%20product%20photography&image_size=square', category: '服饰' },
   { id: 'square_scarf', name: '方巾', price: '149', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=silk%20square%20scarf%20blank%20white%20elegant%20product%20photography&image_size=square', category: '服饰' },
@@ -49,9 +54,13 @@ const materials = [
 const productMaterials: Record<string, string[]> = {
   bookmark: ['wood', 'paper'],
   phonecase: ['plastic', 'silicone'],
+  phonecase_green: ['plastic', 'silicone'],
   notebook: ['paper', 'leather'],
   postcard: ['paper'],
-  tote: ['paper', 'canvas'],
+  tote: ['canvas', 'cotton'],
+  paper_bag: ['paper'],
+  cushion: ['cotton', 'polyester'],
+  handkerchief: ['cotton', 'silk'],
   scarf: ['silk', 'wool'],
   silkscarf: ['silk'],
   square_scarf: ['silk'],
@@ -200,8 +209,35 @@ export default function CustomizeProduct() {
   const [selectedElement, setSelectedElement] = useState<'pattern' | 'text' | null>('pattern')
 
   // ===== 3D 预览相关状态 =====
-  //const [use3D, setUse3D] = useState(false)
   const [frameColor, setFrameColor] = useState('#2c3e50')   // 边框默认颜色
+  const [product3DConfig, setProduct3DConfig] = useState<Product3DConfig | null>(null)
+  // 通用换色：colorMaterial.name → HEX 色值
+  const [productColors, setProductColors] = useState<Record<string, string>>({})
+
+  // 切换产品时异步加载 3D 配置
+  useEffect(() => {
+    let cancelled = false
+    if (!has3DConfig(selectedProduct)) {
+      setProduct3DConfig(null)
+      setProductColors({})
+      return
+    }
+    setProduct3DConfig(null)
+    loadProduct3DConfig(selectedProduct).then((cfg) => {
+      if (cancelled) return
+      setProduct3DConfig(cfg)
+      // 初始化换色：每个 colorMaterial 默认取 frameColor 或黛青
+      if (cfg?.meshConfig?.colorMaterials?.length) {
+        const init: Record<string, string> = {}
+        cfg.meshConfig.colorMaterials.forEach((cm, idx) => {
+          init[cm.name] = idx === 0 ? frameColor : '#2c3e50'
+        })
+        setProductColors(init)
+      }
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProduct])
 
   const showToastMessage = (message: string) => {
     setToastMessage(message)
@@ -933,22 +969,16 @@ export default function CustomizeProduct() {
                 <div className="relative" ref={previewContainerRef} id="preview-container">
                   <div className="absolute -inset-3 border-3 border-deep-blue rounded-sm opacity-10" />
 
-                  {/* ===== 3D 预览模式（目前仅手机壳） ===== */}
-                  {selectedProduct === 'phonecase' ? (
+                  {/* ===== 3D 预览模式（所有有 3D 配置的产品） ===== */}
+                  {product3DConfig && product3DConfig.modelUrl ? (
                     <div className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden">
                       <Product3DViewer
-                        modelUrl="/models/phone_case.glb"
-                        textureTargetMaterial="back"
-                        colorMaterials={[
-                          { name: '边框', materialName: 'frame', label: '边框颜色' },
-                          { name: '机身', materialName: 'body', label: '机身颜色' },
-                        ]}
+                        modelUrl={`/models/${product3DConfig.modelUrl}`}
+                        textureTargetMaterial={product3DConfig.meshConfig?.textureTargetMaterial || ''}
+                        colorMaterials={product3DConfig.meshConfig?.colorMaterials || []}
                         patternImage={selectedPatternImage}
-                        colorMap={{
-                          '边框': frameColor,
-                          '机身': selectedMaterial === 'plastic' ? '#f5f5f5' : '#e8e8e8',
-                        }}
-                        cameraPosition={[0, 0.05, 2.4]}
+                        colorMap={productColors}
+                        cameraPosition={product3DConfig.cameraDefault?.position}
                       />
 
                       {/* 底部信息条 */}
@@ -970,6 +1000,11 @@ export default function CustomizeProduct() {
                           拖拽旋转 · 滚轮缩放
                         </p>
                       </div>
+                    </div>
+                  ) : has3DConfig(selectedProduct) && !product3DConfig ? (
+                    /* 3D 配置加载中 */
+                    <div className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden flex items-center justify-center">
+                      <p className="font-song text-deep-blue-light">正在加载 3D 模型…</p>
                     </div>
                   ) : (
                     /* ===== 原来的 2D 预览逻辑（保持不变） ===== */
@@ -1214,40 +1249,47 @@ export default function CustomizeProduct() {
                       </div>
                     </div>
 
-                    {/* 手机壳：边框颜色（在定制调节之前） */}
-                    {selectedProduct === 'phonecase' && (
+                    {/* 通用换色面板：按当前产品 colorMaterials 动态渲染 */}
+                    {product3DConfig?.meshConfig?.colorMaterials?.length ? (
                       <div className="pt-4 border-t border-deep-blue-100">
                         <h2 className="font-shufa text-lg text-deep-blue flex items-center mb-3">
                           <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">色</span>
-                          边框颜色
+                          {product3DConfig.meshConfig.colorMaterials.length === 1
+                            ? product3DConfig.meshConfig.colorMaterials[0].label
+                            : '部件配色'}
                         </h2>
-                        <div className="flex flex-wrap gap-3">
-                          {[
-                            { c: '#2c3e50', name: '黛青' },
-                            { c: '#1a1a1a', name: '墨黑' },
-                            { c: '#8B4513', name: '赭石' },
-                            { c: '#C0C0C0', name: '银灰' },
-                            { c: '#E8D5B7', name: '米金' },
-                            { c: '#800020', name: '绛红' },
-                          ].map(({ c, name }) => (
-                            <button
-                              key={c}
-                              onClick={() => setFrameColor(c)}
-                              title={name}
-                              className={`w-9 h-9 rounded-full border-2 transition-all ${
-                                frameColor === c
-                                  ? 'border-palace-red scale-110 shadow-md'
-                                  : 'border-deep-blue-200 hover:border-deep-blue'
-                              }`}
-                              style={{ backgroundColor: c }}
-                            />
-                          ))}
-                        </div>
+                        {product3DConfig.meshConfig.colorMaterials.map((cm) => (
+                          <div key={cm.name} className="mb-3">
+                            {product3DConfig.meshConfig.colorMaterials.length > 1 && (
+                              <p className="font-song text-xs text-deep-blue-light mb-2">{cm.label}</p>
+                            )}
+                            <div className="flex flex-wrap gap-3">
+                              {COLOR_PALETTE.map(({ c, name }) => (
+                                <button
+                                  key={c}
+                                  onClick={() => {
+                                    setProductColors((prev) => ({ ...prev, [cm.name]: c }))
+                                    if (cm.name === 'frame' || product3DConfig.meshConfig!.colorMaterials.indexOf(cm) === 0) {
+                                      setFrameColor(c)
+                                    }
+                                  }}
+                                  title={name}
+                                  className={`w-9 h-9 rounded-full border-2 transition-all ${
+                                    productColors[cm.name] === c
+                                      ? 'border-palace-red scale-110 shadow-md'
+                                      : 'border-deep-blue-200 hover:border-deep-blue'
+                                  }`}
+                                  style={{ backgroundColor: c }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                         <p className="font-song text-xs text-deep-blue-light mt-2">
-                          点击色块更换手机壳边框颜色
+                          点击色块更换{currentProduct?.name}部件颜色
                         </p>
                       </div>
-                    )}
+                    ) : null}
                     <div className="pt-4 border-t border-deep-blue-100">
                       <h2 className="font-shufa text-lg text-deep-blue flex items-center mb-4">
                         <span className="w-6 h-6 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-sm">定</span>

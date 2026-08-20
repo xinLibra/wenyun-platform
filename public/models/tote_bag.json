@@ -1,0 +1,37 @@
+[
+  {
+    "productId": "tote_bag_01",
+    "productName": "帆布托特包",
+    "modelUrl": "tote_bag.glb",
+    "meshConfig": {
+      "textureTargetMaterial": "tripo_part_1",
+      "colorMaterials": [
+        {
+          "name": "handle",
+          "materialName": "tripo_part_9",
+          "label": "手提带子"
+        },
+        {
+          "name": "bag_body",
+          "materialName": "tripo_part_0",
+          "label": "帆布包身"
+        }
+      ]
+    },
+    "modelLimit": {
+      "maxTriFaces": 12000,
+      "forwardAxis": "+Z"
+    },
+    "textureSetting": {
+      "wrapS": "ClampToEdgeWrapping",
+      "wrapT": "ClampToEdgeWrapping",
+      "textureScale": [1, 1],
+      "offset": [0, 0],
+      "rotation": 0
+    },
+    "cameraDefault": {
+      "position": [0, 0.12, 0.42],
+      "lookAt": [0, 0, 0]
+    }
+  }
+]
