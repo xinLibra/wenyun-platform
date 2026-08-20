@@ -493,21 +493,6 @@ export default function CreatePattern() {
     }
   }
 
-  const getSelectedStyleName = useCallback(() => {
-    if (dimension.craft.length > 0) {
-      const craftLabels: Record<string, string> = {
-        dye: '染织',
-        embroidery: '刺绣',
-        brocade: '织锦',
-        carving: '雕刻',
-        ceramic: '陶瓷',
-        metal: '金属工艺',
-      }
-      return craftLabels[dimension.craft[0]] || '自定义风格'
-    }
-return '自定义风格'
-  }, [dimension.craft])
-
   const [createMode, setCreateMode] = useState<'ai' | 'fusion'>('ai')
   const [userPatterns, setUserPatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
   const [isLoadingUserPatterns, setIsLoadingUserPatterns] = useState(false)
