@@ -13,8 +13,7 @@ import { applyPreset } from '../config/generationPresets'
 import { PatternDimension, GenerationParams, PromptParseResult, CRAFT_OPTIONS, ETHNIC_OPTIONS, THEME_OPTIONS, APPLICATION_OPTIONS, ARRANGEMENT_OPTIONS, SYMMETRY_OPTIONS } from '../types/pattern'
 import { supabase } from '../lib/supabase'
 import { mockSemanticSearch } from '../mock/semanticSearch'
-import { PatternDnaRadar } from '../components/PatternDnaRadar'
-import { mockPatternDna } from '../mock/patternDna'
+import { PatternDnaRadar, type PatternDnaData } from '../components/PatternDnaRadar'
 import { PatternFusionSlider } from '../components/PatternFusionSlider'
 import {
   parsePromptToTags,
@@ -54,6 +53,61 @@ const DEFAULT_GENERATION_PARAMS: GenerationParams = {
   arrangement: 'single',
   symmetry: 'mirror',
   culturalIntensity: 50,
+}
+
+/**
+ * 将当前生成参数映射到 DNA 雷达图 7 维度
+ * 实时反映用户选择对纹样 DNA 的影响
+ */
+function computeDnaFromParams(p: GenerationParams): PatternDnaData {
+  const { complexity, textureDetail, colorScheme, arrangement, symmetry, culturalIntensity, dimension: dim } = p
+  const s = dim.style
+
+  // 几何度：抽象度越高/几何元素越多 → 几何度越高；具象度高则几何度低
+  // simplicity (平面化/几何化) 正向；figurative (具象度) 反向
+  const geometricScore = Math.round(
+    s.simplicity * 0.5 + (100 - s.figurative) * 0.3 + (100 - complexity) * 0.2
+  )
+
+  // 对称性：由排布方式决定
+  const symmetryMap = { mirror: 90, rotation: 78, none: 35 } as const
+  const symmetryScore = symmetryMap[symmetry] ?? 50
+
+  // 曲率：具象度高 → 曲率高（曲线多）；肌理细节多 → 曲率高
+  const curvatureScore = Math.round(
+    s.figurative * 0.6 + textureDetail * 0.3 + complexity * 0.1
+  )
+
+  // 连续性：四方连续 > 适合纹样 > 单独纹样
+  const repetitionMap = { seamless: 95, adapted: 68, single: 28 } as const
+  const repetitionScore = repetitionMap[arrangement] ?? 50
+
+  // 传统程度：traditional 滑条 + 文化强度
+  const traditionalScore = Math.round(
+    s.traditional * 0.5 + culturalIntensity * 0.3 + s.handmade * 0.2
+  )
+
+  // 现代适配：简洁度高 + 文化强度低 → 现代感强
+  const modernFitScore = Math.round(
+    s.simplicity * 0.4 + (100 - culturalIntensity) * 0.35 + (100 - s.handmade) * 0.25
+  )
+
+  // 配色复杂度：多色模式高 → 单色低；吸色法高 → 潘通中等
+  let colorComplexity = 50
+  if (colorScheme.mode === 'hue') colorComplexity = 82
+  else if (colorScheme.mode === 'pantone') colorComplexity = colorScheme.pantone === 'monochrome-black' ? 35 : 55
+  else if (colorScheme.mode === 'image') colorComplexity = 75
+  colorComplexity = Math.round(colorComplexity * 0.7 + complexity * 0.3)
+
+  return {
+    geometricScore: Math.max(5, Math.min(99, geometricScore)),
+    symmetryScore: Math.max(5, Math.min(99, symmetryScore)),
+    curvatureScore: Math.max(5, Math.min(99, curvatureScore)),
+    repetitionScore: Math.max(5, Math.min(99, repetitionScore)),
+    traditionalScore: Math.max(5, Math.min(99, traditionalScore)),
+    modernFitScore: Math.max(5, Math.min(99, modernFitScore)),
+    colorComplexity: Math.max(5, Math.min(99, colorComplexity)),
+  }
 }
 
 export default function CreatePattern() {
@@ -996,21 +1050,6 @@ return '自定义风格'
                 </div>
               </div>
 
-              <div className="mt-4 p-3 bg-rice-paper rounded-sm border border-deep-blue-100">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-song text-sm text-deep-blue-light">当前风格</span>
-                  <span className="font-shufa text-deep-blue">{getSelectedStyleName()}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-song text-sm text-deep-blue-light">配色方案</span>
-                  <span className="font-shufa text-deep-blue">
-                    {generationParams.colorScheme.mode === 'hue' && '色相调节'}
-                    {generationParams.colorScheme.mode === 'pantone' && '潘通色号'}
-                    {generationParams.colorScheme.mode === 'image' && '图片吸色'}
-                  </span>
-                </div>
-              </div>
-
               <div className="mt-4 space-y-3">
                 <div>
                   <label className="block font-song text-sm text-deep-blue-light mb-1">作品名称</label>
@@ -1385,7 +1424,7 @@ return '自定义风格'
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-              <PatternDnaRadar dna={mockPatternDna} patternName={(createMode === 'fusion' ? fusionWorkTitle : workTitle) || '本次生成纹样'} />
+              <PatternDnaRadar dna={computeDnaFromParams(generationParams)} patternName={(createMode === 'fusion' ? fusionWorkTitle : workTitle) || '本次生成纹样'} />
             </FrameDecorations>
           </motion.div>
         </motion.div>
