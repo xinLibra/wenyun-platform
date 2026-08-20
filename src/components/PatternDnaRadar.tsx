@@ -16,13 +16,13 @@ interface PatternDnaRadarProps {
 }
 
 const dimensionLabels: Record<keyof PatternDnaData, string> = {
-  geometricScore: '几何度',
-  symmetryScore: '对称性',
-  curvatureScore: '曲率',
-  repetitionScore: '连续性',
-  traditionalScore: '传统程度',
-  modernFitScore: '现代适配',
-  colorComplexity: '配色复杂度',
+  geometricScore: '规整感',
+  symmetryScore: '平衡感',
+  curvatureScore: '灵动感',
+  repetitionScore: '完整度',
+  traditionalScore: '非遗韵味',
+  modernFitScore: '现代感',
+  colorComplexity: '色彩丰富度',
 }
 
 export function PatternDnaRadar({ dna, patternName }: PatternDnaRadarProps) {
