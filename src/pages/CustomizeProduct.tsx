@@ -866,7 +866,7 @@ export default function CustomizeProduct() {
                 ))}
               </div>
               
-              <div className="flex-1 grid grid-cols-2 gap-2 content-start overflow-y-auto max-h-[60vh]">
+              <div className="flex-1 grid grid-cols-2 gap-2 content-start overflow-y-auto max-h-[40vh]">
                 {filteredProducts.map((product, index) => (
                   <motion.button
                     key={product.id}
@@ -884,6 +884,36 @@ export default function CustomizeProduct() {
                     <span className={`text-xs ${selectedProduct === product.id ? 'text-ming-yellow' : 'text-deep-blue-light'}`}>¥{product.price}</span>
                   </motion.button>
                 ))}
+              </div>
+
+              <div className="mt-4 flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={handleReset} className="flex-1">重置</Button>
+                  <Button variant="outline" onClick={handleSaveConfig} className="flex-1">保存配置</Button>
+                </div>
+                <Button variant="primary" onClick={handleOpenPatternModal} className="w-full">选择纹样</Button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleExport('png')}
+                    disabled={isExporting}
+                    className="flex-1 px-4 py-2 border border-deep-blue-200 rounded-sm font-song text-deep-blue hover:bg-deep-blue-50 disabled:opacity-50"
+                  >
+                    {isExporting ? '导出中...' : '下载 PNG'}
+                  </button>
+                  <button
+                    onClick={() => handleExport('jpg')}
+                    disabled={isExporting}
+                    className="flex-1 px-4 py-2 border border-deep-blue-200 rounded-sm font-song text-deep-blue hover:bg-deep-blue-50 disabled:opacity-50"
+                  >
+                    {isExporting ? '导出中...' : '下载 JPG'}
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="secondary" onClick={handleAddToCart} className="flex-1">加入购物车</Button>
+                  <StampButton onClick={handleBuyNow} disabled={isBuying} className="flex-1">
+                    {isBuying ? '处理中...' : '立即购买'}
+                  </StampButton>
+                </div>
               </div>
             </FrameDecorations>
 
@@ -1416,37 +1446,7 @@ export default function CustomizeProduct() {
               </FrameDecorations>
             </div>
 
-            <div className="flex flex-wrap justify-between items-center gap-4 mt-6">
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={handleReset}>重置</Button>
-                <Button variant="outline" onClick={handleSaveConfig}>保存配置</Button>
-                <Button variant="primary" onClick={handleOpenPatternModal}>选择纹样</Button>
-              </div>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleExport('png')}
-                  disabled={isExporting}
-                  className="px-4 py-2 border border-deep-blue-200 rounded-sm font-song text-deep-blue hover:bg-deep-blue-50 disabled:opacity-50"
-                >
-                  {isExporting ? '导出中...' : '下载 PNG'}
-                </button>
-                <button
-                  onClick={() => handleExport('jpg')}
-                  disabled={isExporting}
-                  className="px-4 py-2 border border-deep-blue-200 rounded-sm font-song text-deep-blue hover:bg-deep-blue-50 disabled:opacity-50"
-                >
-                  {isExporting ? '导出中...' : '下载 JPG'}
-                </button>
-              </div>
-              
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={handleAddToCart}>加入购物车</Button>
-                <StampButton onClick={handleBuyNow} disabled={isBuying}>
-                  {isBuying ? '处理中...' : '立即购买'}
-                </StampButton>
-              </div>
-            </div>
           </motion.div>
         </div>
 
