@@ -235,7 +235,6 @@ export default function CustomizeProduct() {
   const [selectedElement, setSelectedElement] = useState<'pattern' | 'text' | null>('pattern')
 
   // ===== 3D 预览相关状态 =====
-  const [frameColor, setFrameColor] = useState('#2c3e50')   // 边框默认颜色
   const [product3DConfig, setProduct3DConfig] = useState<Product3DConfig | null>(null)
   // 右侧面板折叠状态
   const [panelExpanded, setPanelExpanded] = useState<{ layout: boolean; color: boolean; adjust: boolean }>({ layout: true, color: true, adjust: true })
@@ -1285,7 +1284,6 @@ export default function CustomizeProduct() {
                                       key={c}
                                       onClick={() => {
                                         setProductColors((prev) => ({ ...prev, [cm.name]: c }))
-                                        setFrameColor(c)
                                       }}
                                       title={name}
                                       className={`w-7 h-7 rounded-full border-2 transition-all ${
