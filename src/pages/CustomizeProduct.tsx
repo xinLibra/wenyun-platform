@@ -792,7 +792,10 @@ export default function CustomizeProduct() {
     const el = document.getElementById('preview-container')
     if (!el) return
 
+    const is3DMode = !!(product3DConfig && product3DConfig.modelUrl)
+
     const handleWheel = (e: WheelEvent) => {
+      if (is3DMode) return
       e.preventDefault()
       e.stopPropagation()
       const delta = e.deltaY > 0 ? -2 : 2
@@ -806,7 +809,7 @@ export default function CustomizeProduct() {
 
     el.addEventListener('wheel', handleWheel, { passive: false })
     return () => el.removeEventListener('wheel', handleWheel)
-  }, [selectedElement])
+  }, [selectedElement, product3DConfig])
 
 
 
