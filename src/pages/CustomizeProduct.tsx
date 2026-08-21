@@ -3,7 +3,6 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { Button, StampButton } from '../components/ui/Button'
-import { ProductCard } from '../components/ui/Card'
 import { InkSlider } from '../components/ui/InkSlider'
 import { BambooToggle } from '../components/ui/Select'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
@@ -36,19 +35,6 @@ const products = [
   { id: 'silkscarf', name: '丝巾', price: '199', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=silk%20scarf%20blank%20white%20elegant%20product%20photography&image_size=square', category: '服饰' },
   { id: 'square_scarf', name: '方巾', price: '149', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=silk%20square%20scarf%20blank%20white%20elegant%20product%20photography&image_size=square', category: '服饰' },
   { id: 'tshirt', name: 'T恤', price: '89', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20white%20cotton%20t-shirt%20front%20view%20with%20collar%20sleeve%20and%20hem%20trim%20minimal%20product%20photography&image_size=portrait_4_3', category: '服饰' },
-]
-
-const materials = [
-  { id: 'wood', name: '木质' },
-  { id: 'plastic', name: '塑料' },
-  { id: 'silicone', name: '硅胶' },
-  { id: 'silk', name: '丝绸' },
-  { id: 'paper', name: '纸张' },
-  { id: 'leather', name: '皮革' },
-  { id: 'canvas', name: '帆布' },
-  { id: 'cotton', name: '纯棉' },
-  { id: 'wool', name: '羊毛' },
-  { id: 'polyester', name: '涤纶' },
 ]
 
 const productMaterials: Record<string, string[]> = {
@@ -252,7 +238,7 @@ export default function CustomizeProduct() {
   const [frameColor, setFrameColor] = useState('#2c3e50')   // 边框默认颜色
   const [product3DConfig, setProduct3DConfig] = useState<Product3DConfig | null>(null)
   // 右侧面板折叠状态
-  const [panelExpanded, setPanelExpanded] = useState<{ layout: boolean; adjust: boolean }>({ layout: true, adjust: true })
+  const [panelExpanded, setPanelExpanded] = useState<{ layout: boolean; color: boolean; adjust: boolean }>({ layout: true, color: true, adjust: true })
   // 通用换色：colorMaterial.name → HEX 色值
   const [productColors, setProductColors] = useState<Record<string, string>>({})
 
@@ -904,20 +890,23 @@ export default function CustomizeProduct() {
                   ‹
                 </button>
                 
-                <div className="flex-1 grid grid-cols-2 gap-3">
+                <div className="flex-1 grid grid-cols-2 gap-2">
                   {currentPageProducts.map((product, index) => (
-                    <motion.div
+                    <motion.button
                       key={product.id}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
+                      transition={{ delay: index * 0.05 }}
+                      onClick={() => handleProductChange(product.id)}
+                      className={`flex flex-col items-start px-3 py-2 rounded-sm font-song text-sm transition-all duration-300 border ${
+                        selectedProduct === product.id
+                          ? 'bg-palace-red text-rice-paper border-palace-red shadow-md'
+                          : 'bg-rice-paper border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                      }`}
                     >
-                      <ProductCard
-                        {...product}
-                        className={selectedProduct === product.id ? 'ring-2 ring-palace-red' : ''}
-                        onClick={() => handleProductChange(product.id)}
-                      />
-                    </motion.div>
+                      <span className="font-shufa">{product.name}</span>
+                      <span className={`text-xs ${selectedProduct === product.id ? 'text-ming-yellow' : 'text-deep-blue-light'}`}>¥{product.price}</span>
+                    </motion.button>
                   ))}
                 </div>
                 
@@ -936,33 +925,6 @@ export default function CustomizeProduct() {
                 </span>
               </div>
             </FrameDecorations>
-
-            <FrameDecorations className="bg-rice-paper-light p-6 mt-6">
-              <h2 className="font-shufa text-xl text-deep-blue mb-4 flex items-center">
-                <span className="w-8 h-8 bg-deep-blue rounded-sm flex items-center justify-center text-rice-paper mr-3 text-sm">材</span>
-                材质选择
-              </h2>
-              
-              <div className="grid grid-cols-2 gap-3">
-                {materials
-                  .filter((material) => productMaterials[selectedProduct]?.includes(material.id))
-                  .map((material) => (
-                    <button
-                      key={material.id}
-                      onClick={() => setSelectedMaterial(material.id)}
-                      className={`py-3 px-4 rounded-sm font-song transition-all duration-300 ${
-                        selectedMaterial === material.id
-                          ? 'bg-deep-blue text-rice-paper'
-                          : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-deep-blue-light'
-                      }`}
-                    >
-                      {material.name}
-                    </button>
-                  ))}
-              </div>
-            </FrameDecorations>
-
-            {/* ===== 新增结束 ===== */}
 
           </motion.div>
 
@@ -1036,11 +998,6 @@ export default function CustomizeProduct() {
                         <div>
                           <h3 className="font-shufa text-lg text-deep-blue">{currentProduct?.name}</h3>
                           <p className="font-song text-palace-red text-base">¥{currentProduct?.price}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-song text-xs text-deep-blue-light">
-                            材质：{materials.find(m => m.id === selectedMaterial)?.name}
-                          </span>
                         </div>
                       </div>
 
@@ -1218,11 +1175,6 @@ export default function CustomizeProduct() {
                                 <h3 className="font-shufa text-lg text-deep-blue">{currentProduct?.name}</h3>
                                 <p className="font-song text-palace-red text-base">¥{currentProduct?.price}</p>
                               </div>
-                              <div className="text-right">
-                                <span className="font-song text-xs text-deep-blue-light">
-                                  材质：{materials.find(m => m.id === selectedMaterial)?.name}
-                                </span>
-                              </div>
                             </div>
                           </div>
                         </div>
@@ -1272,8 +1224,8 @@ export default function CustomizeProduct() {
                 </div>
 
                 {activeTab === 'pattern' && (
-                  <div className="space-y-4">
-                    {/* ===== 区块一：纹样排版 + 部件配色 ===== */}
+                  <div className="space-y-3">
+                    {/* ===== 区块一：纹样排版 ===== */}
                     <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
                       <button
                         onClick={() => setPanelExpanded(p => ({ ...p, layout: !p.layout }))}
@@ -1281,80 +1233,84 @@ export default function CustomizeProduct() {
                       >
                         <span className="font-shufa text-sm text-deep-blue flex items-center">
                           <span className="w-5 h-5 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">排</span>
-                          纹样排版 + 部件配色
+                          纹样排版
                         </span>
                         <span className="text-deep-blue text-xs">{panelExpanded.layout ? '收起 ▲' : '展开 ▼'}</span>
                       </button>
                       {panelExpanded.layout && (
-                        <div className="p-4 space-y-4">
-                          <div>
-                            <div className="grid grid-cols-4 gap-2">
-                              {(Object.keys(layoutPresets) as LayoutMode[]).map((mode) => {
-                                const preset = layoutPresets[mode]
-                                return (
-                                  <button
-                                    key={mode}
-                                    onClick={() => handleLayoutChange(mode)}
-                                    className={`relative p-3 rounded-sm transition-all duration-300 ${
-                                      layoutMode === mode
-                                        ? 'bg-palace-red text-rice-paper shadow-md'
-                                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                                    }`}
-                                  >
-                                    <div className="text-xl mb-1">{preset.icon}</div>
-                                    <div className="font-song text-xs">{preset.name}</div>
-                                  </button>
-                                )
-                              })}
-                            </div>
+                        <div className="p-4">
+                          <div className="grid grid-cols-4 gap-2">
+                            {(Object.keys(layoutPresets) as LayoutMode[]).map((mode) => {
+                              const preset = layoutPresets[mode]
+                              return (
+                                <button
+                                  key={mode}
+                                  onClick={() => handleLayoutChange(mode)}
+                                  className={`relative p-3 rounded-sm transition-all duration-300 ${
+                                    layoutMode === mode
+                                      ? 'bg-palace-red text-rice-paper shadow-md'
+                                      : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                                  }`}
+                                >
+                                  <div className="text-xl mb-1">{preset.icon}</div>
+                                  <div className="font-song text-xs">{preset.name}</div>
+                                </button>
+                              )
+                            })}
                           </div>
-
-                          {/* 通用换色面板：按当前产品 colorMaterials 动态渲染 */}
-                          {product3DConfig?.meshConfig?.colorMaterials?.length ? (
-                            <div className="pt-3 border-t border-deep-blue-100">
-                              <h2 className="font-shufa text-sm text-deep-blue flex items-center mb-2">
-                                <span className="w-5 h-5 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">色</span>
-                                {product3DConfig.meshConfig.colorMaterials.length === 1
-                                  ? product3DConfig.meshConfig.colorMaterials[0].label
-                                  : '部件配色'}
-                              </h2>
-                              {product3DConfig.meshConfig.colorMaterials.map((cm) => (
-                                <div key={cm.name} className="mb-2">
-                                  {product3DConfig.meshConfig.colorMaterials.length > 1 && (
-                                    <p className="font-song text-xs text-deep-blue-light mb-1">{cm.label}</p>
-                                  )}
-                                  <div className="flex flex-wrap gap-2">
-                                    {COLOR_PALETTE.map(({ c, name }) => (
-                                      <button
-                                        key={c}
-                                        onClick={() => {
-                                          setProductColors((prev) => ({ ...prev, [cm.name]: c }))
-                                          if (cm.name === 'frame' || product3DConfig.meshConfig!.colorMaterials.indexOf(cm) === 0) {
-                                            setFrameColor(c)
-                                          }
-                                        }}
-                                        title={name}
-                                        className={`w-8 h-8 rounded-full border-2 transition-all ${
-                                          productColors[cm.name] === c
-                                            ? 'border-palace-red scale-110 shadow-md'
-                                            : 'border-deep-blue-200 hover:border-deep-blue'
-                                        }`}
-                                        style={{ backgroundColor: c }}
-                                      />
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
-                              <p className="font-song text-xs text-deep-blue-light mt-1">
-                                点击色块更换{currentProduct?.name}部件颜色
-                              </p>
-                            </div>
-                          ) : null}
                         </div>
                       )}
                     </div>
 
-                    {/* ===== 区块二：定制调节 ===== */}
+                    {/* ===== 区块二：部件配色 ===== */}
+                    {product3DConfig?.meshConfig?.colorMaterials?.length ? (
+                      <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
+                        <button
+                          onClick={() => setPanelExpanded(p => ({ ...p, color: !p.color }))}
+                          className="w-full flex items-center justify-between px-4 py-2.5 bg-deep-blue/5 hover:bg-deep-blue/10 transition-colors"
+                        >
+                          <span className="font-shufa text-sm text-deep-blue flex items-center">
+                            <span className="w-5 h-5 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">色</span>
+                            部件配色
+                          </span>
+                          <span className="text-deep-blue text-xs">{panelExpanded.color ? '收起 ▲' : '展开 ▼'}</span>
+                        </button>
+                        {panelExpanded.color && (
+                          <div className="p-4 space-y-3">
+                            {product3DConfig.meshConfig.colorMaterials.map((cm) => (
+                              <div key={cm.name}>
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className="font-song text-xs text-deep-blue-light">{cm.label}</p>
+                                  {productColors[cm.name] && (
+                                    <span className="text-xs font-song" style={{ color: productColors[cm.name] }}>●</span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {COLOR_PALETTE.map(({ c, name }) => (
+                                    <button
+                                      key={c}
+                                      onClick={() => {
+                                        setProductColors((prev) => ({ ...prev, [cm.name]: c }))
+                                        setFrameColor(c)
+                                      }}
+                                      title={name}
+                                      className={`w-7 h-7 rounded-full border-2 transition-all ${
+                                        productColors[cm.name] === c
+                                          ? 'border-palace-red scale-110 shadow-md'
+                                          : 'border-deep-blue-200 hover:border-deep-blue'
+                                      }`}
+                                      style={{ backgroundColor: c }}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+
+                    {/* ===== 区块三：定制调节 ===== */}
                     <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
                       <button
                         onClick={() => setPanelExpanded(p => ({ ...p, adjust: !p.adjust }))}
@@ -1595,9 +1551,6 @@ export default function CustomizeProduct() {
                     <div className="flex-1">
                       <h3 className="font-shufa text-deep-blue">{currentProduct?.name}</h3>
                       <p className="font-song text-sm text-deep-blue-light">
-                        材质：{materials.find(m => m.id === selectedMaterial)?.name}
-                      </p>
-                      <p className="font-song text-xs text-deep-blue-light">
                         数量：{quantity} 件
                       </p>
                     </div>

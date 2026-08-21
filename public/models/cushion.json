@@ -25,9 +25,9 @@
       "rotation": 0
     },
     "modelRotation": [0, -1.5708, 0],
-    "modelScale": 0.5,
+    "modelScale": 0.4,
     "cameraDefault": {
-      "position": [0, 0.18, 0.45],
+      "position": [0, 0.2, 0.55],
       "lookAt": [0, 0, 0]
     }
   }

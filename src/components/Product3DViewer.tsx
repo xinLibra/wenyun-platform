@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, useGLTF, Center } from '@react-three/drei'
 import * as THREE from 'three'
@@ -27,6 +27,18 @@ function matchesAnyName(names: string[], target: string): boolean {
   return names.some(n => n.length > 0 && (n === t || n.includes(t)))
 }
 
+/** 解析 hex 颜色为 THREE.Color */
+function hexToColor(hex: string): THREE.Color {
+  try {
+    return new THREE.Color(hex)
+  } catch {
+    return new THREE.Color('#ffffff')
+  }
+}
+
+/** 首次加载时打印所有 mesh 的名字和材质名，便于调试 */
+const loggedModels = new Set<string>()
+
 function Model({
   modelUrl,
   textureTargetMaterial,
@@ -46,6 +58,7 @@ function Model({
 }) {
   const { scene } = useGLTF(modelUrl)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
+  const clonedSceneRef = useRef<THREE.Group | null>(null)
 
   useEffect(() => {
     if (!patternImage) {
@@ -74,14 +87,38 @@ function Model({
 
   const clonedScene = useMemo(() => scene.clone(true), [scene])
 
+  // 首次加载打印材质/节点名
+  useEffect(() => {
+    const modelKey = modelUrl
+    if (loggedModels.has(modelKey)) return
+    loggedModels.add(modelKey)
+
+    const meshInfo: string[] = []
+    clonedScene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh
+        const mat = mesh.material as THREE.MeshStandardMaterial
+        const info = `  node="${child.name || '-'}" mesh="${mesh.name || '-'}" mat="${mat?.name || '-'}" hasMap=${!!mat?.map} color=${mat?.color?.getHexString() || '-'}`
+        meshInfo.push(info)
+      }
+    })
+    console.log(`[3D Viewer] ${modelUrl} 材质/节点清单:\n${meshInfo.join('\n')}`)
+  }, [clonedScene, modelUrl])
+
   useEffect(() => {
     clonedScene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
-        const oldMat = mesh.material as THREE.MeshStandardMaterial
+
+        if (!mesh.material) {
+          mesh.material = new THREE.MeshStandardMaterial({ color: '#f5f5f5', roughness: 0.8, metalness: 0 })
+          return
+        }
+
+        const oldMat: THREE.MeshStandardMaterial = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial
         if (!oldMat) return
 
-        const mat = oldMat.clone()
+        const mat = oldMat.clone() as THREE.MeshStandardMaterial
         mesh.material = mat
 
         // 收集所有可能的名字：节点名 + 材质名 + mesh 名
@@ -90,23 +127,34 @@ function Model({
         const meshNameStr = (mesh.name || '').toLowerCase()
         const allNames = [childName, matNameStr, meshNameStr].filter(n => n.length > 0)
 
-        // 防止纯黑材质：克隆后若颜色为 #000000 则重置为白
+        // 防止纯黑材质：克隆后若颜色为 #000000 则重置为浅灰
         if (mat.color && mat.color.getHex() === 0x000000) {
           mat.color.set('#f5f5f5')
         }
 
         // 贴纹样：只对 textureTargetMaterial 匹配的 mesh 贴图
+        // 贴纹样时将 color 设为白，避免与贴图颜色相乘发黑
         if (texture && textureTargetMaterial && matchesAnyName(allNames, textureTargetMaterial)) {
           mat.map = texture
+          mat.color.set('#ffffff')
           mat.needsUpdate = true
         }
 
         // 换色：只对 colorMaterials 匹配的 mesh 改色，不影响其他部件
+        // 换色时同时设 color + emissive，确保有 map 的材质也能看见颜色变化
         colorMaterials.forEach((cm) => {
           if (matchesAnyName(allNames, cm.materialName)) {
             const hex = colorMap[cm.name]
             if (hex) {
-              mat.color.set(hex)
+              const targetColor = hexToColor(hex)
+              mat.color.copy(targetColor)
+              // 对有 map 的材质，用 emissive 保证颜色可见
+              if (mat.map) {
+                mat.emissive.copy(targetColor)
+                mat.emissiveIntensity = 0.6
+              } else {
+                mat.emissiveIntensity = 0
+              }
               mat.needsUpdate = true
             }
           }
@@ -118,7 +166,7 @@ function Model({
   return (
     <Center>
       <group rotation={modelRotation} scale={modelScale}>
-        <primitive object={clonedScene} />
+        <primitive object={clonedScene} ref={clonedSceneRef} />
       </group>
     </Center>
   )
