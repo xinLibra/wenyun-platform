@@ -9,15 +9,22 @@ interface ColorMaterial {
   label: string
 }
 
+interface TextureTargetMaterials {
+  chest: string[]
+  full: string[]
+}
+
 interface Product3DViewerProps {
   modelUrl: string
   textureTargetMaterial: string
+  textureTargetMaterials?: TextureTargetMaterials
   colorMaterials?: ColorMaterial[]
   patternImage?: string | null
   colorMap?: Record<string, string>
   cameraPosition?: [number, number, number]
   modelRotation?: [number, number, number]
   modelScale?: number
+  patternArea?: 'chest' | 'full'
   className?: string
 }
 
@@ -29,32 +36,50 @@ function hexToColor(hex: string): THREE.Color {
   }
 }
 
+function getTextureTargets(
+  textureTargetMaterial: string,
+  textureTargetMaterials: TextureTargetMaterials | undefined,
+  patternArea: 'chest' | 'full'
+): string[] {
+  if (textureTargetMaterials?.[patternArea]?.length) {
+    return textureTargetMaterials[patternArea]
+  }
+  if (textureTargetMaterial) {
+    return [textureTargetMaterial]
+  }
+  return []
+}
+
 const loggedModels = new Set<string>()
 
 function Model({
   modelUrl,
   textureTargetMaterial,
+  textureTargetMaterials,
   colorMaterials = [],
   patternImage,
   colorMap = {},
   modelRotation = [0, 0, 0],
   modelScale = 0.35,
+  patternArea = 'chest',
 }: {
   modelUrl: string
   textureTargetMaterial: string
+  textureTargetMaterials?: TextureTargetMaterials
   colorMaterials?: ColorMaterial[]
   patternImage?: string | null
   colorMap?: Record<string, string>
   modelRotation?: [number, number, number]
   modelScale?: number
+  patternArea?: 'chest' | 'full'
 }) {
   const { scene } = useGLTF(modelUrl)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
   const clonedSceneRef = useRef<THREE.Group | null>(null)
 
   useEffect(() => {
-    console.log('[Model] url=', modelUrl, 'rot=', modelRotation, 'scale=', modelScale)
-  }, [modelUrl, modelRotation, modelScale])
+    console.log('[Model] url=', modelUrl, 'rot=', modelRotation, 'scale=', modelScale, 'patternArea=', patternArea)
+  }, [modelUrl, modelRotation, modelScale, patternArea])
 
   useEffect(() => {
     if (!patternImage) {
@@ -100,6 +125,8 @@ function Model({
   }, [clonedScene, modelUrl])
 
   useEffect(() => {
+    const targets = getTextureTargets(textureTargetMaterial, textureTargetMaterials, patternArea)
+
     clonedScene.traverse((child) => {
       if (!(child as THREE.Mesh).isMesh) return
       const mesh = child as THREE.Mesh
@@ -126,7 +153,6 @@ function Model({
           mesh.material = mat
         }
 
-        // mat 常为 "-" / "material"，必须带上 mesh/node 名
         const names = [mat.name || '', mesh.name || '', child.name || '']
           .map((s) => s.toLowerCase().trim())
           .filter((s) => s && s !== '-')
@@ -136,6 +162,8 @@ function Model({
           if (!t) return false
           return names.some((n) => n === t)
         }
+
+        const hitTextureTarget = targets.some((t) => matchTarget(t))
 
         if (mat.color && mat.color.getHex() === 0x000000) {
           mat.color.set('#f0f0f0')
@@ -147,9 +175,13 @@ function Model({
           mat.roughness = Math.max(mat.roughness, 0.55)
         }
 
-        if (texture && textureTargetMaterial && matchTarget(textureTargetMaterial)) {
+        if (texture && hitTextureTarget) {
           mat.map = texture
           mat.color.set('#ffffff')
+          mat.needsUpdate = true
+        } else if (!hitTextureTarget && mat.map === texture) {
+          mat.map = null
+          mat.color.set('#f0f0f0')
           mat.needsUpdate = true
         }
 
@@ -184,9 +216,8 @@ function Model({
         }
       })
     })
-  }, [clonedScene, texture, textureTargetMaterial, colorMaterials, colorMap])
+  }, [clonedScene, texture, textureTargetMaterial, textureTargetMaterials, patternArea, colorMaterials, colorMap])
 
-  // 旋转在 Center 外，朝向更可控
   return (
     <group rotation={modelRotation as [number, number, number]} scale={modelScale}>
       <Center>
@@ -208,12 +239,14 @@ function LoaderFallback() {
 export function Product3DViewer({
   modelUrl,
   textureTargetMaterial,
+  textureTargetMaterials,
   colorMaterials = [],
   patternImage,
   colorMap = {},
   cameraPosition,
   modelRotation,
   modelScale,
+  patternArea = 'chest',
   className = '',
 }: Product3DViewerProps) {
   const rot = modelRotation ?? [0, 0, 0]
@@ -244,11 +277,13 @@ export function Product3DViewer({
           <Model
             modelUrl={modelUrl}
             textureTargetMaterial={textureTargetMaterial}
+            textureTargetMaterials={textureTargetMaterials}
             colorMaterials={colorMaterials}
             patternImage={patternImage}
             colorMap={colorMap}
             modelRotation={rot}
             modelScale={scl}
+            patternArea={patternArea}
           />
         </Suspense>
 

@@ -220,6 +220,7 @@ export default function CustomizeProduct() {
     }
     return 'free'
   })
+  const [patternArea, setPatternArea] = useState<'chest' | 'full'>('chest')
   const [showCompare, setShowCompare] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
@@ -342,6 +343,7 @@ export default function CustomizeProduct() {
     setPositionX(50)
     setPositionY(50)
     setBlendMode('normal')
+    setPatternArea('chest')
   }
   
   const [isBuying, setIsBuying] = useState(false)
@@ -1005,12 +1007,14 @@ export default function CustomizeProduct() {
                       <Product3DViewer
                         modelUrl={`/models/${product3DConfig.modelUrl}`}
                         textureTargetMaterial={product3DConfig.meshConfig?.textureTargetMaterial || ''}
+                        textureTargetMaterials={product3DConfig.meshConfig?.textureTargetMaterials}
                         colorMaterials={product3DConfig.meshConfig?.colorMaterials || []}
                         patternImage={selectedPatternImage}
                         colorMap={productColors}
                         modelRotation={product3DConfig.modelRotation ?? [0, 0, 0]}
                         modelScale={product3DConfig.modelScale ?? 0.35}
                         cameraPosition={product3DConfig.cameraDefault?.position ?? [0, 0.12, 1.7]}
+                        patternArea={patternArea}
                       />
 
                       {/* 底部信息条 */}
@@ -1278,6 +1282,36 @@ export default function CustomizeProduct() {
                               )
                             })}
                           </div>
+
+                          {product3DConfig?.meshConfig?.textureTargetMaterials?.chest?.length ? (
+                            <div className="mt-4 pt-4 border-t border-deep-blue-100">
+                              <div className="font-song text-xs text-deep-blue-light mb-2">贴图范围</div>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setPatternArea('chest')}
+                                  className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
+                                    patternArea === 'chest'
+                                      ? 'bg-palace-red text-rice-paper shadow-sm'
+                                      : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                                  }`}
+                                >
+                                  仅胸前
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPatternArea('full')}
+                                  className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
+                                    patternArea === 'full'
+                                      ? 'bg-palace-red text-rice-paper shadow-sm'
+                                      : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                                  }`}
+                                >
+                                  全身
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       )}
                     </div>

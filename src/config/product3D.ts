@@ -16,6 +16,10 @@ export interface Product3DConfig {
   modelUrl: string
   meshConfig: {
     textureTargetMaterial: string
+    textureTargetMaterials?: {
+      chest: string[]
+      full: string[]
+    }
     colorMaterials: ColorMaterialConfig[]
   }
   modelLimit?: {
