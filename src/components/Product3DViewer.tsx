@@ -25,6 +25,7 @@ interface Product3DViewerProps {
   modelRotation?: [number, number, number]
   modelScale?: number
   patternArea?: 'chest' | 'full'
+  captureRef?: React.MutableRefObject<(() => string | null) | null>
   className?: string
 }
 
@@ -247,11 +248,27 @@ export function Product3DViewer({
   modelRotation,
   modelScale,
   patternArea = 'chest',
+  captureRef,
   className = '',
 }: Product3DViewerProps) {
   const rot = modelRotation ?? [0, 0, 0]
   const scl = modelScale ?? 0.35
   const cam = cameraPosition ?? [0, 0.12, 1.7]
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
+
+  const handleCreated = ({ gl }: { gl: THREE.WebGLRenderer }) => {
+    rendererRef.current = gl
+    gl.setClearColor(0x000000, 0)
+    if (captureRef) {
+      captureRef.current = () => {
+        try {
+          return gl.domElement.toDataURL('image/png')
+        } catch {
+          return null
+        }
+      }
+    }
+  }
 
   return (
     <div
@@ -262,9 +279,7 @@ export function Product3DViewer({
         key={modelUrl}
         camera={{ position: cam, fov: 35 }}
         gl={{ antialias: true, alpha: true }}
-        onCreated={({ gl }) => {
-          gl.setClearColor(0x000000, 0)
-        }}
+        onCreated={handleCreated}
       >
         <ambientLight intensity={1.25} />
         <hemisphereLight args={['#ffffff', '#e8e0d4', 0.55]} />

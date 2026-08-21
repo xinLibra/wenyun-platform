@@ -85,6 +85,27 @@ function safeGetItem(key: string): string | null {
   }
 }
 
+/** 安全写入 sessionStorage */
+function safeSessionSet(key: string, value: string): boolean {
+  try {
+    sessionStorage.setItem(key, value)
+    return true
+  } catch (err) {
+    console.warn(`[sessionStorage] 写入失败: ${key}`, err)
+    return false
+  }
+}
+
+/** 安全读取 sessionStorage */
+function safeSessionGet(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key)
+  } catch (err) {
+    console.warn(`[sessionStorage] 读取失败: ${key}`, err)
+    return null
+  }
+}
+
 /** 清理过期的 product_config_draft_* 键，只保留当前产品草稿 */
 function pruneOldDrafts(keepProductId: string) {
   const keepKey = `product_config_draft_${keepProductId}`
@@ -316,6 +337,15 @@ export default function CustomizeProduct() {
     safeSetItem('selected_product_id', productId)
     pruneOldDrafts(productId)
 
+    const savedPattern = safeSessionGet(`customize:selectedPattern:${productId}`)
+    let restoredPatternUrl: string | null = null
+    if (savedPattern) {
+      try {
+        const p = JSON.parse(savedPattern)
+        if (p?.image_url) restoredPatternUrl = p.image_url
+      } catch { /* ignore */ }
+    }
+
     const draftKey = `product_config_draft_${productId}`
     const savedDraft = safeGetItem(draftKey)
     
@@ -324,11 +354,26 @@ export default function CustomizeProduct() {
         const draft = JSON.parse(savedDraft)
         setSelectedProduct(productId)
         setSelectedMaterial(draft.materialId || (productMaterials[productId]?.[0] || ''))
+        if (restoredPatternUrl) {
+          setSelectedPatternImage(restoredPatternUrl)
+        } else if (draft.patternImage) {
+          setSelectedPatternImage(draft.patternImage)
+        }
         setScale(Math.round(draft.params?.scale || 100))
         setRotation(Math.round(draft.params?.rotation || 0))
         setPositionX(Math.round(draft.params?.positionX || 50))
         setPositionY(Math.round(draft.params?.positionY || 50))
         setBlendMode(draft.params?.blendMode || 'normal')
+        if (draft.layoutMode) setLayoutMode(draft.layoutMode)
+        if (draft.text) {
+          setTextOverlay(draft.text.textOverlay || '')
+          setTextFont(draft.text.textFont || 'shufa')
+          setTextSize(draft.text.textSize || 16)
+          setTextPositionX(draft.text.textPositionX || 50)
+          setTextPositionY(draft.text.textPositionY || 85)
+          setTextRotation(draft.text.textRotation || 0)
+        }
+        setPatternArea('chest')
         return
       } catch {
         // 解析失败，使用默认值
@@ -338,11 +383,21 @@ export default function CustomizeProduct() {
     setSelectedProduct(productId)
     const availableMaterials = productMaterials[productId] || []
     setSelectedMaterial(availableMaterials[0] || '')
+    if (restoredPatternUrl) {
+      setSelectedPatternImage(restoredPatternUrl)
+    }
     setScale(100)
     setRotation(0)
     setPositionX(50)
     setPositionY(50)
     setBlendMode('normal')
+    setTextOverlay('')
+    setTextFont('shufa')
+    setTextSize(16)
+    setTextPositionX(50)
+    setTextPositionY(85)
+    setTextRotation(0)
+    setLayoutMode('free')
     setPatternArea('chest')
   }
   
@@ -350,6 +405,7 @@ export default function CustomizeProduct() {
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [orderPreviewImg, setOrderPreviewImg] = useState<string>('')
   const [orderPreviewLoading, setOrderPreviewLoading] = useState(false)
+  const viewerCaptureRef = useRef<(() => string | null) | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [showQuantityModal, setShowQuantityModal] = useState(false)
   const [quantityAction, setQuantityAction] = useState<'cart' | 'buy' | null>(null)
@@ -366,6 +422,7 @@ export default function CustomizeProduct() {
     return lastPattern || 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20blue%20calico%20pattern%20minimal%20elegant&image_size=square'
   })
   const [patternModalLoading, setPatternModalLoading] = useState(false)
+  const [fetchError, setFetchError] = useState(false)
   const previewContainerRef = useRef<HTMLDivElement>(null)
   const productBoxRef = useRef<HTMLDivElement>(null)   // 新增：拖拽比例计算改用这个更小、更准确的容器
 
@@ -391,12 +448,22 @@ export default function CustomizeProduct() {
 
     const draftKey = `product_config_draft_${selectedProduct}`
     const savedDraft = safeGetItem(draftKey)
+
+    const savedPattern = safeSessionGet(`customize:selectedPattern:${selectedProduct}`)
+    if (savedPattern) {
+      try {
+        const p = JSON.parse(savedPattern)
+        if (p?.image_url) {
+          setSelectedPatternImage(p.image_url)
+        }
+      } catch { /* ignore */ }
+    }
     
     if (savedDraft) {
       try {
         const draft = JSON.parse(savedDraft)
         setSelectedMaterial(draft.materialId || (productMaterials[selectedProduct]?.[0] || ''))
-        if (draft.patternImage) {
+        if (draft.patternImage && !savedPattern) {
           setSelectedPatternImage(draft.patternImage)
         }
         if (draft.layoutMode) {
@@ -464,11 +531,21 @@ export default function CustomizeProduct() {
     }
   }
 
-  const fetchUserPatterns = async () => {
+  const patternsCacheRef = useRef<{ userId: string; ts: number; data: UserPattern[] } | null>(null)
+
+  const fetchUserPatterns = async (force = false) => {
+    if (!force && patternsCacheRef.current?.data && Date.now() - patternsCacheRef.current.ts < 60_000) {
+      setUserPatterns(patternsCacheRef.current.data)
+      return
+    }
+
     setPatternModalLoading(true)
     try {
-      const { data: { session } } = await supabase.auth?.getSession()
-      
+      const { data: { session } } = await Promise.race([
+        supabase.auth?.getSession(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+      ]) as any
+
       if (!session?.user) {
         navigate('/login')
         return
@@ -476,14 +553,22 @@ export default function CustomizeProduct() {
 
       const patterns: UserPattern[] = []
 
-      const { data: myWorks } = await supabase
-        .from('generations')
-        .select('id, image_url, params')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
+      const [myWorksResult, favoritesResult] = await Promise.all([
+        supabase
+          .from('generations')
+          .select('id, image_url, params')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false })
+          .limit(30),
+        supabase
+          .from('favorites')
+          .select('generation_id')
+          .eq('user_id', session.user.id)
+          .limit(30),
+      ])
 
-      if (myWorks) {
-        myWorks.forEach((work: any) => {
+      if (myWorksResult.data) {
+        myWorksResult.data.forEach((work: any) => {
           patterns.push({
             id: work.id,
             image_url: work.image_url,
@@ -493,20 +578,16 @@ export default function CustomizeProduct() {
         })
       }
 
-      const { data: favoriteRecords } = await supabase
-        .from('favorites')
-        .select('generation_id')
-        .eq('user_id', session.user.id)
-
-      if (favoriteRecords && favoriteRecords.length > 0) {
-        const generationIds = favoriteRecords.map(f => f.generation_id)
-        const { data: favorites } = await supabase
+      const favRecords = favoritesResult.data
+      if (favRecords && favRecords.length > 0) {
+        const generationIds = favRecords.map((f: any) => f.generation_id)
+        const { data: favGenerations } = await supabase
           .from('generations')
           .select('id, image_url, params')
           .in('id', generationIds)
 
-        if (favorites) {
-          favorites.forEach((fav: any) => {
+        if (favGenerations) {
+          favGenerations.forEach((fav: any) => {
             if (!patterns.find(p => p.id === fav.id)) {
               patterns.push({
                 id: fav.id,
@@ -520,8 +601,12 @@ export default function CustomizeProduct() {
       }
 
       setUserPatterns(patterns)
+      patternsCacheRef.current = { userId: session.user.id, ts: Date.now(), data: patterns }
     } catch (err) {
       console.error('Fetch patterns error:', err)
+      if (!userPatterns.length) {
+        setFetchError(true)
+      }
     } finally {
       setPatternModalLoading(false)
     }
@@ -529,12 +614,29 @@ export default function CustomizeProduct() {
 
   const handleSelectPattern = (pattern: UserPattern) => {
     setSelectedPatternImage(pattern.image_url)
+    try {
+      safeSessionSet(`customize:selectedPattern:${selectedProduct}`, JSON.stringify({
+        id: pattern.id,
+        image_url: pattern.image_url,
+        title: pattern.title,
+      }))
+    } catch { /* ignore */ }
     setShowPatternModal(false)
   }
 
   const handleOpenPatternModal = () => {
-    fetchUserPatterns()
     setShowPatternModal(true)
+    setFetchError(false)
+    if (patternsCacheRef.current?.data && Date.now() - patternsCacheRef.current.ts < 60_000) {
+      setUserPatterns(patternsCacheRef.current.data)
+      setPatternModalLoading(false)
+    }
+    fetchUserPatterns()
+  }
+
+  const handleRetryPatterns = () => {
+    setFetchError(false)
+    fetchUserPatterns(true)
   }
 
   const saveDraft = () => {
@@ -578,7 +680,7 @@ export default function CustomizeProduct() {
     setShowQuantityModal(true)
   }
 
-  const handleConfirmQuantity = () => {
+  const handleConfirmQuantity = async () => {
     setShowQuantityModal(false)
     
     if (quantityAction === 'cart') {
@@ -593,27 +695,47 @@ export default function CustomizeProduct() {
       setShowOrderModal(true)
       setOrderPreviewLoading(true)
       setOrderPreviewImg('')
-      generatePreviewDataUrl({
-        productImage: currentProduct?.image || '',
-        patternImage: selectedPatternImage,
-        layoutMode,
-        scale,
-        rotation,
-        positionX,
-        positionY,
-        blendMode,
-        textOverlay,
-        textFont,
-        textSize,
-        textPositionX,
-        textPositionY,
-        textRotation,
-        canvasWidth: 256,
-        canvasHeight: 256,
-      }, 256)
-        .then((url) => setOrderPreviewImg(url))
-        .catch(() => setOrderPreviewImg(currentProduct?.image || ''))
-        .finally(() => setOrderPreviewLoading(false))
+
+      const tryCapture3D = async () => {
+        if (product3DConfig?.modelUrl && viewerCaptureRef.current) {
+          const dataUrl = viewerCaptureRef.current()
+          if (dataUrl) {
+            setOrderPreviewImg(dataUrl)
+            setOrderPreviewLoading(false)
+            return true
+          }
+        }
+        return false
+      }
+
+      try {
+        const captured = await tryCapture3D()
+        if (!captured) {
+          const url = await generatePreviewDataUrl({
+            productImage: currentProduct?.image || '',
+            patternImage: selectedPatternImage,
+            layoutMode,
+            scale,
+            rotation,
+            positionX,
+            positionY,
+            blendMode,
+            textOverlay,
+            textFont,
+            textSize,
+            textPositionX,
+            textPositionY,
+            textRotation,
+            canvasWidth: 256,
+            canvasHeight: 256,
+          }, 256)
+          setOrderPreviewImg(url)
+        }
+      } catch {
+        setOrderPreviewImg(currentProduct?.image || '')
+      } finally {
+        setOrderPreviewLoading(false)
+      }
     }
     
     setQuantityAction(null)
@@ -1015,6 +1137,7 @@ export default function CustomizeProduct() {
                         modelScale={product3DConfig.modelScale ?? 0.35}
                         cameraPosition={product3DConfig.cameraDefault?.position ?? [0, 0.12, 1.7]}
                         patternArea={patternArea}
+                        captureRef={viewerCaptureRef}
                       />
 
                       {/* 底部信息条 */}
@@ -1571,7 +1694,7 @@ export default function CustomizeProduct() {
                         </div>
                       ) : (
                         <img
-                          src={orderPreviewImg || currentProduct?.image}
+                          src={orderPreviewImg || selectedPatternImage || currentProduct?.image}
                           alt={currentProduct?.name}
                           className="w-full h-full object-cover"
                         />
@@ -1710,6 +1833,17 @@ export default function CustomizeProduct() {
                       <div className="w-8 h-8 border-4 border-deep-blue-200 border-t-palace-red rounded-full animate-spin mx-auto mb-4"></div>
                       <p className="font-song text-deep-blue-light">加载中...</p>
                     </div>
+                  ) : fetchError ? (
+                    <div className="text-center py-16">
+                      <p className="font-song text-deep-blue-light mb-4">加载失败</p>
+                      <button
+                        type="button"
+                        onClick={handleRetryPatterns}
+                        className="px-4 py-1.5 text-sm font-song bg-palace-red text-rice-paper rounded-sm hover:bg-palace-red-dark transition-colors"
+                      >
+                        点击重试
+                      </button>
+                    </div>
                   ) : (
                     userPatterns.filter(p => p.type === patternTab).length === 0 ? (
                       <div className="text-center py-16">
@@ -1740,6 +1874,7 @@ export default function CustomizeProduct() {
                               <img
                                 src={pattern.image_url}
                                 alt={pattern.title}
+                                loading="lazy"
                                 className="w-full h-full object-cover"
                               />
                             </div>
