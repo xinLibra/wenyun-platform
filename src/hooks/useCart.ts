@@ -27,6 +27,8 @@ export function useCart() {
             .eq('user_id', session.user.id)
             .order('created_at', { ascending: false })
 
+          console.log('[Cart] DB query result:', { count: dbCart?.length || 0, error: null })
+
           if (dbCart && dbCart.length > 0) {
             const dbItems: CartItem[] = dbCart.map((item: any) => ({
               id: item.id,
@@ -102,20 +104,22 @@ export function useCart() {
             }
           }
 
-          const existingResult = await supabase
-            .from('cart_items')
-            .select('id')
-            .eq('user_id', session.user.id)
-          const existingIds = new Set((existingResult.data || []).map((item: any) => item.id))
-          const currentIds = new Set(items.map(item => item.id))
-          
-          const staleIds = [...existingIds].filter(id => !currentIds.has(id))
-          if (staleIds.length > 0) {
-            await supabase
+          if (items.length > 0) {
+            const existingResult = await supabase
               .from('cart_items')
-              .delete()
+              .select('id')
               .eq('user_id', session.user.id)
-              .in('id', staleIds)
+            const existingIds = new Set((existingResult.data || []).map((item: any) => item.id))
+            const currentIds = new Set(items.map(item => item.id))
+            
+            const staleIds = [...existingIds].filter(id => !currentIds.has(id))
+            if (staleIds.length > 0) {
+              await supabase
+                .from('cart_items')
+                .delete()
+                .eq('user_id', session.user.id)
+                .in('id', staleIds)
+            }
           }
         } catch (error: any) {
           console.error('[Cart] Failed to save cart to DB:', error.message)
