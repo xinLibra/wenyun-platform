@@ -355,6 +355,7 @@ export default function CustomizeProduct() {
     address: '',
   })
   const [showPatternModal, setShowPatternModal] = useState(false)
+  const [patternTab, setPatternTab] = useState<'work' | 'favorite'>('work')
   const [userPatterns, setUserPatterns] = useState<UserPattern[]>([])
   const [selectedPatternImage, setSelectedPatternImage] = useState<string>(() => {
     const lastPattern = safeGetItem('last_generated_pattern')
@@ -1613,55 +1614,81 @@ export default function CustomizeProduct() {
                     </button>
                   </div>
 
+                  <div className="flex gap-2 mb-4">
+                    <button
+                      onClick={() => setPatternTab('work')}
+                      className={`flex-1 py-2 px-4 rounded-sm font-song transition-all duration-300 ${
+                        patternTab === 'work'
+                          ? 'bg-palace-red text-rice-paper shadow-md'
+                          : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-deep-blue-light'
+                      }`}
+                    >
+                      我的作品
+                    </button>
+                    <button
+                      onClick={() => setPatternTab('favorite')}
+                      className={`flex-1 py-2 px-4 rounded-sm font-song transition-all duration-300 ${
+                        patternTab === 'favorite'
+                          ? 'bg-palace-red text-rice-paper shadow-md'
+                          : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-deep-blue-light'
+                      }`}
+                    >
+                      我的收藏
+                    </button>
+                  </div>
+
                   {patternModalLoading ? (
                     <div className="text-center py-16">
                       <div className="w-8 h-8 border-4 border-deep-blue-200 border-t-palace-red rounded-full animate-spin mx-auto mb-4"></div>
                       <p className="font-song text-deep-blue-light">加载中...</p>
                     </div>
-                  ) : userPatterns.length === 0 ? (
-                    <div className="text-center py-16">
-                      <div className="w-16 h-16 mx-auto bg-deep-blue/10 rounded-sm flex items-center justify-center mb-4">
-                        <svg className="w-8 h-8 text-deep-blue-light" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
+                  ) : (() => {
+                    const filtered = userPatterns.filter(p => p.type === patternTab)
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="text-center py-16">
+                          <div className="w-16 h-16 mx-auto bg-deep-blue/10 rounded-sm flex items-center justify-center mb-4">
+                            <svg className="w-8 h-8 text-deep-blue-light" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <p className="font-song text-deep-blue-light">
+                            {patternTab === 'work' ? '暂无纹样作品' : '暂无收藏纹样'}
+                          </p>
+                          <p className="font-song text-deep-blue-light text-sm mt-2">
+                            {patternTab === 'work' ? '去创作页面生成纹样后再来定制' : '在作品集里点击收藏，方便查找'}
+                          </p>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[50vh] overflow-y-auto">
+                        {filtered.map((pattern, index) => (
+                          <motion.div
+                            key={pattern.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                            onClick={() => handleSelectPattern(pattern)}
+                            className="cursor-pointer group"
+                          >
+                            <div className="aspect-square bg-rice-paper-dark rounded-sm overflow-hidden border-2 border-transparent group-hover:border-palace-red transition-colors">
+                              <img
+                                src={pattern.image_url}
+                                alt={pattern.title}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <div className="mt-2">
+                              <p className="font-shufa text-xs text-deep-blue truncate" title={pattern.title}>
+                                {pattern.title}
+                              </p>
+                            </div>
+                          </motion.div>
+                        ))}
                       </div>
-                      <p className="font-song text-deep-blue-light">暂无纹样作品</p>
-                      <p className="font-song text-deep-blue-light text-sm mt-2">去创作页面生成纹样后再来定制</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[50vh] overflow-y-auto">
-                      {userPatterns.map((pattern, index) => (
-                        <motion.div
-                          key={pattern.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          onClick={() => handleSelectPattern(pattern)}
-                          className="cursor-pointer group"
-                        >
-                          <div className="aspect-square bg-rice-paper-dark rounded-sm overflow-hidden border-2 border-transparent group-hover:border-palace-red transition-colors">
-                            <img
-                              src={pattern.image_url}
-                              alt={pattern.title}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="mt-2">
-                            <p className="font-shufa text-xs text-deep-blue truncate" title={pattern.title}>
-                              {pattern.title}
-                            </p>
-                            <span className={`inline-block mt-1 px-2 py-0.5 text-xs rounded-sm ${
-                              pattern.type === 'work' 
-                                ? 'bg-deep-blue-100 text-deep-blue' 
-                                : 'bg-palace-red-100 text-palace-red'
-                            }`}>
-                              {pattern.type === 'work' ? '我的作品' : '我的收藏'}
-                            </span>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  )}
+                    )
+                  })())}
                 </FrameDecorations>
               </motion.div>
             </motion.div>
