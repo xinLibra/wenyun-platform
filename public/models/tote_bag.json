@@ -10,11 +10,6 @@
           "name": "handle",
           "materialName": "tripo_part_9",
           "label": "手提带子"
-        },
-        {
-          "name": "bag_body",
-          "materialName": "tripo_part_new_0_0",
-          "label": "帆布包身"
         }
       ]
     },
@@ -30,7 +25,7 @@
       "rotation": 0
     },
     "modelRotation": [3.14159, -1.5708, 0],
-    "modelScale": 0.45,
+    "modelScale": 0.4,
     "cameraDefault": {
       "position": [0, 0.15, 0.5],
       "lookAt": [0, 0, 0]

@@ -7,11 +7,6 @@
       "textureTargetMaterial": "Fabric",
       "colorMaterials": [
         {
-          "name": "body",
-          "materialName": "Fabric",
-          "label": "衣身主体"
-        },
-        {
           "name": "collar",
           "materialName": "TrimNeck",
           "label": "领口"

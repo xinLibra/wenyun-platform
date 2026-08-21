@@ -5,13 +5,7 @@
     "modelUrl": "cushion.glb",
     "meshConfig": {
       "textureTargetMaterial": "cushion",
-      "colorMaterials": [
-        {
-          "name": "edge_border",
-          "materialName": "cushion",
-          "label": "抱枕包边"
-        }
-      ]
+      "colorMaterials": []
     },
     "modelLimit": {
       "maxTriFaces": 12000,
@@ -25,9 +19,9 @@
       "rotation": 0
     },
     "modelRotation": [0, -1.5708, 0],
-    "modelScale": 0.4,
+    "modelScale": 0.35,
     "cameraDefault": {
-      "position": [0, 0.2, 0.55],
+      "position": [0, 0.2, 0.5],
       "lookAt": [0, 0, 0]
     }
   }

@@ -24,10 +24,10 @@
       "offset": [0, 0],
       "rotation": 0
     },
-    "modelRotation": [0, -1.5708, 0],
-    "modelScale": 0.55,
+    "modelRotation": [0, 0, 0],
+    "modelScale": 0.5,
     "cameraDefault": {
-      "position": [0, 0.1, 0.5],
+      "position": [0, 0.1, 0.45],
       "lookAt": [0, 0, 0]
     }
   }

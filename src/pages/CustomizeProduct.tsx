@@ -235,11 +235,10 @@ export default function CustomizeProduct() {
   const [selectedElement, setSelectedElement] = useState<'pattern' | 'text' | null>('pattern')
 
   // ===== 3D 预览相关状态 =====
-  const [frameColor, setFrameColor] = useState('#2c3e50')   // 边框默认颜色
   const [product3DConfig, setProduct3DConfig] = useState<Product3DConfig | null>(null)
   // 右侧面板折叠状态
   const [panelExpanded, setPanelExpanded] = useState<{ layout: boolean; color: boolean; adjust: boolean }>({ layout: true, color: true, adjust: true })
-  // 通用换色：colorMaterial.name → HEX 色值
+  // 通用换色：colorMaterial.name → HEX 色值（初始为空，不默认铺深色）
   const [productColors, setProductColors] = useState<Record<string, string>>({})
 
   // 切换产品时异步加载 3D 配置
@@ -254,14 +253,8 @@ export default function CustomizeProduct() {
     loadProduct3DConfig(selectedProduct).then((cfg) => {
       if (cancelled) return
       setProduct3DConfig(cfg)
-      // 初始化换色：每个 colorMaterial 默认取 frameColor 或黛青
-      if (cfg?.meshConfig?.colorMaterials?.length) {
-        const init: Record<string, string> = {}
-        cfg.meshConfig.colorMaterials.forEach((cm, idx) => {
-          init[cm.name] = idx === 0 ? frameColor : '#2c3e50'
-        })
-        setProductColors(init)
-      }
+      // 不默认铺深色：初始 productColors 为空，Viewer 保持 glb 原色
+      setProductColors({})
     })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -988,9 +981,9 @@ export default function CustomizeProduct() {
                         colorMaterials={product3DConfig.meshConfig?.colorMaterials || []}
                         patternImage={selectedPatternImage}
                         colorMap={productColors}
-                        cameraPosition={product3DConfig.cameraDefault?.position}
-                        modelRotation={product3DConfig.modelRotation}
-                        modelScale={product3DConfig.modelScale}
+                        cameraPosition={product3DConfig.cameraDefault?.position ?? [0, 0.1, 1.8]}
+                        modelRotation={product3DConfig.modelRotation ?? [0, 0, 0]}
+                        modelScale={product3DConfig.modelScale ?? 0.5}
                       />
 
                       {/* 底部信息条 */}
@@ -1281,9 +1274,23 @@ export default function CustomizeProduct() {
                               <div key={cm.name}>
                                 <div className="flex items-center justify-between mb-1">
                                   <p className="font-song text-xs text-deep-blue-light">{cm.label}</p>
-                                  {productColors[cm.name] && (
-                                    <span className="text-xs font-song" style={{ color: productColors[cm.name] }}>●</span>
-                                  )}
+                                  <div className="flex items-center gap-2">
+                                    {productColors[cm.name] && (
+                                      <span className="text-xs font-song" style={{ color: productColors[cm.name] }}>●</span>
+                                    )}
+                                    {productColors[cm.name] && (
+                                      <button
+                                        onClick={() => setProductColors((prev) => {
+                                          const next = { ...prev }
+                                          delete next[cm.name]
+                                          return next
+                                        })}
+                                        className="text-xs text-deep-blue-light hover:text-palace-red font-song"
+                                      >
+                                        清除
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                   {COLOR_PALETTE.map(({ c, name }) => (
@@ -1291,7 +1298,6 @@ export default function CustomizeProduct() {
                                       key={c}
                                       onClick={() => {
                                         setProductColors((prev) => ({ ...prev, [cm.name]: c }))
-                                        setFrameColor(c)
                                       }}
                                       title={name}
                                       className={`w-7 h-7 rounded-full border-2 transition-all ${
@@ -1305,6 +1311,7 @@ export default function CustomizeProduct() {
                                 </div>
                               </div>
                             ))}
+                            <p className="font-song text-xs text-deep-blue-light">未选色时保持模型原色</p>
                           </div>
                         )}
                       </div>

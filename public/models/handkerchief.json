@@ -19,7 +19,7 @@
       "rotation": 0
     },
     "modelRotation": [0, 0, 0],
-    "modelScale": 0.15,
+    "modelScale": 0.12,
     "cameraDefault": {
       "position": [0, 0.1, 0.5],
       "lookAt": [0, 0, 0]

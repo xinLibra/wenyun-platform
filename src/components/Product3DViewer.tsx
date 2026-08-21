@@ -21,10 +21,32 @@ interface Product3DViewerProps {
   className?: string
 }
 
-/** 判断 name 列表中是否任一项匹配 target（相等或包含） */
-function matchesAnyName(names: string[], target: string): boolean {
+/**
+ * 匹配策略：优先精确匹配 material.name；其次 node/mesh 名精确；最后才 includes。
+ * 避免一个短名（如 "cushion"）通过 includes 误伤多个部件。
+ */
+function matchMaterial(
+  matName: string,
+  nodeName: string,
+  meshName: string,
+  target: string
+): boolean {
   const t = target.toLowerCase()
-  return names.some(n => n.length > 0 && (n === t || n.includes(t)))
+  const m = matName.toLowerCase()
+  const n = nodeName.toLowerCase()
+  const ms = meshName.toLowerCase()
+
+  // 1. 材质名精确匹配（最可靠）
+  if (m.length > 0 && m === t) return true
+  // 2. 节点名精确匹配
+  if (n.length > 0 && n === t) return true
+  // 3. mesh 名精确匹配
+  if (ms.length > 0 && ms === t) return true
+  // 4. 最后才 includes（兜底，处理带后缀的情况如 .001）
+  if (m.length > 0 && m.includes(t)) return true
+  if (n.length > 0 && n.includes(t)) return true
+  if (ms.length > 0 && ms.includes(t)) return true
+  return false
 }
 
 /** 解析 hex 颜色为 THREE.Color */
@@ -45,8 +67,8 @@ function Model({
   colorMaterials = [],
   patternImage,
   colorMap = {},
-  modelRotation = [0, -Math.PI / 2, 0],
-  modelScale = 0.85,
+  modelRotation = [0, 0, 0],
+  modelScale = 0.45,
 }: {
   modelUrl: string
   textureTargetMaterial: string
@@ -110,8 +132,9 @@ function Model({
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
 
+        // 若 mesh 没有材质，创建默认浅灰材质
         if (!mesh.material) {
-          mesh.material = new THREE.MeshStandardMaterial({ color: '#f5f5f5', roughness: 0.8, metalness: 0 })
+          mesh.material = new THREE.MeshStandardMaterial({ color: '#f0ece4', roughness: 0.85, metalness: 0 })
           return
         }
 
@@ -121,38 +144,38 @@ function Model({
         const mat = oldMat.clone() as THREE.MeshStandardMaterial
         mesh.material = mat
 
-        // 收集所有可能的名字：节点名 + 材质名 + mesh 名
-        const childName = (child.name || '').toLowerCase()
-        const matNameStr = (mat.name || '').toLowerCase()
-        const meshNameStr = (mesh.name || '').toLowerCase()
-        const allNames = [childName, matNameStr, meshNameStr].filter(n => n.length > 0)
+        const nodeName = child.name || ''
+        const meshName = mesh.name || ''
+        const matName = mat.name || ''
 
-        // 防止纯黑材质：克隆后若颜色为 #000000 则重置为浅灰
-        if (mat.color && mat.color.getHex() === 0x000000) {
-          mat.color.set('#f5f5f5')
+        // 防止纯黑材质：克隆后若 color 为 #000000 则重置为浅灰（仅当不是用户选色目标时）
+        const isColorTarget = colorMaterials.some(cm => matchMaterial(matName, nodeName, meshName, cm.materialName))
+        if (!isColorTarget && mat.color && mat.color.getHex() === 0x000000) {
+          mat.color.set('#f0ece4')
         }
 
         // 贴纹样：只对 textureTargetMaterial 匹配的 mesh 贴图
         // 贴纹样时将 color 设为白，避免与贴图颜色相乘发黑
-        if (texture && textureTargetMaterial && matchesAnyName(allNames, textureTargetMaterial)) {
+        if (texture && textureTargetMaterial && matchMaterial(matName, nodeName, meshName, textureTargetMaterial)) {
           mat.map = texture
           mat.color.set('#ffffff')
           mat.needsUpdate = true
         }
 
         // 换色：只对 colorMaterials 匹配的 mesh 改色，不影响其他部件
-        // 换色时同时设 color + emissive，确保有 map 的材质也能看见颜色变化
+        // 仅当 colorMap 中明确有该 name 的色值时才写
         colorMaterials.forEach((cm) => {
-          if (matchesAnyName(allNames, cm.materialName)) {
+          if (matchMaterial(matName, nodeName, meshName, cm.materialName)) {
             const hex = colorMap[cm.name]
             if (hex) {
               const targetColor = hexToColor(hex)
               mat.color.copy(targetColor)
-              // 对有 map 的材质，用 emissive 保证颜色可见
+              // 有 map 的部件：emissive 低强度，避免整块发黑发脏
               if (mat.map) {
                 mat.emissive.copy(targetColor)
-                mat.emissiveIntensity = 0.6
+                mat.emissiveIntensity = 0.2
               } else {
+                // 无 map 部件：emissive 关闭，仅靠 color
                 mat.emissiveIntensity = 0
               }
               mat.needsUpdate = true
@@ -198,16 +221,22 @@ export function Product3DViewer({
       style={{ height: 480, minHeight: 480, background: '#f7f3eb' }}
     >
       <Canvas
-        camera={{ position: cameraPosition || [0, 0.05, 2.4], fov: 28 }}
+        camera={{ position: cameraPosition || [0, 0.1, 1.7], fov: 35 }}
         gl={{ antialias: true, alpha: true }}
         onCreated={({ gl }) => {
           gl.setClearColor(0x000000, 0)
         }}
       >
-        <ambientLight intensity={0.9} />
-        <directionalLight position={[4, 6, 4]} intensity={1.15} />
-        <directionalLight position={[-3, 2, -3]} intensity={0.45} />
-        <directionalLight position={[0, 2, 5]} intensity={0.4} />
+        {/* 环境光：整体提亮，解决背面全黑 */}
+        <ambientLight intensity={1.2} />
+        {/* 半球光：天空白、地面暖，模拟环境反射 */}
+        <hemisphereLight args={['#ffffff', '#e8e0d4', 0.5]} />
+        {/* 主光：正面偏上 */}
+        <directionalLight position={[3, 5, 4]} intensity={0.9} />
+        {/* 背面补光：解决转到背面过暗 */}
+        <directionalLight position={[0, 1, -4]} intensity={0.7} />
+        {/* 侧补光 */}
+        <directionalLight position={[-3, 2, 3]} intensity={0.35} />
 
         <Suspense fallback={<LoaderFallback />}>
           <Model
@@ -224,7 +253,7 @@ export function Product3DViewer({
         <OrbitControls
           makeDefault
           enablePan={false}
-          minDistance={0.8}
+          minDistance={0.5}
           maxDistance={5}
           target={[0, 0, 0]}
         />
