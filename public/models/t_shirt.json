@@ -12,7 +12,7 @@
         { "name": "waist", "materialName": "TrimWaist", "label": "下摆包边" }
       ]
     },
-    "modelRotation": [-1.5708, 3.14159, 0],
+    "modelRotation": [0, 3.14159, 1.5708],
     "modelScale": 0.015,
     "cameraDefault": {
       "position": [0, 0.15, 2.0],

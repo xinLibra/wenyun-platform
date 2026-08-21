@@ -4,11 +4,11 @@
     "productName": "纸袋",
     "modelUrl": "paper_bag.glb",
     "meshConfig": {
-      "textureTargetMaterial": "Material tripo_part_1.001",
+      "textureTargetMaterial": "Material tripo_part_2.001",
       "colorMaterials": [
         {
           "name": "handle",
-          "materialName": "Material tripo_part_2.001",
+          "materialName": "Material tripo_part_1.001",
           "label": "手提带子"
         }
       ]

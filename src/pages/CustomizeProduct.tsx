@@ -344,7 +344,6 @@ export default function CustomizeProduct() {
     setBlendMode('normal')
   }
   
-  const [currentPage, setCurrentPage] = useState(0)
   const [isBuying, setIsBuying] = useState(false)
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [quantity, setQuantity] = useState(1)
@@ -649,13 +648,7 @@ export default function CustomizeProduct() {
     }
   }
   
-  const productsPerPage = 4
   const filteredProducts = products.filter(p => p.category === selectedCategory)
-  const totalPages = Math.ceil(filteredProducts.length / productsPerPage)
-  const currentPageProducts = filteredProducts.slice(
-    currentPage * productsPerPage,
-    (currentPage + 1) * productsPerPage
-  )
 
   const initialTouchDistance = useRef(0)
   const initialTouchAngle = useRef(0)
@@ -848,7 +841,7 @@ export default function CustomizeProduct() {
             transition={{ delay: 0.2 }}
             className="lg:col-span-1"
           >
-            <FrameDecorations className="bg-rice-paper-light p-6">
+            <FrameDecorations className="bg-rice-paper-light p-6 flex flex-col">
               <h2 className="font-shufa text-xl text-deep-blue mb-4 flex items-center">
                 <span className="w-8 h-8 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-3 text-sm">品</span>
                 选择产品
@@ -861,7 +854,6 @@ export default function CustomizeProduct() {
                     onClick={() => {
                       safeSetItem('selected_product_category', category)
                       setSelectedCategory(category)
-                      setCurrentPage(0)
                     }}
                     className={`flex-1 py-2 px-4 rounded-sm font-song transition-all duration-300 ${
                       selectedCategory === category
@@ -874,48 +866,24 @@ export default function CustomizeProduct() {
                 ))}
               </div>
               
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-                  disabled={currentPage === 0}
-                  className="w-8 h-8 flex items-center justify-center bg-rice-paper border border-deep-blue-200 rounded-sm font-shufa text-deep-blue hover:bg-deep-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  ‹
-                </button>
-                
-                <div className="flex-1 grid grid-cols-2 gap-2">
-                  {currentPageProducts.map((product, index) => (
-                    <motion.button
-                      key={product.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      onClick={() => handleProductChange(product.id)}
-                      className={`flex flex-col items-start px-3 py-2 rounded-sm font-song text-sm transition-all duration-300 border ${
-                        selectedProduct === product.id
-                          ? 'bg-palace-red text-rice-paper border-palace-red shadow-md'
-                          : 'bg-rice-paper border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                      }`}
-                    >
-                      <span className="font-shufa">{product.name}</span>
-                      <span className={`text-xs ${selectedProduct === product.id ? 'text-ming-yellow' : 'text-deep-blue-light'}`}>¥{product.price}</span>
-                    </motion.button>
-                  ))}
-                </div>
-                
-                <button
-                  onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
-                  disabled={currentPage === totalPages - 1}
-                  className="w-8 h-8 flex items-center justify-center bg-rice-paper border border-deep-blue-200 rounded-sm font-shufa text-deep-blue hover:bg-deep-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  ›
-                </button>
-              </div>
-              
-              <div className="flex justify-center mt-3">
-                <span className="font-song text-xs text-deep-blue-light">
-                  第 {currentPage + 1} / {totalPages} 页
-                </span>
+              <div className="flex-1 grid grid-cols-2 gap-2 content-start overflow-y-auto max-h-[60vh]">
+                {filteredProducts.map((product, index) => (
+                  <motion.button
+                    key={product.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(index * 0.05, 0.4) }}
+                    onClick={() => handleProductChange(product.id)}
+                    className={`flex flex-col items-start px-3 py-2 rounded-sm font-song text-sm transition-all duration-300 border ${
+                      selectedProduct === product.id
+                        ? 'bg-palace-red text-rice-paper border-palace-red shadow-md'
+                        : 'bg-rice-paper border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                    }`}
+                  >
+                    <span className="font-shufa">{product.name}</span>
+                    <span className={`text-xs ${selectedProduct === product.id ? 'text-ming-yellow' : 'text-deep-blue-light'}`}>¥{product.price}</span>
+                  </motion.button>
+                ))}
               </div>
             </FrameDecorations>
 
