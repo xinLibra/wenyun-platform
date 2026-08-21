@@ -1,43 +1,21 @@
 [
   {
-    "productId": "t_shirt_01",
-    "productName": "短袖T恤",
+    "productId": "tshirt",
+    "productName": "T恤",
     "modelUrl": "t_shirt.glb",
     "meshConfig": {
       "textureTargetMaterial": "Fabric",
       "colorMaterials": [
-        {
-          "name": "collar",
-          "materialName": "TrimNeck",
-          "label": "领口"
-        },
-        {
-          "name": "sleeve_trim",
-          "materialName": "TrimSleeves",
-          "label": "袖口包边"
-        },
-        {
-          "name": "hem_trim",
-          "materialName": "TrimWaist",
-          "label": "下摆包边"
-        }
+        { "name": "body", "materialName": "Fabric", "label": "衣身主体" },
+        { "name": "neck", "materialName": "TrimNeck", "label": "领口" },
+        { "name": "sleeve", "materialName": "TrimSleeves", "label": "袖口包边" },
+        { "name": "waist", "materialName": "TrimWaist", "label": "下摆包边" }
       ]
     },
-    "modelLimit": {
-      "maxTriFaces": 18000,
-      "forwardAxis": "+Z"
-    },
-    "textureSetting": {
-      "wrapS": "ClampToEdgeWrapping",
-      "wrapT": "ClampToEdgeWrapping",
-      "textureScale": [1, 1],
-      "offset": [0, 0],
-      "rotation": 0
-    },
-    "modelRotation": [0, 3.14159, 0],
+    "modelRotation": [-1.5708, 3.14159, 0],
     "modelScale": 0.015,
     "cameraDefault": {
-      "position": [0, 0.15, 1.0],
+      "position": [0, 0.15, 2.0],
       "lookAt": [0, 0.05, 0]
     }
   }

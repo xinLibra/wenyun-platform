@@ -1,27 +1,16 @@
 [
   {
-    "productId": "handkerchief_01",
+    "productId": "handkerchief",
     "productName": "手帕",
     "modelUrl": "handkerchief.glb",
     "meshConfig": {
       "textureTargetMaterial": "bandana",
       "colorMaterials": []
     },
-    "modelLimit": {
-      "maxTriFaces": 12000,
-      "forwardAxis": "+Z"
-    },
-    "textureSetting": {
-      "wrapS": "ClampToEdgeWrapping",
-      "wrapT": "ClampToEdgeWrapping",
-      "textureScale": [1, 1],
-      "offset": [0, 0],
-      "rotation": 0
-    },
-    "modelRotation": [0, 0, 0],
+    "modelRotation": [-1.5708, 0, 0],
     "modelScale": 0.12,
     "cameraDefault": {
-      "position": [0, 0.1, 0.5],
+      "position": [0, 0.05, 1.4],
       "lookAt": [0, 0, 0]
     }
   }

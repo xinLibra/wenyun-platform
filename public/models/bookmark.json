@@ -1,39 +1,20 @@
 [
   {
-    "productId": "bookmark_01",
-    "productName": "中式空白流苏书签",
+    "productId": "bookmark",
+    "productName": "书签",
     "modelUrl": "bookmark.glb",
     "meshConfig": {
       "textureTargetMaterial": "tripo_part_0",
       "colorMaterials": [
-        {
-          "name": "ring",
-          "materialName": "tripo_part_2",
-          "label": "挂环"
-        },
-        {
-          "name": "tassel",
-          "materialName": "tripo_part_8",
-          "label": "流苏"
-        }
+        { "name": "ring", "materialName": "tripo_part_8", "label": "挂环" },
+        { "name": "tassel", "materialName": "tripo_part_2", "label": "流苏" }
       ]
     },
-    "modelLimit": {
-      "maxTriFaces": 9800,
-      "forwardAxis": "+Z"
-    },
-    "textureSetting": {
-      "wrapS": "ClampToEdgeWrapping",
-      "wrapT": "ClampToEdgeWrapping",
-      "textureScale": [1, 1],
-      "offset": [0, 0],
-      "rotation": 0
-    },
+    "modelRotation": [0, 1.6, 0],
+    "modelScale": 0.55,
     "cameraDefault": {
-      "position": [0, 0.15, 0.5],
+      "position": [0, 0.05, 1.5],
       "lookAt": [0, 0, 0]
-    },
-    "modelRotation": [0, -1.5708, 0],
-    "modelScale": 0.5
+    }
   }
 ]

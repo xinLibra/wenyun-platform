@@ -1,33 +1,22 @@
 [
   {
-    "productId": "phone_case_green",
-    "productName": "手机壳（绿）",
+    "productId": "phonecase_green",
+    "productName": "手机壳·绿",
     "modelUrl": "phone_case_green.glb",
     "meshConfig": {
-      "textureTargetMaterial": "Cube_002_Material_001_0",
+      "textureTargetMaterial": "Material.001",
       "colorMaterials": [
         {
           "name": "frame",
-          "materialName": "Cube_002_Material_003_0",
+          "materialName": "Material.003",
           "label": "侧边边框"
         }
       ]
     },
-    "modelLimit": {
-      "maxTriFaces": 12000,
-      "forwardAxis": "+Z"
-    },
-    "textureSetting": {
-      "wrapS": "ClampToEdgeWrapping",
-      "wrapT": "ClampToEdgeWrapping",
-      "textureScale": [1, 1],
-      "offset": [0, 0],
-      "rotation": 0
-    },
-    "modelRotation": [0, 0, 0],
-    "modelScale": 0.5,
+    "modelRotation": [0, -1.504, 0],
+    "modelScale": 0.45,
     "cameraDefault": {
-      "position": [0, 0.1, 0.45],
+      "position": [0, 0.05, 1.7],
       "lookAt": [0, 0, 0]
     }
   }

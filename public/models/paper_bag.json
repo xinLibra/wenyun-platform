@@ -1,33 +1,22 @@
 [
   {
-    "productId": "paper_bag_01",
-    "productName": "牛皮纸手提袋",
+    "productId": "paper_bag",
+    "productName": "纸袋",
     "modelUrl": "paper_bag.glb",
     "meshConfig": {
-      "textureTargetMaterial": "tripo_part_1",
+      "textureTargetMaterial": "Material tripo_part_1.001",
       "colorMaterials": [
         {
           "name": "handle",
-          "materialName": "tripo_part_2",
+          "materialName": "Material tripo_part_2.001",
           "label": "手提带子"
         }
       ]
     },
-    "modelLimit": {
-      "maxTriFaces": 12000,
-      "forwardAxis": "+Z"
-    },
-    "textureSetting": {
-      "wrapS": "ClampToEdgeWrapping",
-      "wrapT": "ClampToEdgeWrapping",
-      "textureScale": [1, 1],
-      "offset": [0, 0],
-      "rotation": 0
-    },
     "modelRotation": [3.14159, -1.5708, 0],
-    "modelScale": 0.45,
+    "modelScale": 0.38,
     "cameraDefault": {
-      "position": [0, 0.15, 0.5],
+      "position": [0, 0.12, 1.55],
       "lookAt": [0, 0, 0]
     }
   }

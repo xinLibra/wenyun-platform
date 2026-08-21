@@ -1,7 +1,7 @@
 [
   {
-    "productId": "phone_case_white",
-    "productName": "手机壳（白）",
+    "productId": "phonecase",
+    "productName": "手机壳·白",
     "modelUrl": "phone_case.glb",
     "meshConfig": {
       "textureTargetMaterial": "Cube_002_Material_001_0",
@@ -13,21 +13,10 @@
         }
       ]
     },
-    "modelLimit": {
-      "maxTriFaces": 12000,
-      "forwardAxis": "+Z"
-    },
-    "textureSetting": {
-      "wrapS": "ClampToEdgeWrapping",
-      "wrapT": "ClampToEdgeWrapping",
-      "textureScale": [1, 1],
-      "offset": [0, 0],
-      "rotation": 0
-    },
-    "modelRotation": [0, 0, 0],
-    "modelScale": 0.5,
+    "modelRotation": [-0.7, -1.7, -0.2],
+    "modelScale": 0.4,
     "cameraDefault": {
-      "position": [0, 0.1, 0.45],
+      "position": [0, 0.05, 1.8],
       "lookAt": [0, 0, 0]
     }
   }

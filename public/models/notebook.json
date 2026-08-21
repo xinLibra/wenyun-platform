@@ -1,33 +1,22 @@
 [
   {
-    "productId": "notebook_01",
-    "productName": "线圈笔记本",
+    "productId": "notebook",
+    "productName": "笔记本",
     "modelUrl": "notebook.glb",
     "meshConfig": {
-      "textureTargetMaterial": "Object_5.001",
+      "textureTargetMaterial": "材质.001",
       "colorMaterials": [
         {
           "name": "coil",
-          "materialName": "Object_4",
+          "materialName": "材质.002",
           "label": "线圈颜色"
         }
       ]
     },
-    "modelLimit": {
-      "maxTriFaces": 12000,
-      "forwardAxis": "+Z"
-    },
-    "textureSetting": {
-      "wrapS": "ClampToEdgeWrapping",
-      "wrapT": "ClampToEdgeWrapping",
-      "textureScale": [1, 1],
-      "offset": [0, 0],
-      "rotation": 0
-    },
-    "modelRotation": [0.3, 0, 0],
+    "modelRotation": [2.5, 2, 1.8],
     "modelScale": 0.4,
     "cameraDefault": {
-      "position": [0, 0.15, 0.5],
+      "position": [-0.5, 0.15, 1.5],
       "lookAt": [0, 0, 0]
     }
   }

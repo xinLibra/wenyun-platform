@@ -1,27 +1,22 @@
 [
   {
-    "productId": "cushion_01",
-    "productName": "方形抱枕",
+    "productId": "cushion",
+    "productName": "抱枕",
     "modelUrl": "cushion.glb",
     "meshConfig": {
-      "textureTargetMaterial": "cushion",
-      "colorMaterials": []
+      "textureTargetMaterial": "cushionglb",
+      "colorMaterials": [
+        {
+          "name": "body",
+          "materialName": "cushionglb",
+          "label": "抱枕（整枕）"
+        }
+      ]
     },
-    "modelLimit": {
-      "maxTriFaces": 12000,
-      "forwardAxis": "+Z"
-    },
-    "textureSetting": {
-      "wrapS": "ClampToEdgeWrapping",
-      "wrapT": "ClampToEdgeWrapping",
-      "textureScale": [1, 1],
-      "offset": [0, 0],
-      "rotation": 0
-    },
-    "modelRotation": [0, -1.5708, 0],
-    "modelScale": 0.35,
+    "modelRotation": [0, 1.5, 0],
+    "modelScale": 0.32,
     "cameraDefault": {
-      "position": [0, 0.2, 0.5],
+      "position": [0, 0.1, 1.5],
       "lookAt": [0, 0, 0]
     }
   }
