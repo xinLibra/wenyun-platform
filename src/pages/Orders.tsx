@@ -5,7 +5,7 @@ import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
-import { products, materials } from '../lib/products'
+import { products } from '../lib/products'
 import PatternPreview from '../components/PatternPreview'
 
 interface Order {
@@ -249,9 +249,6 @@ export default function Orders() {
                     </div>
                     <div className="flex-1">
                       <h3 className="font-shufa text-lg text-deep-blue mb-1">{product?.name}</h3>
-                      <p className="font-song text-sm text-deep-blue-light mb-2">
-                        材质：{materials[order.customization?.material] || '未知'}
-                      </p>
                       <p className="font-song text-xs text-deep-blue-light mb-2">
                         定制参数：尺寸 {order.customization?.scale || 100}%，旋转 {order.customization?.rotation || 0}°
                         {order.customization?.textOverlay && (
@@ -353,12 +350,9 @@ export default function Orders() {
                         )}
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-shufa text-lg text-deep-blue mb-1">
+                        <h3 className="font-shufa text-deep-blue">
                           {products[selectedOrder.product_id]?.name}
                         </h3>
-                        <p className="font-song text-sm text-deep-blue-light mb-2">
-                          材质：{materials[selectedOrder.customization?.material] || '未知'}
-                        </p>
                         <p className="font-song text-xs text-deep-blue-light">
                           定制参数：尺寸 {selectedOrder.customization?.scale || 100}%，旋转 {selectedOrder.customization?.rotation || 0}°，位置 ({selectedOrder.customization?.positionX || 50}%, {selectedOrder.customization?.positionY || 50}%)
                           {selectedOrder.customization?.textOverlay && (
@@ -571,9 +565,6 @@ export default function Orders() {
                       </div>
                       <div className="flex-1">
                         <h3 className="font-shufa text-deep-blue">{products[selectedOrder.product_id]?.name}</h3>
-                        <p className="font-song text-sm text-deep-blue-light">
-                          材质：{materials[selectedOrder.customization?.material] || '未知'}
-                        </p>
                         <p className="font-song text-xs text-deep-blue-light">
                           数量：{reorderQuantity}件
                         </p>

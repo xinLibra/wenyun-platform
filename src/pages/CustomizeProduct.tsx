@@ -583,7 +583,7 @@ export default function CustomizeProduct() {
       addToCart({
         productId: selectedProduct,
         generationId: null,
-        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, patternImage: selectedPatternImage, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
+        customization: { scale, rotation, positionX, positionY, blendMode, patternImage: selectedPatternImage, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
         quantity: quantity
       })
       alert('已加入购物车')
@@ -652,7 +652,7 @@ export default function CustomizeProduct() {
         generation_id: null,
         image_url: selectedPatternImage,
         product_image: currentProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, material: selectedMaterial, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
+        customization: { scale, rotation, positionX, positionY, blendMode, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
         quantity: quantity,
         status: 'demo',
         created_at: new Date().toISOString(),

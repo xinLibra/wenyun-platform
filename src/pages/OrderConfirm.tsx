@@ -5,7 +5,7 @@ import { Button } from '../components/ui/Button'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { supabase } from '../lib/supabase'
-import { products, materials } from '../lib/products'
+import { products } from '../lib/products'
 
 export default function OrderConfirmPage() {
   const { id: orderId } = useParams<{ id?: string }>()
@@ -74,7 +74,6 @@ export default function OrderConfirmPage() {
   }
 
   const product = products[order.product_id] || { name: '未知产品', price: '0', image: '' }
-  const materialName = order.customization?.material ? materials[order.customization.material] || '未知材质' : ''
 
   return (
     <div className="min-h-screen bg-rice-paper py-8 px-4">
@@ -121,9 +120,6 @@ export default function OrderConfirmPage() {
                 <div className="space-y-4">
                   <div>
                     <h2 className="font-shufa text-xl text-deep-blue">{product.name}</h2>
-                    <p className="font-song text-deep-blue-light mt-1">
-                      {materialName && `材质：${materialName}`}
-                    </p>
                   </div>
 
                   <div className="border-t border-deep-blue-100 pt-4">

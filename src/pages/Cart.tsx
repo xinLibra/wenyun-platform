@@ -6,7 +6,7 @@ import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { useCart } from '../hooks/useCart'
 import { supabase } from '../lib/supabase'
-import { products, materials } from '../lib/products'
+import { products } from '../lib/products'
 import PatternPreview from '../components/PatternPreview'
 
 export default function Cart() {
@@ -246,10 +246,7 @@ export default function Cart() {
                       )}
                     </div>
                   <div className="flex-1">
-                    <h3 className="font-shufa text-lg text-deep-blue mb-1">{product?.name}</h3>
-                    <p className="font-song text-sm text-deep-blue-light mb-2">
-                      材质：{materials[item.customization?.material] || '未知'}
-                    </p>
+                    <p className="font-shufa text-lg text-deep-blue mb-1">{product?.name}</p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <button
