@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
 export interface CartItem {
@@ -10,10 +10,12 @@ export interface CartItem {
 }
 
 const STORAGE_KEY = 'cart_items_local'
+const DEBOUNCE_MS = 500
 
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>([])
   const isLoaded = useRef(false)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const syncCart = async () => {
@@ -21,15 +23,18 @@ export function useCart() {
       
       if (session?.user) {
         try {
-          const { data: dbCart } = await supabase
+          const { data: dbCart, error: dbError } = await supabase
             .from('cart_items')
             .select('*')
             .eq('user_id', session.user.id)
             .order('created_at', { ascending: false })
 
-          console.log('[Cart] DB query result:', { count: dbCart?.length || 0, error: null })
-
-          if (dbCart && dbCart.length > 0) {
+          if (dbError) {
+            console.error('[Cart] DB query error:', dbError)
+            const localCart = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+            setItems(localCart)
+          } else if (dbCart && dbCart.length > 0) {
+            console.log('[Cart] DB loaded:', dbCart.length, 'items')
             const dbItems: CartItem[] = dbCart.map((item: any) => ({
               id: item.id,
               productId: item.product_id,
@@ -39,12 +44,8 @@ export function useCart() {
             }))
             setItems(dbItems)
           } else {
-            const localCart = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-            if (localCart.length > 0) {
-              setItems(localCart)
-            } else {
-              setItems([])
-            }
+            console.log('[Cart] Cart is empty (no DB error, no data)')
+            setItems([])
           }
         } catch (error) {
           console.error('Failed to sync cart from DB:', error)
@@ -73,64 +74,75 @@ export function useCart() {
 
   const COMPARE_FIELDS = ['scale', 'rotation', 'positionX', 'positionY', 'blendMode', 'material']
 
-  useEffect(() => {
-    const saveToDB = async () => {
-      if (!isLoaded.current) {
-        return
-      }
+  const saveToDB = useCallback(async (currentItems: CartItem[]) => {
+    if (!isLoaded.current) return
 
-      const { data: { session } } = await supabase.auth?.getSession()
-      
-      if (session?.user) {
-        try {
-          if (items.length > 0) {
-            const upsertResult = await supabase
-              .from('cart_items')
-              .upsert(
-                items.map(item => ({
-                  id: item.id,
-                  user_id: session.user.id,
-                  product_id: item.productId,
-                  generation_id: item.generationId || null,
-                  customization: item.customization,
-                  quantity: item.quantity,
-                })),
-                { onConflict: 'id' }
-              )
-            
-            if (upsertResult.error) {
-              console.error('[Cart] Upsert failed:', upsertResult.error)
-              return
-            }
-          }
-
-          if (items.length > 0) {
-            const existingResult = await supabase
-              .from('cart_items')
-              .select('id')
-              .eq('user_id', session.user.id)
-            const existingIds = new Set((existingResult.data || []).map((item: any) => item.id))
-            const currentIds = new Set(items.map(item => item.id))
-            
-            const staleIds = [...existingIds].filter(id => !currentIds.has(id))
-            if (staleIds.length > 0) {
-              await supabase
-                .from('cart_items')
-                .delete()
-                .eq('user_id', session.user.id)
-                .in('id', staleIds)
-            }
-          }
-        } catch (error: any) {
-          console.error('[Cart] Failed to save cart to DB:', error.message)
-        }
-      } else {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-      }
+    const { data: { session } } = await supabase.auth?.getSession()
+    
+    if (!session?.user) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentItems))
+      return
     }
 
-    saveToDB()
-  }, [items])
+    try {
+      if (currentItems.length > 0) {
+        const upsertResult = await supabase
+          .from('cart_items')
+          .upsert(
+            currentItems.map(item => ({
+              id: item.id,
+              user_id: session.user.id,
+              product_id: item.productId,
+              generation_id: item.generationId || null,
+              customization: item.customization,
+              quantity: item.quantity,
+            })),
+            { onConflict: 'id' }
+          )
+        
+        if (upsertResult.error) {
+          console.error('[Cart] Upsert failed:', upsertResult.error)
+          return
+        }
+
+        const existingResult = await supabase
+          .from('cart_items')
+          .select('id')
+          .eq('user_id', session.user.id)
+        const existingIds = new Set((existingResult.data || []).map((item: any) => item.id))
+        const currentIds = new Set(currentItems.map(item => item.id))
+        
+        const staleIds = [...existingIds].filter(id => !currentIds.has(id))
+        if (staleIds.length > 0) {
+          const delResult = await supabase
+            .from('cart_items')
+            .delete()
+            .eq('user_id', session.user.id)
+            .in('id', staleIds)
+          if (delResult.error) {
+            console.error('[Cart] Stale cleanup failed:', delResult.error)
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('[Cart] Failed to save cart to DB:', error.message)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+    }
+    saveTimer.current = setTimeout(() => {
+      saveToDB(items)
+    }, DEBOUNCE_MS)
+
+    return () => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current)
+      }
+    }
+  }, [items, saveToDB])
 
   function addToCart(item: Omit<CartItem, 'id'>) {
     setItems((prev) => {
