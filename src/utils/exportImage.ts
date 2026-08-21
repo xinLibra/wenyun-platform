@@ -263,6 +263,19 @@ function generateFileName(productName: string, ext: string): string {
   return `${productName}_${timestamp}.${ext}`
 }
 
+// 生成定制预览图（返回 base64 dataURL，用于订单缩略图等场景）
+export async function generatePreviewDataUrl(
+  params: ExportParams,
+  size = 256
+): Promise<string> {
+  const canvas = await renderCompositeCanvas({
+    ...params,
+    canvasWidth: size,
+    canvasHeight: size,
+  })
+  return canvas.toDataURL('image/png')
+}
+
 // 导出为指定格式并触发下载
 export async function exportAndDownload(
   params: ExportParams,
