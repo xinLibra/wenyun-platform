@@ -4,7 +4,7 @@
     "productName": "笔记本",
     "modelUrl": "notebook.glb",
     "meshConfig": {
-      "textureTargetMaterial": "材质.001",
+      "textureTargetMaterial": "材质",
       "colorMaterials": [
         {
           "name": "coil",
@@ -13,10 +13,10 @@
         }
       ]
     },
-    "modelRotation": [2.5, 2, 1.8],
+    "modelRotation": [1.5, 1, -0.2],
     "modelScale": 0.4,
     "cameraDefault": {
-      "position": [-0.5, 0.15, 1.5],
+      "position": [0, 0, 1.5],
       "lookAt": [0, 0, 0]
     }
   }

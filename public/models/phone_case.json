@@ -1,14 +1,14 @@
 [
   {
     "productId": "phonecase",
-    "productName": "手机壳·白",
+    "productName": "手机壳",
     "modelUrl": "phone_case.glb",
     "meshConfig": {
-      "textureTargetMaterial": "Cube_002_Material_001_0",
+      "textureTargetMaterial": "Cube_002_Material_001",
       "colorMaterials": [
         {
           "name": "frame",
-          "materialName": "Cube_002_Material_005_0",
+          "materialName": "Cube_002_Material_005",
           "label": "侧边边框"
         }
       ]

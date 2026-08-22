@@ -12,7 +12,66 @@ import { DraggableText } from '../components/DraggableText'
 import { useCart } from '../hooks/useCart'
 import { supabase } from '../lib/supabase'
 import { Product3DViewer } from '../components/Product3DViewer'
-import { loadProduct3DConfig, has3DConfig, COLOR_PALETTE, type Product3DConfig } from '../config/product3D'
+import { loadProduct3DConfig, has3DConfig, COLOR_PALETTE, type Product3DConfig, type PatternAreaKey } from '../config/product3D'
+
+/** HSL → HEX，用于色相/明度滑条 */
+function hslToHex(h: number, s: number, l: number): string {
+  s = Math.max(0, Math.min(100, s)) / 100
+  l = Math.max(0, Math.min(100, l)) / 100
+  const k = (n: number) => (n + h / 30) % 12
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => {
+    const color = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))
+    return Math.round(255 * color).toString(16).padStart(2, '0')
+  }
+  return `#${f(0)}${f(8)}${f(4)}`
+}
+
+/** canvas 读取纹样图主色（返回 HEX，失败 null） */
+async function extractDominantColor(imageUrl: string): Promise<string | null> {
+  if (!imageUrl) return null
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'Anonymous'
+    img.onload = () => {
+      try {
+        const size = 64
+        const canvas = document.createElement('canvas')
+        canvas.width = size
+        canvas.height = size
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { resolve(null); return }
+        ctx.drawImage(img, 0, 0, size, size)
+        const { data } = ctx.getImageData(0, 0, size, size)
+        let r = 0, g = 0, b = 0, cnt = 0
+        for (let i = 0; i < data.length; i += 16) {
+          const a = data[i + 3]
+          if (a < 125) continue
+          r += data[i]; g += data[i + 1]; b += data[i + 2]; cnt++
+        }
+        if (!cnt) { resolve(null); return }
+        r = Math.round(r / cnt); g = Math.round(g / cnt); b = Math.round(b / cnt)
+        const hex = '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('')
+        resolve(hex)
+      } catch {
+        resolve(null)
+      }
+    }
+    img.onerror = () => resolve(null)
+    img.src = imageUrl
+  })
+}
+
+function resolveImageUrl(imageUrl: string): string {
+  if (!imageUrl) return ''
+  if (imageUrl.startsWith('data:') || imageUrl.startsWith('http')) return imageUrl
+  // Likely a Supabase storage path like 'bucket_name/file_path'
+  try {
+    const { data } = supabase.storage.from('generations').getPublicUrl(imageUrl)
+    if (data?.publicUrl) return data.publicUrl
+  } catch { /* ignore */ }
+  return imageUrl
+}
 
 interface UserPattern {
   id: string
@@ -23,11 +82,10 @@ interface UserPattern {
 
 const products = [
   { id: 'bookmark', name: '书签', price: '19', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20bookmark%20with%20metal%20ring%20and%20silk%20tassel%20on%20wooden%20stick%20blank%20elegant%20product%20photography%20on%20white%20background&image_size=portrait_4_3', category: '文创' },
-  { id: 'phonecase', name: '手机壳·白', price: '49', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20white%20smartphone%20case%20with%20detachable%20side%20frame%20minimal%20product%20photography%20on%20light%20background&image_size=portrait_4_3', category: '文创' },
-  { id: 'phonecase_green', name: '手机壳·绿', price: '49', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20jade%20green%20smartphone%20case%20with%20detachable%20side%20frame%20minimal%20product%20photography%20on%20light%20background&image_size=portrait_4_3', category: '文创' },
+  { id: 'phonecase', name: '手机壳', price: '49', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20white%20smartphone%20case%20with%20detachable%20side%20frame%20minimal%20product%20photography%20on%20light%20background&image_size=portrait_4_3', category: '文创' },
   { id: 'notebook', name: '笔记本', price: '39', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=spiral%20coil%20notebook%20blank%20kraft%20cover%20with%20silver%20metal%20binding%20rings%20minimal%20product%20photography&image_size=portrait_4_3', category: '文创' },
   { id: 'postcard', name: '明信片', price: '12', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=postcard%20blank%20white%20minimal%20product%20photography&image_size=landscape_4_3', category: '文创' },
-  { id: 'tote', name: '托特包', price: '59', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=canvas%20tote%20bag%20blank%20natural%20beige%20with%20brown%20leather%20handles%20upright%20front%20view%20product%20photography&image_size=square', category: '文创' },
+  { id: 'tote', name: '手提包', price: '59', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=canvas%20tote%20bag%20blank%20natural%20beige%20with%20brown%20leather%20handles%20upright%20front%20view%20product%20photography&image_size=square', category: '文创' },
   { id: 'paper_bag', name: '纸袋', price: '29', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=kraft%20paper%20shopping%20bag%20with%20twisted%20paper%20handles%20upright%20front%20view%20blank%20product%20photography&image_size=square', category: '文创' },
   { id: 'cushion', name: '抱枕', price: '89', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=square%20cushion%20pillow%20blank%20white%20with%20decorative%20border%20edge%20front%20view%20product%20photography&image_size=square', category: '文创' },
   { id: 'handkerchief', name: '手帕', price: '19', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=folded%20cotton%20handkerchief%20blank%20white%20minimal%20product%20photography%20on%20light%20background&image_size=square', category: '文创' },
@@ -40,7 +98,6 @@ const products = [
 const productMaterials: Record<string, string[]> = {
   bookmark: ['wood', 'paper'],
   phonecase: ['plastic', 'silicone'],
-  phonecase_green: ['plastic', 'silicone'],
   notebook: ['paper', 'leather'],
   postcard: ['paper'],
   tote: ['canvas', 'cotton'],
@@ -241,7 +298,12 @@ export default function CustomizeProduct() {
     }
     return 'free'
   })
-  const [patternArea, setPatternArea] = useState<'chest' | 'full'>('chest')
+  const [patternArea, setPatternArea] = useState<PatternAreaKey>('chest')
+  const [colorArea, setColorArea] = useState<PatternAreaKey | undefined>(undefined)
+  const [activeColorPart, setActiveColorPart] = useState<string | null>(null)
+  const [hue, setHue] = useState(210)
+  const [lightness, setLightness] = useState(45)
+  const [patternRenderLimit, setPatternRenderLimit] = useState(12)
   const [showCompare, setShowCompare] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
@@ -346,6 +408,8 @@ export default function CustomizeProduct() {
       } catch { /* ignore */ }
     }
 
+    const defaultPatternArea: PatternAreaKey = productId === 'tote' ? 'center' : 'chest'
+
     const draftKey = `product_config_draft_${productId}`
     const savedDraft = safeGetItem(draftKey)
     
@@ -373,7 +437,10 @@ export default function CustomizeProduct() {
           setTextPositionY(draft.text.textPositionY || 85)
           setTextRotation(draft.text.textRotation || 0)
         }
-        setPatternArea('chest')
+        setProductColors(draft.colors || {})
+        setActiveColorPart(null)
+        setPatternArea(defaultPatternArea)
+        setColorArea(productId === 'tote' ? 'center' : undefined)
         return
       } catch {
         // 解析失败，使用默认值
@@ -398,7 +465,10 @@ export default function CustomizeProduct() {
     setTextPositionY(85)
     setTextRotation(0)
     setLayoutMode('free')
-    setPatternArea('chest')
+    setProductColors({})
+    setActiveColorPart(null)
+    setPatternArea(defaultPatternArea)
+    setColorArea(productId === 'tote' ? 'center' : undefined)
   }
   
   const [isBuying, setIsBuying] = useState(false)
@@ -417,12 +487,13 @@ export default function CustomizeProduct() {
   const [showPatternModal, setShowPatternModal] = useState(false)
   const [patternTab, setPatternTab] = useState<'work' | 'favorite'>('work')
   const [userPatterns, setUserPatterns] = useState<UserPattern[]>([])
-  const [selectedPatternImage, setSelectedPatternImage] = useState<string>(() => {
+  const [selectedPatternImage, setSelectedPatternImage] = useState<string | null>(() => {
     const lastPattern = safeGetItem('last_generated_pattern')
     return lastPattern || 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20blue%20calico%20pattern%20minimal%20elegant&image_size=square'
   })
   const [patternModalLoading, setPatternModalLoading] = useState(false)
   const [fetchError, setFetchError] = useState(false)
+  const [patternImageStates, setPatternImageStates] = useState<Record<string, 'loading' | 'loaded' | 'error'>>({})
   const previewContainerRef = useRef<HTMLDivElement>(null)
   const productBoxRef = useRef<HTMLDivElement>(null)   // 新增：拖拽比例计算改用这个更小、更准确的容器
 
@@ -499,10 +570,19 @@ export default function CustomizeProduct() {
       layoutMode,
       params: { scale, rotation, positionX, positionY, blendMode },
       text: { textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
+      colors: productColors,
       updatedAt: new Date().toISOString()
     }
     safeSetItem(draftKey, JSON.stringify(draft))
-  }, [selectedProduct, selectedMaterial, selectedPatternImage, layoutMode, scale, rotation, positionX, positionY, blendMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation])
+  }, [selectedProduct, selectedMaterial, selectedPatternImage, layoutMode, scale, rotation, positionX, positionY, blendMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, productColors])
+
+  // ===== 色相/明度滑条：实时写入当前激活部件 =====
+  useEffect(() => {
+    if (!activeColorPart) return
+    const hex = hslToHex(hue, 60, lightness)
+    setProductColors((prev) => ({ ...prev, [activeColorPart]: hex }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hue, lightness, activeColorPart])
 
   const handleReset = () => {
     const confirmed = window.confirm('确定要恢复默认设置吗？当前调节将被清空')
@@ -627,6 +707,8 @@ export default function CustomizeProduct() {
   const handleOpenPatternModal = () => {
     setShowPatternModal(true)
     setFetchError(false)
+    setPatternRenderLimit(12)
+    setPatternImageStates({})
     if (patternsCacheRef.current?.data && Date.now() - patternsCacheRef.current.ts < 60_000) {
       setUserPatterns(patternsCacheRef.current.data)
       setPatternModalLoading(false)
@@ -637,6 +719,70 @@ export default function CustomizeProduct() {
   const handleRetryPatterns = () => {
     setFetchError(false)
     fetchUserPatterns(true)
+  }
+
+  const handleClearPattern = () => {
+    setSelectedPatternImage(null)
+    try {
+      sessionStorage.removeItem(`customize:selectedPattern:${selectedProduct}`)
+    } catch { /* ignore */ }
+    showToastMessage('已清除纹样')
+  }
+
+  const handleClearColors = () => {
+    setProductColors({})
+    setActiveColorPart(null)
+    showToastMessage('已清除全部换色，恢复模型原色')
+  }
+
+  const handleClearPartColor = (partName: string) => {
+    setProductColors((prev) => {
+      const next = { ...prev }
+      delete next[partName]
+      return next
+    })
+    showToastMessage('已清除该部件换色')
+  }
+
+  const handleApplyDominantColor = async () => {
+    if (!selectedPatternImage) {
+      showToastMessage('请先选择纹样')
+      return
+    }
+    const targetPart = activeColorPart || product3DConfig?.meshConfig?.colorMaterials?.[0]?.name || null
+    if (!targetPart) {
+      showToastMessage('当前产品无可配色部件')
+      return
+    }
+    const hex = await extractDominantColor(selectedPatternImage)
+    if (hex) {
+      setProductColors((prev) => ({ ...prev, [targetPart]: hex }))
+      const label = product3DConfig?.meshConfig?.colorMaterials?.find(c => c.name === targetPart)?.label || targetPart
+      showToastMessage(`「${label}」已应用纹样主色 ${hex}`)
+    } else {
+      showToastMessage('纹样主色提取失败（可能跨域）')
+    }
+  }
+
+  const handleApplyAllDominantColors = async () => {
+    if (!selectedPatternImage) {
+      showToastMessage('请先选择纹样')
+      return
+    }
+    const cmList = product3DConfig?.meshConfig?.colorMaterials
+    if (!cmList?.length) {
+      showToastMessage('当前产品无可配色部件')
+      return
+    }
+    const hex = await extractDominantColor(selectedPatternImage)
+    if (hex) {
+      const all: Record<string, string> = {}
+      cmList.forEach((cm) => { all[cm.name] = hex })
+      setProductColors(all)
+      showToastMessage(`全部 ${cmList.length} 个部件已应用纹样主色 ${hex}`)
+    } else {
+      showToastMessage('纹样主色提取失败（可能跨域）')
+    }
   }
 
   const saveDraft = () => {
@@ -1044,7 +1190,16 @@ export default function CustomizeProduct() {
                   <Button variant="outline" onClick={handleReset} className="flex-1">重置</Button>
                   <Button variant="outline" onClick={handleSaveConfig} className="flex-1">保存配置</Button>
                 </div>
-                <Button variant="primary" onClick={handleOpenPatternModal} className="w-full">选择纹样</Button>
+                <div className="flex gap-2">
+                  <Button variant="primary" onClick={handleOpenPatternModal} className="flex-1">选择纹样</Button>
+                  <button
+                    type="button"
+                    onClick={handleClearPattern}
+                    className="px-3 py-2 border border-deep-blue-200 rounded-sm font-song text-sm text-deep-blue hover:bg-deep-blue-50 transition-colors"
+                  >
+                    清除纹样
+                  </button>
+                </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleExport('png')}
@@ -1130,6 +1285,7 @@ export default function CustomizeProduct() {
                         modelUrl={`/models/${product3DConfig.modelUrl}`}
                         textureTargetMaterial={product3DConfig.meshConfig?.textureTargetMaterial || ''}
                         textureTargetMaterials={product3DConfig.meshConfig?.textureTargetMaterials}
+                        colorTargetMaterials={product3DConfig.meshConfig?.colorTargetMaterials}
                         colorMaterials={product3DConfig.meshConfig?.colorMaterials || []}
                         patternImage={selectedPatternImage}
                         colorMap={productColors}
@@ -1137,6 +1293,7 @@ export default function CustomizeProduct() {
                         modelScale={product3DConfig.modelScale ?? 0.35}
                         cameraPosition={product3DConfig.cameraDefault?.position ?? [0, 0.12, 1.7]}
                         patternArea={patternArea}
+                        colorArea={colorArea}
                         captureRef={viewerCaptureRef}
                       />
 
@@ -1406,35 +1563,46 @@ export default function CustomizeProduct() {
                             })}
                           </div>
 
-                          {product3DConfig?.meshConfig?.textureTargetMaterials?.chest?.length ? (
-                            <div className="mt-4 pt-4 border-t border-deep-blue-100">
-                              <div className="font-song text-xs text-deep-blue-light mb-2">贴图范围</div>
-                              <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => setPatternArea('chest')}
-                                  className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
-                                    patternArea === 'chest'
-                                      ? 'bg-palace-red text-rice-paper shadow-sm'
-                                      : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                                  }`}
-                                >
-                                  仅胸前
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setPatternArea('full')}
-                                  className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
-                                    patternArea === 'full'
-                                      ? 'bg-palace-red text-rice-paper shadow-sm'
-                                      : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                                  }`}
-                                >
-                                  全身
-                                </button>
+                          {(() => {
+                            const tm = product3DConfig?.meshConfig?.textureTargetMaterials
+                            if (!tm) return null
+                            const hasChest = !!tm.chest?.length
+                            const hasCenter = !!tm.center?.length
+                            if (!hasChest && !hasCenter) return null
+                            const leftKey: PatternAreaKey = hasCenter ? 'center' : 'chest'
+                            const leftLabel = hasCenter ? '正中区域' : '仅胸前'
+                            const rightKey: PatternAreaKey = 'full'
+                            const rightLabel = selectedProduct === 'tote' ? '全包' : '全身'
+                            return (
+                              <div className="mt-4 pt-4 border-t border-deep-blue-100">
+                                <div className="font-song text-xs text-deep-blue-light mb-2">贴图范围</div>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPatternArea(leftKey)}
+                                    className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
+                                      patternArea === leftKey
+                                        ? 'bg-palace-red text-rice-paper shadow-sm'
+                                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                                    }`}
+                                  >
+                                    {leftLabel}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPatternArea(rightKey)}
+                                    className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
+                                      patternArea === rightKey
+                                        ? 'bg-palace-red text-rice-paper shadow-sm'
+                                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                                    }`}
+                                  >
+                                    {rightLabel}
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          ) : null}
+                            )
+                          })()}
                         </div>
                       )}
                     </div>
@@ -1442,45 +1610,160 @@ export default function CustomizeProduct() {
                     {/* ===== 区块二：部件配色 ===== */}
                     {product3DConfig?.meshConfig?.colorMaterials?.length ? (
                       <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
-                        <button
-                          onClick={() => setPanelExpanded(p => ({ ...p, color: !p.color }))}
-                          className="w-full flex items-center justify-between px-4 py-2.5 bg-deep-blue/5 hover:bg-deep-blue/10 transition-colors"
-                        >
-                          <span className="font-shufa text-sm text-deep-blue flex items-center">
-                            <span className="w-5 h-5 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">色</span>
-                            部件配色
-                          </span>
-                          <span className="text-deep-blue text-xs">{panelExpanded.color ? '收起 ▲' : '展开 ▼'}</span>
-                        </button>
+                        <div className="flex items-center justify-between px-3 py-2.5 bg-deep-blue/5">
+                          <button
+                            onClick={() => setPanelExpanded(p => ({ ...p, color: !p.color }))}
+                            className="flex items-center flex-1"
+                          >
+                            <span className="font-shufa text-sm text-deep-blue flex items-center">
+                              <span className="w-5 h-5 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">色</span>
+                              部件配色
+                            </span>
+                            <span className="text-deep-blue text-xs ml-2">{panelExpanded.color ? '收起 ▲' : '展开 ▼'}</span>
+                          </button>
+                          <div className="flex gap-1.5 ml-2">
+                            <button
+                              type="button"
+                              onClick={handleApplyAllDominantColors}
+                              className="px-2 py-1 text-xs font-song border border-deep-blue-200 text-deep-blue rounded-sm hover:border-palace-red hover:text-palace-red transition-colors"
+                              title="所有部件用纹样主色"
+                            >
+                              全部用纹样色
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleClearColors}
+                              className="px-2 py-1 text-xs font-song border border-deep-blue-200 text-deep-blue rounded-sm hover:border-palace-red hover:text-palace-red transition-colors"
+                            >
+                              清除全部颜色
+                            </button>
+                          </div>
+                        </div>
                         {panelExpanded.color && (
                           <div className="p-4 space-y-3">
-                            {product3DConfig.meshConfig.colorMaterials.map((cm) => (
-                              <div key={cm.name}>
-                                <div className="flex items-center justify-between mb-1">
-                                  <p className="font-song text-xs text-deep-blue-light">{cm.label}</p>
-                                  {productColors[cm.name] && (
-                                    <span className="text-xs font-song" style={{ color: productColors[cm.name] }}>●</span>
+                            {product3DConfig.meshConfig.colorMaterials.map((cm) => {
+                              const isEditing = activeColorPart === cm.name
+                              const hasColor = !!productColors[cm.name]
+                              return (
+                                <div key={cm.name} className={`rounded-sm border transition-all ${isEditing ? 'border-palace-red bg-palace-red/5 shadow-sm' : 'border-deep-blue-200 hover:border-deep-blue'}`}>
+                                  <div
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => setActiveColorPart(isEditing ? null : cm.name)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveColorPart(isEditing ? null : cm.name) } }}
+                                    className={`w-full flex items-center justify-between px-3 py-2 cursor-pointer ${isEditing ? 'bg-palace-red/5' : 'hover:bg-deep-blue-5'}`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      {hasColor ? (
+                                        <span
+                                          className="inline-block w-5 h-5 rounded-sm border border-deep-blue-300 shadow-sm"
+                                          style={{ backgroundColor: productColors[cm.name] }}
+                                        />
+                                      ) : (
+                                        <span className="inline-block w-5 h-5 rounded-sm border-2 border-dashed border-deep-blue-300 bg-rice-paper" />
+                                      )}
+                                      <span className="font-song text-sm text-deep-blue">{cm.label}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {isEditing ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-song bg-palace-red text-rice-paper rounded-sm">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-ming-yellow" />
+                                          编辑中
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-deep-blue-light group-hover:text-deep-blue">点击编辑</span>
+                                      )}
+                                      {hasColor && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleClearPartColor(cm.name) }}
+                                          className="ml-1 px-1.5 py-0.5 text-[10px] font-song border border-deep-blue-200 text-deep-blue-light rounded-sm hover:border-palace-red hover:text-palace-red transition-colors"
+                                          title="仅清除此部件颜色"
+                                        >
+                                          清除
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {isEditing && (
+                                    <div className="px-3 pb-3 space-y-3">
+                                      <div className="flex flex-wrap gap-2">
+                                        {COLOR_PALETTE.map(({ c, name }) => (
+                                          <button
+                                            key={c}
+                                            onClick={() => {
+                                              setProductColors((prev) => ({ ...prev, [cm.name]: c }))
+                                            }}
+                                            title={name}
+                                            className={`w-7 h-7 rounded-full border-2 transition-all ${
+                                              productColors[cm.name] === c
+                                                ? 'border-palace-red scale-110 shadow-md'
+                                                : 'border-deep-blue-200 hover:border-deep-blue'
+                                            }`}
+                                            style={{ backgroundColor: c }}
+                                          />
+                                        ))}
+                                      </div>
+
+                                      <div className="space-y-2 pt-2 border-t border-deep-blue-100">
+                                        <InkSlider
+                                          label={`色相 (0–360)`}
+                                          value={hue}
+                                          min={0}
+                                          max={360}
+                                          onChange={(v) => { setHue(v); setActiveColorPart(cm.name) }}
+                                        />
+                                        <InkSlider
+                                          label={`明度 (0–100)`}
+                                          value={lightness}
+                                          min={5}
+                                          max={95}
+                                          onChange={(v) => { setLightness(v); setActiveColorPart(cm.name) }}
+                                        />
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={handleApplyDominantColor}
+                                        className="w-full py-1.5 text-xs font-song bg-rice-paper border border-deep-blue-200 text-deep-blue rounded-sm hover:border-palace-red hover:text-palace-red transition-colors"
+                                      >
+                                        此部件用纹样主色
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
-                                <div className="flex flex-wrap gap-2">
-                                  {COLOR_PALETTE.map(({ c, name }) => (
-                                    <button
-                                      key={c}
-                                      onClick={() => {
-                                        setProductColors((prev) => ({ ...prev, [cm.name]: c }))
-                                      }}
-                                      title={name}
-                                      className={`w-7 h-7 rounded-full border-2 transition-all ${
-                                        productColors[cm.name] === c
-                                          ? 'border-palace-red scale-110 shadow-md'
-                                          : 'border-deep-blue-200 hover:border-deep-blue'
-                                      }`}
-                                      style={{ backgroundColor: c }}
-                                    />
-                                  ))}
+                              )
+                            })}
+
+                            {product3DConfig.meshConfig.colorTargetMaterials?.center?.length ? (
+                              <div className="pt-3 border-t border-deep-blue-100">
+                                <div className="font-song text-xs text-deep-blue-light mb-2">上色范围</div>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setColorArea('center')}
+                                    className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
+                                      colorArea === 'center'
+                                        ? 'bg-palace-red text-rice-paper shadow-sm'
+                                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                                    }`}
+                                  >
+                                    正中区域
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setColorArea('full')}
+                                    className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
+                                      colorArea === 'full'
+                                        ? 'bg-palace-red text-rice-paper shadow-sm'
+                                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                                    }`}
+                                  >
+                                    全包
+                                  </button>
                                 </div>
                               </div>
-                            ))}
+                            ) : null}
                           </div>
                         )}
                       </div>
@@ -1828,7 +2111,7 @@ export default function CustomizeProduct() {
                     </button>
                   </div>
 
-                  {patternModalLoading ? (
+                  {patternModalLoading && userPatterns.filter(p => p.type === patternTab).length === 0 ? (
                     <div className="text-center py-16">
                       <div className="w-8 h-8 border-4 border-deep-blue-200 border-t-palace-red rounded-full animate-spin mx-auto mb-4"></div>
                       <p className="font-song text-deep-blue-light">加载中...</p>
@@ -1860,32 +2143,90 @@ export default function CustomizeProduct() {
                         </p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[50vh] overflow-y-auto">
-                        {userPatterns.filter(p => p.type === patternTab).map((pattern, index) => (
-                          <motion.div
-                            key={pattern.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.05 }}
-                            onClick={() => handleSelectPattern(pattern)}
-                            className="cursor-pointer group"
+                      (() => {
+                        const filtered = userPatterns.filter(p => p.type === patternTab)
+                        const shown = filtered.slice(0, patternRenderLimit)
+                        const hasMore = patternRenderLimit < filtered.length
+                        return (
+                          <div
+                            className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[50vh] overflow-y-auto"
+                            onScroll={(e) => {
+                              const t = e.currentTarget
+                              if (t.scrollTop + t.clientHeight > t.scrollHeight - 120 && hasMore) {
+                                setPatternRenderLimit((n) => Math.min(n + 12, filtered.length))
+                              }
+                            }}
                           >
-                            <div className="aspect-square bg-rice-paper-dark rounded-sm overflow-hidden border-2 border-transparent group-hover:border-palace-red transition-colors">
-                              <img
-                                src={pattern.image_url}
-                                alt={pattern.title}
-                                loading="lazy"
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                            <div className="mt-2">
-                              <p className="font-shufa text-xs text-deep-blue truncate" title={pattern.title}>
-                                {pattern.title}
-                              </p>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
+                            {shown.map((pattern, index) => {
+                              const imgState = patternImageStates[pattern.id] || 'loading'
+                              const rawUrl = pattern.image_url
+                              const resolvedUrl = resolveImageUrl(rawUrl)
+                              const isHugeBase64 = rawUrl.startsWith('data:') && rawUrl.length > 300_000
+                              return (
+                                <motion.div
+                                  key={pattern.id}
+                                  initial={{ opacity: 0, y: 20 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ delay: Math.min(index, 8) * 0.05 }}
+                                  onClick={() => handleSelectPattern(pattern)}
+                                  className="cursor-pointer group"
+                                >
+                                  <div className="aspect-square bg-deep-blue-50 rounded-sm overflow-hidden border-2 border-transparent group-hover:border-palace-red transition-colors relative">
+                                    {imgState === 'error' ? (
+                                      <div className="w-full h-full flex flex-col items-center justify-center bg-deep-blue-50 p-2">
+                                        <svg className="w-6 h-6 text-deep-blue-light mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                        <span className="text-[10px] font-song text-deep-blue-light text-center">加载失败</span>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        {imgState === 'loading' && (
+                                          <div className="absolute inset-0 flex items-center justify-center bg-deep-blue-50 z-10">
+                                            <div className="w-5 h-5 border-2 border-deep-blue-200 border-t-palace-red rounded-full animate-spin"></div>
+                                          </div>
+                                        )}
+                                        <img
+                                          src={resolvedUrl}
+                                          alt={pattern.title}
+                                          loading="lazy"
+                                          decoding="async"
+                                          className={`w-full h-full object-cover transition-opacity duration-200 ${imgState === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
+                                          onLoad={() => {
+                                            setPatternImageStates((prev) => ({ ...prev, [pattern.id]: 'loaded' }))
+                                          }}
+                                          onError={() => {
+                                            setPatternImageStates((prev) => ({ ...prev, [pattern.id]: 'error' }))
+                                          }}
+                                        />
+                                        {isHugeBase64 && imgState === 'loaded' && (
+                                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/40 to-transparent px-1 py-0.5">
+                                            <span className="text-[9px] text-white/90 font-song">原图</span>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                  <div className="mt-2">
+                                    <p className="font-shufa text-xs text-deep-blue truncate" title={pattern.title}>
+                                      {pattern.title}
+                                    </p>
+                                  </div>
+                                </motion.div>
+                              )
+                            })}
+                            {hasMore && (
+                              <button
+                                type="button"
+                                onClick={() => setPatternRenderLimit((n) => Math.min(n + 12, filtered.length))}
+                                className="col-span-full py-2 text-xs font-song text-deep-blue-light hover:text-palace-red"
+                              >
+                                加载更多（剩余 {filtered.length - patternRenderLimit}）
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })()
                     )
                   )}
                 </FrameDecorations>

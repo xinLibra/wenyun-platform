@@ -2,6 +2,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, useGLTF, Center } from '@react-three/drei'
 import * as THREE from 'three'
+import type { PatternAreaKey } from '../config/product3D'
 
 interface ColorMaterial {
   name: string
@@ -9,22 +10,21 @@ interface ColorMaterial {
   label: string
 }
 
-interface TextureTargetMaterials {
-  chest: string[]
-  full: string[]
-}
+type TextureTargetMaterials = Partial<Record<PatternAreaKey, string[]>>
 
 interface Product3DViewerProps {
   modelUrl: string
   textureTargetMaterial: string
   textureTargetMaterials?: TextureTargetMaterials
+  colorTargetMaterials?: TextureTargetMaterials
   colorMaterials?: ColorMaterial[]
   patternImage?: string | null
   colorMap?: Record<string, string>
   cameraPosition?: [number, number, number]
   modelRotation?: [number, number, number]
   modelScale?: number
-  patternArea?: 'chest' | 'full'
+  patternArea?: PatternAreaKey
+  colorArea?: PatternAreaKey
   captureRef?: React.MutableRefObject<(() => string | null) | null>
   className?: string
 }
@@ -40,15 +40,27 @@ function hexToColor(hex: string): THREE.Color {
 function getTextureTargets(
   textureTargetMaterial: string,
   textureTargetMaterials: TextureTargetMaterials | undefined,
-  patternArea: 'chest' | 'full'
+  patternArea: PatternAreaKey
 ): string[] {
   if (textureTargetMaterials?.[patternArea]?.length) {
-    return textureTargetMaterials[patternArea]
+    return textureTargetMaterials[patternArea] as string[]
   }
   if (textureTargetMaterial) {
     return [textureTargetMaterial]
   }
   return []
+}
+
+function getColorTargets(
+  colorMaterialName: string,
+  colorTargetMaterials: TextureTargetMaterials | undefined,
+  colorArea: PatternAreaKey | undefined
+): string[] | null {
+  if (!colorArea) return null
+  const mapped = colorTargetMaterials?.[colorArea]
+  if (mapped?.length) return mapped
+  if (colorMaterialName) return [colorMaterialName]
+  return null
 }
 
 const loggedModels = new Set<string>()
@@ -57,30 +69,34 @@ function Model({
   modelUrl,
   textureTargetMaterial,
   textureTargetMaterials,
+  colorTargetMaterials,
   colorMaterials = [],
   patternImage,
   colorMap = {},
   modelRotation = [0, 0, 0],
   modelScale = 0.35,
   patternArea = 'chest',
+  colorArea,
 }: {
   modelUrl: string
   textureTargetMaterial: string
   textureTargetMaterials?: TextureTargetMaterials
+  colorTargetMaterials?: TextureTargetMaterials
   colorMaterials?: ColorMaterial[]
   patternImage?: string | null
   colorMap?: Record<string, string>
   modelRotation?: [number, number, number]
   modelScale?: number
-  patternArea?: 'chest' | 'full'
+  patternArea?: PatternAreaKey
+  colorArea?: PatternAreaKey
 }) {
   const { scene } = useGLTF(modelUrl)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
   const clonedSceneRef = useRef<THREE.Group | null>(null)
 
   useEffect(() => {
-    console.log('[Model] url=', modelUrl, 'rot=', modelRotation, 'scale=', modelScale, 'patternArea=', patternArea)
-  }, [modelUrl, modelRotation, modelScale, patternArea])
+    console.log('[Model] url=', modelUrl, 'rot=', modelRotation, 'scale=', modelScale, 'patternArea=', patternArea, 'colorArea=', colorArea)
+  }, [modelUrl, modelRotation, modelScale, patternArea, colorArea])
 
   useEffect(() => {
     if (!patternImage) {
@@ -158,10 +174,15 @@ function Model({
           .map((s) => s.toLowerCase().trim())
           .filter((s) => s && s !== '-')
 
-        const matchTarget = (target: string) => {
+        const matchTarget = (target: string): boolean => {
           const t = (target || '').toLowerCase().trim()
           if (!t) return false
-          return names.some((n) => n === t)
+          return names.some((n) => {
+            if (!n) return false
+            if (n === t) return true
+            if (n.length < 3 || t.length < 3) return false
+            return n.includes(t) || t.includes(n)
+          })
         }
 
         const hitTextureTarget = targets.some((t) => matchTarget(t))
@@ -176,6 +197,7 @@ function Model({
           mat.roughness = Math.max(mat.roughness, 0.55)
         }
 
+        // ===== 纹样贴图：命中目标 → 贴 + color=白，否则清除 =====
         if (texture && hitTextureTarget) {
           mat.map = texture
           mat.color.set('#ffffff')
@@ -186,6 +208,7 @@ function Model({
           mat.needsUpdate = true
         }
 
+        // ===== 换色 =====
         let userColored = false
         colorMaterials.forEach((cm) => {
           if (!matchTarget(cm.materialName)) return
@@ -193,11 +216,12 @@ function Model({
           if (!hex) return
           userColored = true
           const targetColor = hexToColor(hex)
-          mat.color.copy(targetColor)
           if (mat.map) {
+            // 有贴图：不要用 color 乘脏贴图，用 emissive 做轻微着色
             mat.emissive.copy(targetColor)
             mat.emissiveIntensity = 0.2
           } else {
+            mat.color.copy(targetColor)
             mat.emissive.set(0x000000)
             mat.emissiveIntensity = 0
           }
@@ -217,7 +241,7 @@ function Model({
         }
       })
     })
-  }, [clonedScene, texture, textureTargetMaterial, textureTargetMaterials, patternArea, colorMaterials, colorMap])
+  }, [clonedScene, texture, textureTargetMaterial, textureTargetMaterials, patternArea, colorTargetMaterials, colorArea, colorMaterials, colorMap])
 
   return (
     <group rotation={modelRotation as [number, number, number]} scale={modelScale}>
@@ -241,6 +265,7 @@ export function Product3DViewer({
   modelUrl,
   textureTargetMaterial,
   textureTargetMaterials,
+  colorTargetMaterials,
   colorMaterials = [],
   patternImage,
   colorMap = {},
@@ -248,6 +273,7 @@ export function Product3DViewer({
   modelRotation,
   modelScale,
   patternArea = 'chest',
+  colorArea,
   captureRef,
   className = '',
 }: Product3DViewerProps) {
@@ -293,12 +319,14 @@ export function Product3DViewer({
             modelUrl={modelUrl}
             textureTargetMaterial={textureTargetMaterial}
             textureTargetMaterials={textureTargetMaterials}
+            colorTargetMaterials={colorTargetMaterials}
             colorMaterials={colorMaterials}
             patternImage={patternImage}
             colorMap={colorMap}
             modelRotation={rot}
             modelScale={scl}
             patternArea={patternArea}
+            colorArea={colorArea}
           />
         </Suspense>
 

@@ -10,16 +10,16 @@ export interface ColorMaterialConfig {
   label: string
 }
 
+export type PatternAreaKey = 'chest' | 'center' | 'full'
+
 export interface Product3DConfig {
   productId: string
   productName: string
   modelUrl: string
   meshConfig: {
     textureTargetMaterial: string
-    textureTargetMaterials?: {
-      chest: string[]
-      full: string[]
-    }
+    textureTargetMaterials?: Partial<Record<PatternAreaKey, string[]>>
+    colorTargetMaterials?: Partial<Record<PatternAreaKey, string[]>>
     colorMaterials: ColorMaterialConfig[]
   }
   modelLimit?: {
@@ -44,7 +44,6 @@ export interface Product3DConfig {
 /** 产品 ID → json 配置路径（public 下相对路径） */
 export const PRODUCT_3D_CONFIG: Record<string, string> = {
   phonecase: '/models/phone_case.json',
-  phonecase_green: '/models/phone_case_green.json',
   bookmark: '/models/bookmark.json',
   cushion: '/models/cushion.json',
   tote: '/models/tote_bag.json',
@@ -79,7 +78,7 @@ export async function loadProduct3DConfig(productId: string): Promise<Product3DC
   }
 }
 
-/** 预设色板（供换色面板使用） */
+/** 预设色板（供换色面板使用） — 至少 12 色 */
 export const COLOR_PALETTE = [
   { c: '#2c3e50', name: '黛青' },
   { c: '#1a1a1a', name: '墨黑' },
@@ -87,4 +86,10 @@ export const COLOR_PALETTE = [
   { c: '#C0C0C0', name: '银灰' },
   { c: '#E8D5B7', name: '米金' },
   { c: '#800020', name: '绛红' },
+  { c: '#FFFFFF', name: '纯白' },
+  { c: '#F5EFE0', name: '米白' },
+  { c: '#0F2347', name: '藏青' },
+  { c: '#5B8C5A', name: '草绿' },
+  { c: '#F4C561', name: '杏黄' },
+  { c: '#6FB6E8', name: '天蓝' },
 ]
