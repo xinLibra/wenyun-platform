@@ -10,6 +10,9 @@ interface ColorMaterial {
   label: string
 }
 
+/** 纹样排版模式（与 2D PatternRenderer 保持一致） */
+type LayoutMode = 'center' | 'tile' | 'corner' | 'band' | 'free'
+
 type TextureTargetMaterials = Partial<Record<PatternAreaKey, string[]>>
 
 interface Product3DViewerProps {
@@ -29,6 +32,16 @@ interface Product3DViewerProps {
   className?: string
   /** patternArea=full 时，不贴图的材质列表（用于兜底 full 配置不全） */
   excludeFromPatternAreaFull?: string[]
+  /** 纹样排版模式 */
+  layoutMode?: LayoutMode
+  /** 纹样缩放（0.5~4，映射到 repeat） */
+  patternScale?: number
+  /** 纹样水平偏移（-0.5~0.5） */
+  offsetX?: number
+  /** 纹样垂直偏移（-0.5~0.5） */
+  offsetY?: number
+  /** 纹样旋转（角度，0~360） */
+  patternRotation?: number
 }
 
 function hexToColor(hex: string): THREE.Color {
@@ -55,6 +68,88 @@ function getTextureTargets(
 
 const loggedModels = new Set<string>()
 
+/** 根据 layoutMode 配置 texture 的 wrap/repeat/offset/rotation
+ * 与 2D PatternRenderer 行为保持一致
+ */
+function configureTextureByLayout(
+  tex: THREE.Texture,
+  layoutMode: LayoutMode,
+  patternScale: number,
+  offsetX: number,
+  offsetY: number,
+  patternRotation: number
+): void {
+  // 将 patternScale (0.5~4) 映射到 repeat (2~0.25)
+  // scale 越大 = 纹样越大 = repeat 越小
+  const s = Math.max(0.25, Math.min(4, 2 / patternScale))
+  const rotRad = (patternRotation * Math.PI) / 180
+
+  // 重置
+  tex.center.set(0.5, 0.5)
+  tex.rotation = 0
+  tex.offset.set(0, 0)
+  tex.repeat.set(1, 1)
+
+  switch (layoutMode) {
+    case 'tile':
+      // 重复平铺：RepeatWrapping，repeat 随 patternScale
+      tex.wrapS = THREE.RepeatWrapping
+      tex.wrapT = THREE.RepeatWrapping
+      tex.repeat.set(s, s)
+      tex.offset.set(0, 0)
+      tex.rotation = 0
+      break
+
+    case 'center':
+      // 居中放大：ClampToEdgeWrapping，单图居中
+      tex.wrapS = THREE.ClampToEdgeWrapping
+      tex.wrapT = THREE.ClampToEdgeWrapping
+      // 根据 scale 微调，保持「一张居中」语义
+      const centerScale = Math.max(0.5, Math.min(1.5, patternScale / 2))
+      tex.repeat.set(centerScale, centerScale)
+      tex.offset.set((1 - centerScale) / 2, (1 - centerScale) / 2)
+      tex.rotation = 0
+      break
+
+    case 'band':
+      // 腰封式：横向重复、纵向窄带
+      tex.wrapS = THREE.RepeatWrapping
+      tex.wrapT = THREE.ClampToEdgeWrapping
+      // 横向随 scale，纵向固定窄带
+      tex.repeat.set(s * 1.5, Math.max(0.15, 0.25 / patternScale))
+      // 垂直居中偏上（腰封位置）
+      const waistHeight = Math.max(0.15, 0.25 / patternScale)
+      tex.offset.set(0, 0.5 - waistHeight / 2)
+      tex.rotation = 0
+      break
+
+    case 'corner':
+      // 角落点缀：小图在角落
+      tex.wrapS = THREE.ClampToEdgeWrapping
+      tex.wrapT = THREE.ClampToEdgeWrapping
+      const cornerSize = Math.max(0.2, 0.35 / patternScale)
+      tex.repeat.set(cornerSize, cornerSize)
+      // 默认右上角，可通过 offset 微调
+      tex.offset.set(1 - cornerSize, 1 - cornerSize)
+      tex.rotation = 0
+      break
+
+    case 'free':
+    default:
+      // 自由模式：用户控制 scale/offset/rotation
+      tex.wrapS = THREE.RepeatWrapping
+      tex.wrapT = THREE.RepeatWrapping
+      tex.repeat.set(s, s)
+      tex.center.set(0.5, 0.5)
+      // offset 范围 -0.5~0.5 映射到实际偏移
+      tex.offset.set(offsetX, offsetY)
+      tex.rotation = rotRad
+      break
+  }
+
+  tex.needsUpdate = true
+}
+
 function Model({
   modelUrl,
   textureTargetMaterial,
@@ -68,6 +163,11 @@ function Model({
   patternArea = 'chest',
   colorArea,
   excludeFromPatternAreaFull = [],
+  layoutMode = 'center',
+  patternScale = 1,
+  offsetX = 0,
+  offsetY = 0,
+  patternRotation = 0,
 }: {
   modelUrl: string
   textureTargetMaterial: string
@@ -82,6 +182,11 @@ function Model({
   colorArea?: PatternAreaKey
   /** full 贴图时，这些材质名绝对不贴图（如手提带）；用于兜底 full 配置不全的 JSON */
   excludeFromPatternAreaFull?: string[]
+  layoutMode?: LayoutMode
+  patternScale?: number
+  offsetX?: number
+  offsetY?: number
+  patternRotation?: number
 }) {
   const { scene } = useGLTF(modelUrl)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
@@ -106,9 +211,9 @@ function Model({
       (tex) => {
         if (cancelled) return
         tex.colorSpace = THREE.SRGBColorSpace
-        tex.wrapS = THREE.ClampToEdgeWrapping
-        tex.wrapT = THREE.ClampToEdgeWrapping
         tex.flipY = false
+        // 根据 layoutMode 配置纹理变换
+        configureTextureByLayout(tex, layoutMode, patternScale, offsetX, offsetY, patternRotation)
         setTexture(tex)
       },
       undefined,
@@ -117,7 +222,7 @@ function Model({
     return () => {
       cancelled = true
     }
-  }, [patternImage])
+  }, [patternImage, layoutMode, patternScale, offsetX, offsetY, patternRotation])
 
   const clonedScene = useMemo(() => scene.clone(true), [scene])
 
@@ -306,7 +411,7 @@ function Model({
         }
       })
     })
-  }, [clonedScene, texture, scene, textureTargetMaterial, textureTargetMaterials, patternArea, colorTargetMaterials, colorArea, colorMaterials, colorMap])
+  }, [clonedScene, texture, scene, textureTargetMaterial, textureTargetMaterials, patternArea, colorTargetMaterials, colorArea, colorMaterials, colorMap, layoutMode, patternScale, offsetX, offsetY, patternRotation])
 
   return (
     <group rotation={modelRotation as [number, number, number]} scale={modelScale}>
@@ -342,6 +447,11 @@ export function Product3DViewer({
   captureRef,
   className = '',
   excludeFromPatternAreaFull = [],
+  layoutMode = 'center',
+  patternScale = 1,
+  offsetX = 0,
+  offsetY = 0,
+  patternRotation = 0,
 }: Product3DViewerProps) {
   const rot = modelRotation ?? [0, 0, 0]
   const scl = modelScale ?? 0.35
@@ -382,7 +492,7 @@ export function Product3DViewer({
 
         <Suspense fallback={<LoaderFallback />}>
           <Model
-            key={`${modelUrl}-${patternImage || 'none'}`}
+            key={`${modelUrl}-${patternImage || 'none'}-${layoutMode}-${patternScale}-${offsetX}-${offsetY}-${patternRotation}`}
             modelUrl={modelUrl}
             textureTargetMaterial={textureTargetMaterial}
             textureTargetMaterials={textureTargetMaterials}
@@ -395,6 +505,11 @@ export function Product3DViewer({
             patternArea={patternArea}
             colorArea={colorArea}
             excludeFromPatternAreaFull={excludeFromPatternAreaFull}
+            layoutMode={layoutMode}
+            patternScale={patternScale}
+            offsetX={offsetX}
+            offsetY={offsetY}
+            patternRotation={patternRotation}
           />
         </Suspense>
 

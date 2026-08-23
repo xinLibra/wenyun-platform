@@ -1345,6 +1345,11 @@ export default function CustomizeProduct() {
                             : undefined
                         }
                         captureRef={viewerCaptureRef}
+                        layoutMode={layoutMode}
+                        patternScale={scale}
+                        offsetX={positionX}
+                        offsetY={positionY}
+                        patternRotation={rotation}
                       />
 
                       {/* 底部信息条 */}
