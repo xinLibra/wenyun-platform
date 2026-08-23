@@ -42,6 +42,7 @@ interface Product3DViewerProps {
   offsetY?: number
   /** 纹样旋转（角度，0~360） */
   patternRotation?: number
+  blendMode?: 'normal' | 'overlay' | 'multiply' | 'screen'
 }
 
 function hexToColor(hex: string): THREE.Color {
@@ -69,7 +70,7 @@ function getTextureTargets(
 const loggedModels = new Set<string>()
 
 /** 根据 layoutMode 配置 texture 的 wrap/repeat/offset/rotation
- * 与 2D PatternRenderer 行为保持一致
+ * 保守策略：保证主贴图面清晰完整，宁可简单不要花哨但坏掉
  */
 function configureTextureByLayout(
   tex: THREE.Texture,
@@ -79,9 +80,9 @@ function configureTextureByLayout(
   offsetY: number,
   patternRotation: number
 ): void {
-  // 将 patternScale (0.5~4) 映射到 repeat (2~0.25)
-  // scale 越大 = 纹样越大 = repeat 越小
-  const s = Math.max(0.25, Math.min(4, 2 / patternScale))
+  // 将 patternScale (0.5~4) 映射到 repeat (2~0.5)
+  // scale 越大 = 纹样越大 = repeat 越小，限制在合理范围避免极端值
+  const s = Math.max(0.5, Math.min(2, 1.5 / patternScale))
   const rotRad = (patternRotation * Math.PI) / 180
 
   // 重置
@@ -92,56 +93,66 @@ function configureTextureByLayout(
 
   switch (layoutMode) {
     case 'tile':
-      // 重复平铺：RepeatWrapping，repeat 随 patternScale
+      // 重复平铺：四方连续铺满，用 RepeatWrapping
       tex.wrapS = THREE.RepeatWrapping
       tex.wrapT = THREE.RepeatWrapping
-      tex.repeat.set(s, s)
+      // scale 0.5~4 映射到 repeat 2~0.5
+      const tileRepeat = Math.max(0.5, Math.min(3, 2 / patternScale))
+      tex.repeat.set(tileRepeat, tileRepeat)
       tex.offset.set(0, 0)
       tex.rotation = 0
       break
 
     case 'center':
-      // 居中放大：ClampToEdgeWrapping，单图居中
+      // 居中放大：单图完整显示在中心
+      // 用 ClampToEdgeWrapping 避免边缘重复
       tex.wrapS = THREE.ClampToEdgeWrapping
       tex.wrapT = THREE.ClampToEdgeWrapping
-      // 根据 scale 微调，保持「一张居中」语义
-      const centerScale = Math.max(0.5, Math.min(1.5, patternScale / 2))
+      // scale 控制显示范围：1为填满，越小显示越少（放大效果）
+      // 限制在 0.7~1.3 避免极端拉伸
+      const centerScale = Math.max(0.7, Math.min(1.3, 1.2 - (patternScale - 1) * 0.1))
       tex.repeat.set(centerScale, centerScale)
+      // 居中偏移
       tex.offset.set((1 - centerScale) / 2, (1 - centerScale) / 2)
       tex.rotation = 0
       break
 
     case 'band':
-      // 腰封式：横向重复、纵向窄带
+      // 腰封式：横向装饰带
       tex.wrapS = THREE.RepeatWrapping
       tex.wrapT = THREE.ClampToEdgeWrapping
-      // 横向随 scale，纵向固定窄带
-      tex.repeat.set(s * 1.5, Math.max(0.15, 0.25 / patternScale))
-      // 垂直居中偏上（腰封位置）
-      const waistHeight = Math.max(0.15, 0.25 / patternScale)
-      tex.offset.set(0, 0.5 - waistHeight / 2)
+      // 横向随 scale，纵向固定窄带（0.25~0.4）
+      const bandHeight = Math.max(0.25, Math.min(0.4, 0.3 / patternScale))
+      tex.repeat.set(s * 1.2, bandHeight)
+      // 垂直居中偏上（视觉腰封位置）
+      tex.offset.set(0, 0.5 - bandHeight / 2)
       tex.rotation = 0
       break
 
     case 'corner':
-      // 角落点缀：小图在角落
-      tex.wrapS = THREE.ClampToEdgeWrapping
-      tex.wrapT = THREE.ClampToEdgeWrapping
-      const cornerSize = Math.max(0.2, 0.35 / patternScale)
+      // 角落点缀：小图在角落，其余显示材质原色
+      // 用 RepeatWrapping 但 offset 推到一角
+      tex.wrapS = THREE.RepeatWrapping
+      tex.wrapT = THREE.RepeatWrapping
+      // 小图尺寸
+      const cornerSize = Math.max(0.35, Math.min(0.6, 0.5 / patternScale))
       tex.repeat.set(cornerSize, cornerSize)
-      // 默认右上角，可通过 offset 微调
-      tex.offset.set(1 - cornerSize, 1 - cornerSize)
+      // 推到右下角（UV 坐标 0,0 通常在左下，1,1 在右上）
+      // offset 让图显示在角落：右下 = 大图区域
+      tex.offset.set(1 - cornerSize, 0)
       tex.rotation = 0
       break
 
     case 'free':
     default:
-      // 自由模式：用户控制 scale/offset/rotation
+      // 自由模式：用户完全控制
       tex.wrapS = THREE.RepeatWrapping
       tex.wrapT = THREE.RepeatWrapping
-      tex.repeat.set(s, s)
+      // scale 映射到 repeat
+      const freeRepeat = Math.max(0.3, Math.min(3, 1.5 / patternScale))
+      tex.repeat.set(freeRepeat, freeRepeat)
       tex.center.set(0.5, 0.5)
-      // offset 范围 -0.5~0.5 映射到实际偏移
+      // offset 范围 -0.5~0.5
       tex.offset.set(offsetX, offsetY)
       tex.rotation = rotRad
       break
@@ -168,26 +179,8 @@ function Model({
   offsetX = 0,
   offsetY = 0,
   patternRotation = 0,
-}: {
-  modelUrl: string
-  textureTargetMaterial: string
-  textureTargetMaterials?: TextureTargetMaterials
-  colorTargetMaterials?: TextureTargetMaterials
-  colorMaterials?: ColorMaterial[]
-  patternImage?: string | null
-  colorMap?: Record<string, string>
-  modelRotation?: [number, number, number]
-  modelScale?: number
-  patternArea?: PatternAreaKey
-  colorArea?: PatternAreaKey
-  /** full 贴图时，这些材质名绝对不贴图（如手提带）；用于兜底 full 配置不全的 JSON */
-  excludeFromPatternAreaFull?: string[]
-  layoutMode?: LayoutMode
-  patternScale?: number
-  offsetX?: number
-  offsetY?: number
-  patternRotation?: number
-}) {
+  blendMode = 'normal',
+}: Product3DViewerProps) {
   const { scene } = useGLTF(modelUrl)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
   const clonedSceneRef = useRef<THREE.Group | null>(null)
@@ -371,10 +364,49 @@ function Model({
         if (texture && effectiveHitTexture) {
           mat.map = texture
           mat.color.set('#ffffff') // 贴图区必须纯白，否则乘脏贴图
+          
+          // 应用混合模式
+          switch (blendMode) {
+            case 'overlay':
+              // 叠加：近似用 AdditiveBlending 但降低强度
+              mat.blending = THREE.CustomBlending
+              mat.blendSrc = THREE.SrcAlphaFactor
+              mat.blendDst = THREE.OneFactor
+              mat.blendEquation = THREE.AddEquation
+              mat.opacity = 0.85
+              mat.transparent = true
+              break
+            case 'multiply':
+              // 正片叠底
+              mat.blending = THREE.MultiplyBlending
+              mat.opacity = 1
+              mat.transparent = false
+              break
+            case 'screen':
+              // 滤色：用 CustomBlending 近似 Screen
+              mat.blending = THREE.CustomBlending
+              mat.blendSrc = THREE.OneFactor
+              mat.blendDst = THREE.OneMinusSrcColorFactor
+              mat.blendEquation = THREE.AddEquation
+              mat.opacity = 0.9
+              mat.transparent = true
+              break
+            case 'normal':
+            default:
+              // 正常模式
+              mat.blending = THREE.NormalBlending
+              mat.opacity = 1
+              mat.transparent = false
+              break
+          }
+          
           mat.needsUpdate = true
         } else {
           // 未命中贴图目标：清 map + 严格恢复 initialColor（绝不会黑，因为存时已修正）
           mat.map = null
+          mat.blending = THREE.NormalBlending
+          mat.opacity = 1
+          mat.transparent = false
           const initC = getInitialColor(names, mesh.name, idx)
           mat.color.copy(initC)
           mat.needsUpdate = true
@@ -411,7 +443,7 @@ function Model({
         }
       })
     })
-  }, [clonedScene, texture, scene, textureTargetMaterial, textureTargetMaterials, patternArea, colorTargetMaterials, colorArea, colorMaterials, colorMap, layoutMode, patternScale, offsetX, offsetY, patternRotation])
+  }, [clonedScene, texture, scene, textureTargetMaterial, textureTargetMaterials, patternArea, colorTargetMaterials, colorArea, colorMaterials, colorMap, layoutMode, patternScale, offsetX, offsetY, patternRotation, blendMode])
 
   return (
     <group rotation={modelRotation as [number, number, number]} scale={modelScale}>
@@ -452,6 +484,7 @@ export function Product3DViewer({
   offsetX = 0,
   offsetY = 0,
   patternRotation = 0,
+  blendMode = 'normal',
 }: Product3DViewerProps) {
   const rot = modelRotation ?? [0, 0, 0]
   const scl = modelScale ?? 0.35
@@ -492,7 +525,7 @@ export function Product3DViewer({
 
         <Suspense fallback={<LoaderFallback />}>
           <Model
-            key={`${modelUrl}-${patternImage || 'none'}-${layoutMode}-${patternScale}-${offsetX}-${offsetY}-${patternRotation}`}
+            key={`${modelUrl}-${patternImage || 'none'}-${layoutMode}-${patternScale}-${offsetX}-${offsetY}-${patternRotation}-${blendMode}`}
             modelUrl={modelUrl}
             textureTargetMaterial={textureTargetMaterial}
             textureTargetMaterials={textureTargetMaterials}
@@ -510,6 +543,7 @@ export function Product3DViewer({
             offsetX={offsetX}
             offsetY={offsetY}
             patternRotation={patternRotation}
+            blendMode={blendMode}
           />
         </Suspense>
 

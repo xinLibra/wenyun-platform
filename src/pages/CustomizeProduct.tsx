@@ -1350,6 +1350,7 @@ export default function CustomizeProduct() {
                         offsetX={positionX}
                         offsetY={positionY}
                         patternRotation={rotation}
+                        blendMode={blendMode as 'normal' | 'overlay' | 'multiply' | 'screen'}
                       />
 
                       {/* 底部信息条 */}
