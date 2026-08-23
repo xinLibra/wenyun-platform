@@ -81,6 +81,9 @@ function Model({
   const { scene } = useGLTF(modelUrl)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
   const clonedSceneRef = useRef<THREE.Group | null>(null)
+  // 只存一次的「原始色」缓存：key = mat.name/mesh.name 组合，值 = 修正后的 THREE.Color
+  const initialColorsRef = useRef<Map<string, THREE.Color>>(new Map())
+  const initialColorReadyRef = useRef(false)
 
   useEffect(() => {
     console.log('[Model] url=', modelUrl, 'rot=', modelRotation, 'scale=', modelScale, 'patternArea=', patternArea, 'colorArea=', colorArea)
@@ -137,6 +140,59 @@ function Model({
   useEffect(() => {
     const targets = getTextureTargets(textureTargetMaterial, textureTargetMaterials, patternArea)
 
+    // ===== 1. 一次性从原始 scene 捕获初始色（只跑一次）=====
+    if (!initialColorReadyRef.current) {
+      initialColorReadyRef.current = true
+      initialColorsRef.current.clear()
+      scene.traverse((child) => {
+        if (!(child as THREE.Mesh).isMesh) return
+        const mesh = child as THREE.Mesh
+        const raw = mesh.material
+        if (!raw) return
+        const list = Array.isArray(raw) ? raw : [raw]
+        ;(list as THREE.MeshStandardMaterial[]).forEach((m, i) => {
+          if (!m) return
+          const matName = (m.name || '').toLowerCase().trim()
+          const meshName = (mesh.name || '').toLowerCase().trim()
+          const keys = new Set<string>()
+          if (matName) keys.add(matName)
+          if (meshName) keys.add(meshName)
+          if (matName) keys.add(`${meshName}|${matName}`)
+          // 原始颜色：纯黑/亮度 < 0.08 → 当浅灰，避免导出器把有贴图材质 color 设黑导致"清色/非贴图区变黑"
+          let c: THREE.Color
+          if (m.color) {
+            c = m.color.clone()
+            const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+            // 该原始材质本身有贴图 map → 黑色是导出器约定，不影响，但若将来清掉 map 要回亮
+            if (c.getHex() === 0x000000 || lum < 0.08) {
+              c.set('#f5f5f5')
+            }
+          } else {
+            c = new THREE.Color('#f5f5f5')
+          }
+          keys.forEach((k) => initialColorsRef.current.set(k, c))
+          // 额外按 material 数组下标存一份
+          initialColorsRef.current.set(`${meshName}|${i}`, c)
+        })
+      })
+    }
+
+    // 取初始色：按名称匹配，找不到就退回安全色
+    const getInitialColor = (names: string[], meshName: string, matIdx: number): THREE.Color => {
+      const byIndex = initialColorsRef.current.get(`${meshName.toLowerCase()}|${matIdx}`)
+      if (byIndex) return byIndex
+      for (const n of names) {
+        const c = initialColorsRef.current.get(n)
+        if (c) return c
+      }
+      for (const n of names) {
+        for (const [k, v] of initialColorsRef.current.entries()) {
+          if (n && k && (n.includes(k) || k.includes(n))) return v
+        }
+      }
+      return new THREE.Color('#f5f5f5')
+    }
+
     clonedScene.traverse((child) => {
       if (!(child as THREE.Mesh).isMesh) return
       const mesh = child as THREE.Mesh
@@ -157,17 +213,6 @@ function Model({
         if (!oldMat) return
 
         const mat = oldMat.clone() as THREE.MeshStandardMaterial
-        // 缓存初始色：纯黑/过暗一律当成浅灰，避免贴图/清色后整件变黑
-        if (!(mat as any).userData.initialColor) {
-          const c = mat.color ? mat.color.clone() : new THREE.Color('#f0f0f0')
-          // 不用 getLuminance（旧版 three 没有）；用 r/g/b 判断过暗
-          const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
-          if (c.getHex() === 0x000000 || lum < 0.08) {
-            c.set('#f0f0f0')
-          }
-          ;(mat as any).userData.initialColor = c
-        }
-        const initialColor = (mat as any).userData.initialColor as THREE.Color
 
         if (Array.isArray(mesh.material)) {
           ;(mesh.material as THREE.Material[])[idx] = mat
@@ -185,7 +230,6 @@ function Model({
           return names.some((n) => {
             if (!n) return false
             if (n === t) return true
-            // 对中文名或短名，放宽 includes 条件（不限制 3 字符）
             const minLen = /[\u4e00-\u9fff]/.test(t) || /[\u4e00-\u9fff]/.test(n) ? 2 : 3
             if (n.length < minLen || t.length < minLen) return false
             return n.includes(t) || t.includes(n)
@@ -201,19 +245,20 @@ function Model({
           mat.roughness = Math.max(mat.roughness, 0.55)
         }
 
-        // ===== 纹样贴图 =====
+        // ===== 纹样贴图：严格按规则 =====
         if (texture && hitTextureTarget) {
           mat.map = texture
-          mat.color.set('#ffffff') // 贴图区必须白，否则乘脏
+          mat.color.set('#ffffff') // 贴图区必须纯白，否则乘脏贴图
           mat.needsUpdate = true
         } else {
+          // 未命中贴图目标：清 map + 严格恢复 initialColor（绝不会黑，因为存时已修正）
           mat.map = null
-          // 无贴图时先回到安全底色（已修正的 initialColor），后面换色逻辑再覆盖
-          mat.color.copy(initialColor)
+          const initC = getInitialColor(names, mesh.name, idx)
+          mat.color.copy(initC)
           mat.needsUpdate = true
         }
 
-        // ===== 换色 =====
+        // ===== 换色：仅用户显式设置的部件覆盖 =====
         let userColored = false
         colorMaterials.forEach((cm) => {
           if (!matchTarget(cm.materialName)) return
@@ -222,7 +267,7 @@ function Model({
           userColored = true
           const targetColor = hexToColor(hex)
           if (mat.map) {
-            // 有贴图：不用 color 乘脏贴图，用 emissive 轻微着色
+            // 有贴图：不要把 color 乘脏贴图，用 emissive 轻微着色
             mat.emissive.copy(targetColor)
             mat.emissiveIntensity = 0.2
           } else {
@@ -233,17 +278,18 @@ function Model({
           mat.needsUpdate = true
         })
 
-        // 未被用户换色的材质：恢复 initialColor + 清 emissive
+        // 未被用户换色：确保 emissive 干净，无贴图时保持 initialColor
         if (!userColored) {
           if (!mat.map) {
-            mat.color.copy(initialColor)
+            const initC = getInitialColor(names, mesh.name, idx)
+            mat.color.copy(initC)
           }
           mat.emissive.set(0x000000)
           mat.emissiveIntensity = 0
         }
       })
     })
-  }, [clonedScene, texture, textureTargetMaterial, textureTargetMaterials, patternArea, colorTargetMaterials, colorArea, colorMaterials, colorMap])
+  }, [clonedScene, texture, scene, textureTargetMaterial, textureTargetMaterials, patternArea, colorTargetMaterials, colorArea, colorMaterials, colorMap])
 
   return (
     <group rotation={modelRotation as [number, number, number]} scale={modelScale}>

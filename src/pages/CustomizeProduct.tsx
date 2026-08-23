@@ -110,8 +110,6 @@ const productMaterials: Record<string, string[]> = {
   tshirt: ['cotton', 'polyester'],
 }
 
-const views = ['front', 'back', 'side']
-
 type LayoutMode = 'center' | 'tile' | 'corner' | 'band' | 'free'
 
 const blendModeLabels: Record<string, string> = {
@@ -281,7 +279,7 @@ export default function CustomizeProduct() {
   const [rotation, setRotation] = useState(getInitialParams(getInitialProduct()).rotation)
   const [positionX, setPositionX] = useState(getInitialParams(getInitialProduct()).positionX)
   const [positionY, setPositionY] = useState(getInitialParams(getInitialProduct()).positionY)
-  const [currentView, setCurrentView] = useState('front')
+
   const [blendMode, setBlendMode] = useState(getInitialParams(getInitialProduct()).blendMode)
   const [selectedCategory, setSelectedCategory] = useState(getInitialCategory())
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
@@ -310,7 +308,7 @@ export default function CustomizeProduct() {
   const [hue, setHue] = useState(210)
   const [lightness, setLightness] = useState(45)
   const [patternRenderLimit, setPatternRenderLimit] = useState(12)
-  const [showCompare, setShowCompare] = useState(false)
+
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
   const [activeTab, setActiveTab] = useState<'pattern' | 'text'>('pattern')
@@ -1316,39 +1314,6 @@ export default function CustomizeProduct() {
                     <span className="w-6 h-6 bg-ming-yellow/50 rounded-sm flex items-center justify-center text-deep-blue mr-2 text-sm">览</span>
                     效果预览
                   </h2>
-                  
-                  <div className="flex gap-2 z-10">
-                    {/* 有 3D 配置的产品不显示对比/视角按钮 */}
-                    {!has3DConfig(selectedProduct) && (
-                      <>
-                        <button
-                          onClick={() => setShowCompare(!showCompare)}
-                          className={`px-3 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
-                            showCompare
-                              ? 'bg-deep-blue text-rice-paper shadow-sm'
-                              : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-deep-blue-light'
-                          }`}
-                          style={{ zIndex: 10 }}
-                        >
-                          {showCompare ? '关闭对比' : '对比原图'}
-                        </button>
-                        {views.map((view) => (
-                          <button
-                            key={view}
-                            onClick={() => setCurrentView(view)}
-                            className={`px-3 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
-                              currentView === view
-                                ? 'bg-palace-red text-rice-paper shadow-sm'
-                                : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                            }`}
-                            style={{ zIndex: 10 }}
-                          >
-                            {view === 'front' ? '正面' : view === 'back' ? '背面' : '侧面'}
-                          </button>
-                        ))}
-                      </>
-                    )}
-                  </div>
                 </div>
                 
                 <div className="relative" ref={previewContainerRef} id="preview-container">
@@ -1396,155 +1361,70 @@ export default function CustomizeProduct() {
                       <p className="font-song text-deep-blue-light">正在加载 3D 模型…</p>
                     </div>
                   ) : (
-                    /* ===== 原来的 2D 预览逻辑（保持不变） ===== */
+                    /* ===== 原来的 2D 预览逻辑 ===== */
                     <>
-                      {showCompare ? (
-                        <div className="flex">
-                          {/* 原图侧 */}
-                          <div className="flex-1 relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden">
-                            <div className="absolute inset-0 bg-ink-wash opacity-10" />
-                            <div className="absolute top-2 left-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
-                              <p className="font-song text-xs text-deep-blue">原图</p>
-                            </div>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <img
-                                src={currentProduct?.image}
-                                alt={currentProduct?.name}
-                                className="w-48 h-auto object-contain"
-                                draggable={false}
-                                onDragStart={(e) => e.preventDefault()}
-                              />
-                            </div>
-                          </div>
+                      <div
+                        className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden"
+                        style={{ touchAction: 'none' }}
+                        onClick={() => setSelectedElement(null)}
+                      >
+                        <div className="absolute inset-0 bg-ink-wash opacity-10" />
 
-                          {/* 定制效果侧 */}
-                          <div
-                            className="flex-1 relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden"
-                            style={{ touchAction: 'none' }}
-                            onClick={() => setSelectedElement(null)}
-                          >
-                            <div className="absolute inset-0 bg-ink-wash opacity-10" />
-                            <div className="absolute top-2 left-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
-                              <p className="font-song text-xs text-deep-blue">定制效果</p>
-                            </div>
-
-                            <div
-                              className="absolute inset-0 flex items-center justify-center"
+                        <div
+                          className="absolute inset-0 flex items-center justify-center"
+                          onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
+                        >
+                          <div className="relative" ref={productBoxRef}>
+                            <img
+                              src={currentProduct?.image}
+                              alt={currentProduct?.name}
+                              className="w-48 h-auto object-contain"
+                              draggable={false}
+                              onDragStart={(e) => e.preventDefault()}
                               onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
-                            >
-                              <div className="relative" ref={productBoxRef}>
-                                <img
-                                  src={currentProduct?.image}
-                                  alt={currentProduct?.name}
-                                  className="w-48 h-auto object-contain"
-                                  draggable={false}
-                                  onDragStart={(e) => e.preventDefault()}
-                                  onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
-                                />
-                                {selectedPatternImage && (
-                                  <PatternRenderer
-                                    layoutMode={layoutMode}
-                                    patternImage={selectedPatternImage}
-                                    scale={scale}
-                                    rotation={rotation}
-                                    positionX={positionX}
-                                    positionY={positionY}
-                                    blendMode={blendMode}
-                                    isSelected={selectedElement === 'pattern'}
-                                    onSelect={() => setSelectedElement('pattern')}
-                                    onMouseDown={handleMouseDown}
-                                    onTouchStart={handleTouchStart}
-                                    onTouchMove={handleTouchMove}
-                                    imageSize="small"
-                                  />
-                                )}
-                                {textOverlay && (
-                                  <DraggableText
-                                    text={textOverlay}
-                                    font={textFont}
-                                    fontSize={textSize}
-                                    positionX={textPositionX}
-                                    positionY={textPositionY}
-                                    rotation={textRotation}
-                                    isSelected={selectedElement === 'text'}
-                                    onSelect={() => setSelectedElement('text')}
-                                    onPositionChange={(x, y) => {
-                                      setTextPositionX(x)
-                                      setTextPositionY(y)
-                                    }}
-                                    onSizeChange={setTextSize}
-                                    onRotationChange={setTextRotation}
-                                    containerRef={productBoxRef}
-                                  />
-                                )}
-                              </div>
-                            </div>
+                            />
+                            {selectedPatternImage && (
+                              <PatternRenderer
+                                layoutMode={layoutMode}
+                                patternImage={selectedPatternImage}
+                                scale={scale}
+                                rotation={rotation}
+                                positionX={positionX}
+                                positionY={positionY}
+                                blendMode={blendMode}
+                                isSelected={selectedElement === 'pattern'}
+                                onSelect={() => setSelectedElement('pattern')}
+                                onMouseDown={handleMouseDown}
+                                onTouchStart={handleTouchStart}
+                                onTouchMove={handleTouchMove}
+                                imageSize="large"
+                              />
+                            )}
+                            {textOverlay && (
+                              <DraggableText
+                                text={textOverlay}
+                                font={textFont}
+                                fontSize={textSize}
+                                positionX={textPositionX}
+                                positionY={textPositionY}
+                                rotation={textRotation}
+                                isSelected={selectedElement === 'text'}
+                                onSelect={() => setSelectedElement('text')}
+                                onPositionChange={(x, y) => {
+                                  setTextPositionX(x)
+                                  setTextPositionY(y)
+                                }}
+                                onSizeChange={setTextSize}
+                                onRotationChange={setTextRotation}
+                                containerRef={productBoxRef}
+                              />
+                            )}
                           </div>
                         </div>
-                      ) : (
-                        <div
-                          className="relative aspect-[3/4] bg-gradient-to-b from-rice-paper-dark to-rice-paper rounded-sm overflow-hidden"
-                          style={{ touchAction: 'none' }}
-                          onClick={() => setSelectedElement(null)}
-                        >
-                          <div className="absolute inset-0 bg-ink-wash opacity-10" />
 
-                          <div
-                            className="absolute inset-0 flex items-center justify-center"
-                            onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
-                          >
-                            <div className="relative" ref={productBoxRef}>
-                              <img
-                                src={currentProduct?.image}
-                                alt={currentProduct?.name}
-                                className="w-48 h-auto object-contain"
-                                draggable={false}
-                                onDragStart={(e) => e.preventDefault()}
-                                onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
-                              />
-                              {selectedPatternImage && (
-                                <PatternRenderer
-                                  layoutMode={layoutMode}
-                                  patternImage={selectedPatternImage}
-                                  scale={scale}
-                                  rotation={rotation}
-                                  positionX={positionX}
-                                  positionY={positionY}
-                                  blendMode={blendMode}
-                                  isSelected={selectedElement === 'pattern'}
-                                  onSelect={() => setSelectedElement('pattern')}
-                                  onMouseDown={handleMouseDown}
-                                  onTouchStart={handleTouchStart}
-                                  onTouchMove={handleTouchMove}
-                                  imageSize="large"
-                                />
-                              )}
-                              {textOverlay && (
-                                <DraggableText
-                                  text={textOverlay}
-                                  font={textFont}
-                                  fontSize={textSize}
-                                  positionX={textPositionX}
-                                  positionY={textPositionY}
-                                  rotation={textRotation}
-                                  isSelected={selectedElement === 'text'}
-                                  onSelect={() => setSelectedElement('text')}
-                                  onPositionChange={(x, y) => {
-                                    setTextPositionX(x)
-                                    setTextPositionY(y)
-                                  }}
-                                  onSizeChange={setTextSize}
-                                  onRotationChange={setTextRotation}
-                                  containerRef={productBoxRef}
-                                />
-                              )}
-                            </div>
-                          </div>
-
-                          {/* 底部信息条（原有） */}
-                          <div className="absolute bottom-3 left-3 right-3 flex flex-col gap-1.5">
-                            {!showCompare && (
-                              <div className="hidden sm:flex sm:items-center sm:gap-4 bg-rice-paper/70 backdrop-blur-sm px-2 py-1 rounded-sm w-fit">
+                        {/* 底部信息条（原有） */}
+                        <div className="absolute bottom-3 left-3 right-3 flex flex-col gap-1.5">
+                          <div className="hidden sm:flex sm:items-center sm:gap-4 bg-rice-paper/70 backdrop-blur-sm px-2 py-1 rounded-sm w-fit">
                                 <span className="font-song text-xs text-deep-blue-light">
                                   <span className="text-deep-blue">大小：{scale}%</span>
                                 </span>
@@ -1555,7 +1435,6 @@ export default function CustomizeProduct() {
                                   <span className="text-deep-blue">叠加：{blendModeLabels[blendMode] || blendMode}</span>
                                 </span>
                               </div>
-                            )}
                             <div className="flex justify-between items-end">
                               <div>
                                 <h3 className="font-shufa text-lg text-deep-blue">{currentProduct?.name}</h3>
@@ -1564,7 +1443,6 @@ export default function CustomizeProduct() {
                             </div>
                           </div>
                         </div>
-                      )}
 
                       <div className="absolute top-2 right-2 bg-rice-paper/90 backdrop-blur-sm px-2 py-1 rounded-sm">
                         <p className="font-song text-xs text-deep-blue-light">
