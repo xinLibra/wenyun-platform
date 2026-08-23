@@ -16,12 +16,27 @@ export default function MyWorksPage() {
   const [editTitle, setEditTitle] = useState('')
 
   useEffect(() => {
+    let mounted = true
+    let timeoutId: ReturnType<typeof setTimeout>
+
     const fetchWorks = async () => {
       try {
+        // 防御：Supabase 未初始化时直接报错
+        if (!supabase || !supabase.auth) {
+          if (mounted) {
+            setError('系统未正确配置，请联系管理员')
+            setIsLoading(false)
+          }
+          return
+        }
+
         const { data: { session } } = await supabase.auth?.getSession()
         
         if (!session?.user) {
-          navigate('/login')
+          if (mounted) {
+            navigate('/login')
+            setIsLoading(false)
+          }
           return
         }
 
@@ -33,7 +48,7 @@ export default function MyWorksPage() {
 
         if (fetchError) {
           console.error('Fetch works error:', fetchError)
-          setError('获取作品失败，请稍后重试')
+          if (mounted) setError('获取作品失败，请稍后重试')
         } else if (generationsData) {
           const generationIds = generationsData.map((gen: Generation) => gen.id)
           
@@ -55,17 +70,31 @@ export default function MyWorksPage() {
             ...gen,
             favorite_count: favoriteCounts[gen.id] || 0
           }))
-          setGenerations(updatedGenerations)
+          if (mounted) setGenerations(updatedGenerations)
         }
       } catch (err) {
         console.error('Fetch works error:', err)
-        setError('获取作品失败，请稍后重试')
+        if (mounted) setError('获取作品失败，请稍后重试')
       } finally {
-        setIsLoading(false)
+        clearTimeout(timeoutId)
+        if (mounted) setIsLoading(false)
       }
     }
 
+    // 10 秒超时兜底：防止网络或 Supabase 无响应导致一直 loading
+    timeoutId = setTimeout(() => {
+      if (mounted) {
+        setIsLoading(false)
+        setError('加载超时，请检查网络连接或稍后重试')
+      }
+    }, 10000)
+
     fetchWorks()
+
+    return () => {
+      mounted = false
+      clearTimeout(timeoutId)
+    }
   }, [navigate])
 
   const handlePublicToggle = async (generationId: string, currentPublic: boolean) => {
