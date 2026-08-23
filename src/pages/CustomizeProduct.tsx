@@ -14,6 +14,22 @@ import { supabase } from '../lib/supabase'
 import { Product3DViewer } from '../components/Product3DViewer'
 import { loadProduct3DConfig, has3DConfig, COLOR_PALETTE, type Product3DConfig, type PatternAreaKey } from '../config/product3D'
 
+/** 结构化错误序列化：保留 Supabase PostgrestError 的 message/code/details/hint/status，避免 Console 只显示 Error {} */
+function serializeError(error: any) {
+  if (!error) return { raw: error }
+  if (error?.message !== undefined || error?.code !== undefined || error?.status !== undefined) {
+    return {
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+      hint: error?.hint,
+      status: error?.status ?? error?.statusCode ?? error?.status_code,
+      raw: error,
+    }
+  }
+  return { message: String(error), raw: error }
+}
+
 /** HSL → HEX，用于色相/明度滑条 */
 function hslToHex(h: number, s: number, l: number): string {
   s = Math.max(0, Math.min(100, s)) / 100
@@ -723,10 +739,12 @@ export default function CustomizeProduct() {
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('query timeout')), 15000)),
       ])
 
-      if (myWorksResult.error) throw new Error(`作品查询失败: ${myWorksResult.error.message || String(myWorksResult.error)}`)
-      if (favoritesResult.error) throw new Error(`收藏查询失败: ${favoritesResult.error.message || String(favoritesResult.error)}`)
-
-      if (myWorksResult.data) {
+      // 作品与收藏分别处理：一个失败不静默，也不拖垮另一个；作品成功就展示作品
+      let worksFailed = false
+      if (myWorksResult.error) {
+        worksFailed = true
+        console.error('Fetch patterns - works query failed', serializeError(myWorksResult.error))
+      } else if (myWorksResult.data) {
         myWorksResult.data.forEach((work: any) => {
           patterns.push({
             id: work.id,
@@ -737,33 +755,52 @@ export default function CustomizeProduct() {
         })
       }
 
-      const favRecords = favoritesResult.data
-      if (favRecords && favRecords.length > 0) {
-        const generationIds = favRecords.map((f: any) => f.generation_id)
-        const favResult = await supabase
-          .from('generations')
-          .select('id, image_url, params')
-          .in('id', generationIds)
-          .limit(40)
-        if (favResult.error) throw new Error(`收藏作品查询失败: ${favResult.error.message || String(favResult.error)}`)
-        if (favResult.data) {
-          favResult.data.forEach((fav: any) => {
-            if (!patterns.find(p => p.id === fav.id)) {
-              patterns.push({
-                id: fav.id,
-                image_url: fav.image_url,
-                title: fav.params?.title || `收藏作品 #${String(fav.id).slice(0, 8)}`,
-                type: 'favorite',
+      if (favoritesResult.error) {
+        console.error('Fetch patterns - favorites query failed', serializeError(favoritesResult.error))
+      } else {
+        const favRecords = favoritesResult.data
+        if (favRecords && favRecords.length > 0) {
+          const generationIds = favRecords.map((f: any) => f.generation_id)
+          try {
+            const favResult = await supabase
+              .from('generations')
+              .select('id, image_url, params')
+              .in('id', generationIds)
+              .limit(40)
+            if (favResult.error) {
+              console.error('Fetch patterns - favorites detail query failed', serializeError(favResult.error))
+            } else if (favResult.data) {
+              favResult.data.forEach((fav: any) => {
+                if (!patterns.find(p => p.id === fav.id)) {
+                  patterns.push({
+                    id: fav.id,
+                    image_url: fav.image_url,
+                    title: fav.params?.title || `收藏作品 #${String(fav.id).slice(0, 8)}`,
+                    type: 'favorite',
+                  })
+                }
               })
             }
-          })
+          } catch (favErr) {
+            console.error('Fetch patterns - favorites detail query threw', serializeError(favErr))
+          }
         }
+      }
+
+      // 作品查询失败且无任何数据 → 报错态；否则展示已取到的部分结果
+      if (worksFailed && patterns.length === 0) {
+        if (!patternsCacheRef.current?.data) {
+          setFetchError(true)
+        } else {
+          setUserPatterns(patternsCacheRef.current.data)
+        }
+        return
       }
 
       setUserPatterns(patterns)
       patternsCacheRef.current = { userId: sessionUser!.id, ts: Date.now(), data: patterns }
     } catch (err) {
-      console.error('Fetch patterns error:', err)
+      console.error('Fetch patterns error', serializeError(err))
       // 有旧缓存仍展示，无缓存才报错
       if (!patternsCacheRef.current?.data) {
         setFetchError(true)
@@ -913,9 +950,14 @@ export default function CustomizeProduct() {
       if (is3DProduct && viewerCaptureRef.current) {
         previewImage = viewerCaptureRef.current() || undefined
       }
+      const cartProduct = products.find(p => p.id === selectedProduct)
       addToCart({
         productId: selectedProduct,
         generationId: null,
+        // 必填字段：名称/价格/图片，预览失败也绝不写空串导致空白格
+        name: cartProduct?.name,
+        price: cartProduct?.price,
+        image: cartProduct?.image,
         customization: { scale, rotation, positionX, positionY, blendMode, patternImage: selectedPatternImage, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, previewImage },
         quantity: quantity
       })

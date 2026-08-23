@@ -45,7 +45,7 @@ export default function Cart() {
   const selectedItemsList = items.filter(item => selectedItems.has(item.id))
   const totalPrice = selectedItemsList.reduce((sum, item) => {
     const product = products[item.productId]
-    return sum + (parseFloat(product?.price || '0') * item.quantity)
+    return sum + (parseFloat(item.price ?? product?.price ?? '0') * item.quantity)
   }, 0)
 
   const handleCheckout = async () => {
@@ -88,7 +88,7 @@ export default function Cart() {
           product_id: item.productId,
           generation_id: item.generationId,
           image_url: item.customization?.patternImage,
-          product_image: product?.image,
+          product_image: product?.image || item.image,
           customization: item.customization,
           quantity: item.quantity,
           status: 'demo',
@@ -219,23 +219,19 @@ export default function Cart() {
           <div className="space-y-4">
             {items.map((item, index) => {
               const product = products[item.productId]
+              // 渲染兜底：旧脏数据缺字段时也不出现无名空白行
+              const displayName = item.name || product?.name || '未命名商品'
+              const displayPrice = parseFloat(item.price ?? product?.price ?? '0') || 0
+              const fallbackImage = item.image || product?.image
               return (
                 <motion.div
                   key={item.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  className={`relative flex gap-4 p-4 bg-rice-paper rounded-sm border ${selectedItems.has(item.id) ? 'border-palace-red' : 'border-deep-blue-100'}`}
+                  className={`flex gap-3 p-4 bg-rice-paper rounded-sm border ${selectedItems.has(item.id) ? 'border-palace-red' : 'border-deep-blue-100'}`}
                 >
-                  <button
-                    onClick={() => setShowDeleteConfirm(item.id)}
-                    className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center bg-palace-red text-rice-paper rounded-full hover:bg-palace-red-dark transition-colors z-10"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                  <label className="flex items-center justify-center flex-shrink-0 cursor-pointer pt-10">
+                  <label className="flex items-start justify-center flex-shrink-0 cursor-pointer pt-6">
                     <input
                       type="checkbox"
                       checked={selectedItems.has(item.id)}
@@ -248,7 +244,7 @@ export default function Cart() {
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
                           <img
                             src={item.customization.previewImage}
-                            alt={product?.name}
+                            alt={displayName}
                             className="w-full h-full object-cover"
                           />
                         </div>
@@ -270,36 +266,53 @@ export default function Cart() {
                           textPositionX={item.customization.textPositionX || 50}
                           textPositionY={item.customization.textPositionY || 85}
                         />
-                      ) : (
+                      ) : fallbackImage ? (
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
                           <img
-                            src={product?.image}
-                            alt={product?.name}
+                            src={fallbackImage}
+                            alt={displayName}
                             className="w-full h-full object-cover"
                           />
                         </div>
+                      ) : (
+                        <div className="w-24 h-24 bg-deep-blue-50 rounded-sm overflow-hidden flex-shrink-0 flex flex-col items-center justify-center">
+                          <svg className="w-8 h-8 text-deep-blue-light" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span className="text-[10px] font-song text-deep-blue-light mt-1">暂无图</span>
+                        </div>
                       )}
                     </div>
-                  <div className="flex-1">
-                    <p className="font-shufa text-lg text-deep-blue mb-1">{product?.name}</p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="w-8 h-8 flex items-center justify-center bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue hover:bg-deep-blue-100 transition-colors"
-                        >
-                          -
-                        </button>
-                        <span className="w-8 text-center font-song text-deep-blue">{item.quantity}</span>
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="w-8 h-8 flex items-center justify-center bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue hover:bg-deep-blue-100 transition-colors"
-                        >
-                          +
-                        </button>
-                      </div>
-                      <span className="font-shufa text-palace-red text-lg">¥{(parseFloat(product?.price || '0') * item.quantity).toFixed(0)}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-shufa text-lg text-deep-blue mb-2 truncate" title={displayName}>{displayName}</p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        className="w-8 h-8 flex items-center justify-center bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue hover:bg-deep-blue-100 transition-colors"
+                      >
+                        -
+                      </button>
+                      <span className="w-8 text-center font-song text-deep-blue">{item.quantity}</span>
+                      <button
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        className="w-8 h-8 flex items-center justify-center bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue hover:bg-deep-blue-100 transition-colors"
+                      >
+                        +
+                      </button>
                     </div>
+                  </div>
+                  {/* 右列：价格在上、删除在下，独立分区互不遮挡 */}
+                  <div className="flex flex-col items-end justify-between flex-shrink-0 pl-2">
+                    <span className="font-shufa text-palace-red text-lg whitespace-nowrap">¥{(displayPrice * item.quantity).toFixed(0)}</span>
+                    <button
+                      onClick={() => setShowDeleteConfirm(item.id)}
+                      title="删除商品"
+                      className="w-8 h-8 flex items-center justify-center bg-palace-red text-rice-paper rounded-full hover:bg-palace-red-dark transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
                 </motion.div>
               )

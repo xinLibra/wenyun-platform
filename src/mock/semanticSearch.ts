@@ -1,92 +1,71 @@
-interface PatternRecommendation {
+import { searchCulturalSemantics, type CulturalSemantic } from '../config/culturalSemantics'
+
+export interface PatternRecommendation {
   patternId: string
   patternName: string
   imageUrl: string
   meaning: string
   region: string
   matchScore: number
+  /** 纹样所属主题（floral/beast），用于自动勾选主题 */
+  themeId?: 'floral' | 'beast'
 }
 
-const semanticRules: Record<
-  string,
-  { matchedTags: string[]; recommendations: PatternRecommendation[] }
-> = {
-  毕业: {
-    matchedTags: ['毕业', '成长', '牡丹纹'],
-    recommendations: [
-      {
-        patternId: 'mock-peony-001',
-        patternName: '牡丹纹',
-        imageUrl: '/placeholder-pattern-a.png',
-        meaning: '富贵吉祥，寓意圆满美好',
-        region: '江南地区传统纹样',
-        matchScore: 95,
-      },
-    ],
-  },
-  新婚: {
-    matchedTags: ['新婚', '喜庆', '龙凤纹'],
-    recommendations: [
-      {
-        patternId: 'mock-dragon-phoenix-001',
-        patternName: '龙凤纹',
-        imageUrl: '/placeholder-pattern-b.png',
-        meaning: '美满姻缘，寓意夫妻和谐',
-        region: '传统吉祥纹样',
-        matchScore: 92,
-      },
-    ],
-  },
-  婚礼: {
-    matchedTags: ['婚礼', '喜庆', '龙凤纹'],
-    recommendations: [
-      {
-        patternId: 'mock-dragon-phoenix-002',
-        patternName: '龙凤纹',
-        imageUrl: '/placeholder-pattern-b.png',
-        meaning: '龙凤呈祥，喜庆成双',
-        region: '传统吉祥纹样',
-        matchScore: 93,
-      },
-    ],
-  },
-  生日: {
-    matchedTags: ['生日', '祝福', '鹤纹'],
-    recommendations: [
-      {
-        patternId: 'mock-crane-001',
-        patternName: '鹤纹',
-        imageUrl: '/placeholder-pattern-a.png',
-        meaning: '松鹤延年，寓意长寿吉祥',
-        region: '传统民俗纹样',
-        matchScore: 90,
-      },
-    ],
-  },
-  寿: {
-    matchedTags: ['寿辰', '长寿', '鹤纹'],
-    recommendations: [
-      {
-        patternId: 'mock-crane-002',
-        patternName: '鹤纹',
-        imageUrl: '/placeholder-pattern-a.png',
-        meaning: '仙鹤祥瑞，康宁长寿',
-        region: '传统民俗纹样',
-        matchScore: 91,
-      },
-    ],
-  },
+interface SemanticSearchResult {
+  matchedTags: string[]
+  recommendations: PatternRecommendation[]
 }
 
-// 模拟异步接口调用，含随机延迟，模拟真实网络请求体验
-export async function mockSemanticSearch(query: string) {
-  await new Promise((resolve) => setTimeout(resolve, 600))
+/** 根据 patternId 选择占位图（两个占位图交替，避免列表千篇一律） */
+function placeholderFor(patternId: string): string {
+  let hash = 0
+  for (let i = 0; i < patternId.length; i++) {
+    hash = (hash * 31 + patternId.charCodeAt(i)) & 0x7fffffff
+  }
+  return hash % 2 === 0 ? '/placeholder-pattern-a.png' : '/placeholder-pattern-b.png'
+}
 
-  const matchedKey = Object.keys(semanticRules).find((key) => query.includes(key))
+/**
+ * 场景关键词 → 文化语义推荐
+ * 从 culturalSemantics 表中做「包含匹配」，返回最多 8 条推荐。
+ * 推荐按「场景 + 纹样」去重（同一纹样同一场景只出现一次），
+ * 并优先展示更符合常见赠礼场景的条目。
+ */
+export async function mockSemanticSearch(query: string): Promise<SemanticSearchResult> {
+  // 保留少量异步体验，与旧实现一致
+  await new Promise((resolve) => setTimeout(resolve, 400))
 
-  if (!matchedKey) {
+  const q = (query || '').trim()
+  if (!q) return { matchedTags: [], recommendations: [] }
+
+  const hits = searchCulturalSemantics(q)
+  if (hits.length === 0) {
     return { matchedTags: [], recommendations: [] }
   }
 
-  return semanticRules[matchedKey]
+  const seen = new Set<string>()
+  const recs: PatternRecommendation[] = []
+  for (const hit of hits) {
+    const key = `${hit.patternId}:${hit.scene}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    recs.push({
+      patternId: hit.patternId,
+      patternName: hit.patternLabel,
+      imageUrl: placeholderFor(hit.patternId),
+      meaning: hit.meaning,
+      region: hit.scene,
+      matchScore: Math.max(80, 100 - recs.length * 3),
+      themeId: hit.themeId,
+    })
+    if (recs.length >= 8) break
+  }
+
+  // matchedTags：命中场景的去重集合，供「识别到」标签展示
+  const sceneTags = [...new Set(hits.map((h: CulturalSemantic) => h.scene))].slice(0, 5)
+
+  return {
+    matchedTags: sceneTags,
+    recommendations: recs,
+  }
 }

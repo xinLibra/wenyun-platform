@@ -70,9 +70,8 @@ export const SUBCATEGORY_PANTONE_MAP: Record<string, SubcategoryPantone> = {
   lion:           { pantoneCode: '12-0752 TCX', label: '金色',   englishName: 'golden yellow',    promptTag: 'monochrome-black', reason: '金狮护佑' },
   tiger:          { pantoneCode: '17-1462 TCX', label: '橙红',   englishName: 'orange red',       promptTag: 'monochrome-black', reason: '虎虎生威' },
   dragon_phoenix: { pantoneCode: '18-1662 TCX', label: '宫墙红', englishName: 'palace red',       promptTag: 'multicolor',      reason: '龙凤呈祥' },
-  beast_other:    { pantoneCode: '18-1662 TCX', label: '宫墙红', englishName: 'palace red',       promptTag: 'monochrome-black', reason: '通用瑞兽兜底' },
 
-  // ===== 花卉（9 条，单色系为主，按花型自然属性选色） =====
+  // ===== 花卉（单色系为主，按花型自然属性选色） =====
   // 牡丹：花团锦簇，藕粉色
   peony:                { pantoneCode: '16-1450 TCX', label: '藕粉',   englishName: 'light pink',       promptTag: 'monochrome-black', reason: '牡丹国色，柔美' },
   // 菊花：金秋盛放，金色
@@ -89,6 +88,12 @@ export const SUBCATEGORY_PANTONE_MAP: Record<string, SubcategoryPantone> = {
   interlocking_floral:  { pantoneCode: '16-0541 TCX', label: '松石绿', englishName: 'turquoise green',  promptTag: 'monochrome-black', reason: '缠枝连绵，松石绿' },
   // 植物：草木青绿
   plant:                { pantoneCode: '15-1260 TCX', label: '嫩绿',   englishName: 'fresh green',      promptTag: 'monochrome-black', reason: '草木青葱，嫩绿' },
+  // 兰花：空谷幽兰，月白/淡紫
+  orchid:               { pantoneCode: '14-3904 TCX', label: '淡紫',   englishName: 'soft lilac',       promptTag: 'monochrome-black', reason: '空谷幽兰，淡雅' },
+  // 芙蓉：朝开暮合，芙蓉出水，粉色
+  furong:               { pantoneCode: '16-1720 TCX', label: '桃粉',   englishName: 'peach pink',       promptTag: 'monochrome-black', reason: '芙蓉娇艳，桃粉' },
+  // 石榴花：多子多福，中国红
+  pomegranate_flower:   { pantoneCode: '18-1662 TCX', label: '宫墙红', englishName: 'palace red',       promptTag: 'monochrome-black', reason: '石榴多子，朱红' },
   // 其他花卉：通用粉色兜底
   floral_other:         { pantoneCode: '16-1450 TCX', label: '藕粉',   englishName: 'light pink',       promptTag: 'monochrome-black', reason: '通用花卉，藕粉兜底' },
 }
@@ -142,7 +147,6 @@ export const DEFAULT_PRESET: GenerationPreset = {
  * │ lion            │ 狮纹     │ mirror 镜像   │ monochrome black │
  * │ dragon_phoenix  │ 龙凤纹   │ mirror 镜像   │ multicolor       │
  * │ tiger           │ 虎纹     │ none  无规则  │ monochrome black │
- * │ beast_other     │ 其他瑞兽 │ none  无规则  │ monochrome black │
  * └─────────────────┴──────────┴───────────────┴──────────────────┘
  *
  * 麒麟 qilin：patternTaxonomy 无 qilin 子类，不强行加路由（按需求第 4 条）。
@@ -221,14 +225,6 @@ export const GENERATION_PRESETS: Record<string, GenerationPreset> = {
     culturalIntensity: 85,
     colorScheme: COLOR_MONO_BLACK,
   },
-  beast_other: {
-    arrangement: 'single',
-    symmetry: 'none',
-    complexity: 55,
-    textureDetail: 25,
-    culturalIntensity: 85,
-    colorScheme: COLOR_MONO_BLACK,
-  },
 
   // ===== 花卉子类默认值 =====
   // 配色：每个子类对应一个具体潘通色号（见 SUBCATEGORY_PANTONE_MAP），不再使用 multicolor 语义预设
@@ -296,6 +292,30 @@ export const GENERATION_PRESETS: Record<string, GenerationPreset> = {
     textureDetail: 30,
     culturalIntensity: 70,
     colorScheme: { mode: 'pantone', pantone: '15-1260 TCX' },
+  },
+  orchid: {
+    arrangement: 'single',
+    symmetry: 'none',
+    complexity: 50,
+    textureDetail: 25,
+    culturalIntensity: 70,
+    colorScheme: { mode: 'pantone', pantone: '14-3904 TCX' },
+  },
+  furong: {
+    arrangement: 'single',
+    symmetry: 'mirror',
+    complexity: 55,
+    textureDetail: 28,
+    culturalIntensity: 70,
+    colorScheme: { mode: 'pantone', pantone: '16-1720 TCX' },
+  },
+  pomegranate_flower: {
+    arrangement: 'single',
+    symmetry: 'mirror',
+    complexity: 55,
+    textureDetail: 28,
+    culturalIntensity: 75,
+    colorScheme: { mode: 'pantone', pantone: '18-1662 TCX' },
   },
   floral_other: {
     arrangement: 'single',

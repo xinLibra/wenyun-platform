@@ -162,6 +162,34 @@ export const LORA_MAP: LoraMapEntry[] = [
     loraFile: 'ICH_peony_pattern_lora_v7_clear',
     loraWeight: FLOWER_LORA_WEIGHT,
   },
+  // 新增花卉子类（2026-08-23）：暂无专属 LoRA，只写 trigger，不追加 <lora:...> 标签
+  {
+    subcategoryId: 'orchid',
+    themeId: 'floral',
+    subLabelZh: '兰花纹',
+    subLabelEn: 'orchid',
+    trigger: 'ichpattern_orchid',
+    loraFile: null,
+    loraWeight: FLOWER_LORA_WEIGHT,
+  },
+  {
+    subcategoryId: 'furong',
+    themeId: 'floral',
+    subLabelZh: '芙蓉花纹',
+    subLabelEn: 'hibiscus',
+    trigger: 'ichpattern_furong',
+    loraFile: null,
+    loraWeight: FLOWER_LORA_WEIGHT,
+  },
+  {
+    subcategoryId: 'pomegranate_flower',
+    themeId: 'floral',
+    subLabelZh: '石榴花纹',
+    subLabelEn: 'pomegranate flower',
+    trigger: 'ichpattern_pomegranate_flower',
+    loraFile: null,
+    loraWeight: FLOWER_LORA_WEIGHT,
+  },
 
   // ============ 瑞兽（9 个子类挂载专属 LoRA） ============
   {
@@ -253,16 +281,6 @@ export const LORA_MAP: LoraMapEntry[] = [
     trigger: 'ichpattern_lion',
     // v1 有报告（源 outputs/lion_v1/）
     loraFile: 'ICH_lion_pattern_lora_v1',
-    loraWeight: DEFAULT_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'beast_other',
-    themeId: 'beast',
-    subLabelZh: '其他瑞兽',
-    subLabelEn: 'beast',
-    trigger: 'ichpattern_beast',
-    // 通用瑞兽 LoRA 兜底（未在 9 个专属 LoRA 覆盖范围内的瑞兽子类时使用）
-    loraFile: 'ICH_beast_pattern_lora-000001',
     loraWeight: DEFAULT_LORA_WEIGHT,
   },
 ]

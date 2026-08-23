@@ -10,6 +10,8 @@ interface PatternRecommendation {
   meaning: string
   region: string
   matchScore: number
+  /** 纹样所属主题（floral/beast），用于点击后自动切主题 */
+  themeId?: 'floral' | 'beast'
 }
 
 interface PromptInputProps {
@@ -224,26 +226,53 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
       const result = await onSemanticSearch(prompt.trim())
       setMatchedTags(result.matchedTags)
       setRecommendations(result.recommendations)
+      // 默认选中第一条并立即应用：切主题/勾子类/寓意并入标签
+      if (result.recommendations.length > 0) {
+        const first = result.recommendations[0]
+        const firstKey = `${first.patternId}:${first.region}`
+        // 避免重复点击「获取场景推荐」时对同一条重复追加
+        if (selectedRecommendationId !== firstKey) {
+          applyRecommendation(first)
+        }
+      }
     } finally {
       setIsSearching(false)
     }
   }
 
+  /** 应用一条推荐：保留用户原文，把「纹样名 + 寓意」并入输入框并直接解析，
+   *  让父组件切主题/勾子类；寓意随 rawText 并入 prompt 标签 */
+  const applyRecommendation = (rec: PatternRecommendation) => {
+    previousPromptRef.current = prompt
+    const base = prompt.trim()
+    const text = base
+      ? `${base}，${rec.patternName}，${rec.meaning}`
+      : `${rec.patternName}，${rec.meaning}`
+    setPrompt(text)
+    setJustSelectedRecommendation(true)
+    setSelectedRecommendationId(`${rec.patternId}:${rec.region}`)
+    setIsParsed(true)
+    onParseComplete?.(true)
+    onParse({
+      dimension: {
+        mainTheme: rec.themeId === 'beast' ? 'beast' : rec.themeId === 'floral' ? 'floral' : undefined,
+        subcategory: rec.patternId,
+      } as any,
+      rawText: text,
+    })
+  }
+
   const handleSelectRecommendation = (rec: PatternRecommendation) => {
-    if (selectedRecommendationId === rec.patternId) {
+    if (selectedRecommendationId === `${rec.patternId}:${rec.region}`) {
+      // 再次点击同一推荐：撤销应用，恢复用户原文
       setPrompt(previousPromptRef.current)
       setSelectedRecommendationId(null)
       setJustSelectedRecommendation(false)
-      return
-    }
-    previousPromptRef.current = prompt
-    setPrompt(`${rec.patternName}，${rec.meaning}`)
-    setJustSelectedRecommendation(true)
-    setSelectedRecommendationId(rec.patternId)
-    if (isParsed) {
       setIsParsed(false)
       onParseComplete?.(false)
+      return
     }
+    applyRecommendation(rec)
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -273,7 +302,7 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
         >
           <span className="text-palace-red">👉</span>
           <span className="font-song text-sm text-palace-red">
-            已为您填入推荐描述，请点击下方「解析」按钮，自动勾选对应筛选项
+            已应用该推荐：自动切换主题并勾选对应纹样，寓意已并入描述标签
           </span>
         </motion.div>
       )}
@@ -335,10 +364,10 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
       {recommendations.length > 0 && (
         <div className="mt-3 space-y-2">
           {recommendations.map((rec) => {
-            const isApplied = selectedRecommendationId === rec.patternId
+            const isApplied = selectedRecommendationId === `${rec.patternId}:${rec.region}`
             return (
               <div
-                key={rec.patternId}
+                key={`${rec.patternId}:${rec.region}`}
                 onClick={() => handleSelectRecommendation(rec)}
                 className={`flex gap-3 p-3 bg-rice-paper rounded-sm border cursor-pointer transition-colors ${
                   isApplied
@@ -358,6 +387,11 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
                     </h4>
                     <span className="text-xs font-song text-palace-red flex-shrink-0 ml-2">
                       匹配 {rec.matchScore}%
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[11px] font-song bg-deep-blue-50 text-deep-blue px-1.5 py-0.5 rounded-sm border border-deep-blue-100">
+                      {rec.region}
                     </span>
                   </div>
                   <p className="font-song text-xs text-deep-blue-light">{rec.meaning}</p>

@@ -57,7 +57,7 @@ function normalizePantone(code: string, opts: { stripTcx?: boolean } = {}): stri
  */
 const PANTONE_HEX_MAP: Record<string, string> = {
   // 瑞兽
-  '18-1662 TCX': '#C3423F', // 宫墙红 dragon/phoenix_bird/dragon_phoenix/beast_other
+  '18-1662 TCX': '#C3423F', // 宫墙红 dragon/phoenix_bird/dragon_phoenix
   '19-4052 TCX': '#26364B', // 深藏青 crane
   '16-1450 TCX': '#E8B4B8', // 藕粉 butterfly
   '16-4725 TCX': '#1565C0', // 钴蓝 peacock
