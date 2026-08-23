@@ -1345,12 +1345,6 @@ export default function CustomizeProduct() {
                             : undefined
                         }
                         captureRef={viewerCaptureRef}
-                        layoutMode={layoutMode}
-                        patternScale={scale}
-                        offsetX={positionX}
-                        offsetY={positionY}
-                        patternRotation={rotation}
-                        blendMode={blendMode as 'normal' | 'overlay' | 'multiply' | 'screen'}
                       />
 
                       {/* 底部信息条 */}
