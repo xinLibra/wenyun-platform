@@ -51,18 +51,6 @@ function getTextureTargets(
   return []
 }
 
-function getColorTargets(
-  colorMaterialName: string,
-  colorTargetMaterials: TextureTargetMaterials | undefined,
-  colorArea: PatternAreaKey | undefined
-): string[] | null {
-  if (!colorArea) return null
-  const mapped = colorTargetMaterials?.[colorArea]
-  if (mapped?.length) return mapped
-  if (colorMaterialName) return [colorMaterialName]
-  return null
-}
-
 const loggedModels = new Set<string>()
 
 function Model({
@@ -139,6 +127,11 @@ function Model({
       }
     })
     console.log(`[3D Viewer] ${modelUrl} 材质/节点清单:\n${meshInfo.join('\n')}`)
+    // 打印当前 targets 和 colorMaterials 供调试
+    const targets = getTextureTargets(textureTargetMaterial, textureTargetMaterials, patternArea)
+    console.log(`[3D Viewer] patternArea=${patternArea} targets=`, targets)
+    console.log(`[3D Viewer] colorMaterials=`, colorMaterials.map(cm => `${cm.name}=${cm.materialName}`))
+    console.log(`[3D Viewer] colorMap=`, colorMap)
   }, [clonedScene, modelUrl])
 
   useEffect(() => {
@@ -164,6 +157,18 @@ function Model({
         if (!oldMat) return
 
         const mat = oldMat.clone() as THREE.MeshStandardMaterial
+        // 缓存初始色：纯黑/过暗一律当成浅灰，避免贴图/清色后整件变黑
+        if (!(mat as any).userData.initialColor) {
+          const c = mat.color ? mat.color.clone() : new THREE.Color('#f0f0f0')
+          // 不用 getLuminance（旧版 three 没有）；用 r/g/b 判断过暗
+          const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+          if (c.getHex() === 0x000000 || lum < 0.08) {
+            c.set('#f0f0f0')
+          }
+          ;(mat as any).userData.initialColor = c
+        }
+        const initialColor = (mat as any).userData.initialColor as THREE.Color
+
         if (Array.isArray(mesh.material)) {
           ;(mesh.material as THREE.Material[])[idx] = mat
         } else {
@@ -180,16 +185,15 @@ function Model({
           return names.some((n) => {
             if (!n) return false
             if (n === t) return true
-            if (n.length < 3 || t.length < 3) return false
+            // 对中文名或短名，放宽 includes 条件（不限制 3 字符）
+            const minLen = /[\u4e00-\u9fff]/.test(t) || /[\u4e00-\u9fff]/.test(n) ? 2 : 3
+            if (n.length < minLen || t.length < minLen) return false
             return n.includes(t) || t.includes(n)
           })
         }
 
         const hitTextureTarget = targets.some((t) => matchTarget(t))
 
-        if (mat.color && mat.color.getHex() === 0x000000) {
-          mat.color.set('#f0f0f0')
-        }
         if (typeof mat.metalness === 'number') {
           mat.metalness = Math.min(mat.metalness, 0.15)
         }
@@ -197,14 +201,15 @@ function Model({
           mat.roughness = Math.max(mat.roughness, 0.55)
         }
 
-        // ===== 纹样贴图：命中目标 → 贴 + color=白，否则清除 =====
+        // ===== 纹样贴图 =====
         if (texture && hitTextureTarget) {
           mat.map = texture
-          mat.color.set('#ffffff')
+          mat.color.set('#ffffff') // 贴图区必须白，否则乘脏
           mat.needsUpdate = true
-        } else if (!hitTextureTarget && mat.map === texture) {
+        } else {
           mat.map = null
-          mat.color.set('#f0f0f0')
+          // 无贴图时先回到安全底色（已修正的 initialColor），后面换色逻辑再覆盖
+          mat.color.copy(initialColor)
           mat.needsUpdate = true
         }
 
@@ -217,7 +222,7 @@ function Model({
           userColored = true
           const targetColor = hexToColor(hex)
           if (mat.map) {
-            // 有贴图：不要用 color 乘脏贴图，用 emissive 做轻微着色
+            // 有贴图：不用 color 乘脏贴图，用 emissive 轻微着色
             mat.emissive.copy(targetColor)
             mat.emissiveIntensity = 0.2
           } else {
@@ -228,14 +233,11 @@ function Model({
           mat.needsUpdate = true
         })
 
-        if (!userColored && mat.color) {
-          const hsl = { h: 0, s: 0, l: 0 }
-          mat.color.getHSL(hsl)
-          if (hsl.l < 0.35) {
-            mat.color.set(mat.map ? '#ffffff' : '#e8e8e8')
+        // 未被用户换色的材质：恢复 initialColor + 清 emissive
+        if (!userColored) {
+          if (!mat.map) {
+            mat.color.copy(initialColor)
           }
-        }
-        if (mat.emissive && !userColored) {
           mat.emissive.set(0x000000)
           mat.emissiveIntensity = 0
         }
@@ -316,6 +318,7 @@ export function Product3DViewer({
 
         <Suspense fallback={<LoaderFallback />}>
           <Model
+            key={`${modelUrl}-${patternImage || 'none'}`}
             modelUrl={modelUrl}
             textureTargetMaterial={textureTargetMaterial}
             textureTargetMaterials={textureTargetMaterials}

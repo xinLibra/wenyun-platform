@@ -298,8 +298,14 @@ export default function CustomizeProduct() {
     }
     return 'free'
   })
-  const [patternArea, setPatternArea] = useState<PatternAreaKey>('chest')
-  const [colorArea, setColorArea] = useState<PatternAreaKey | undefined>(undefined)
+    const [patternArea, setPatternArea] = useState<PatternAreaKey>(() => {
+    const pid = safeGetItem('selected_product_id') || products[0]?.id || ''
+    return pid === 'tote' ? 'center' : 'chest'
+  })
+    const [colorArea, setColorArea] = useState<PatternAreaKey | undefined>(() => {
+    const pid = safeGetItem('selected_product_id') || products[0]?.id || ''
+    return pid === 'tote' ? 'center' : undefined
+  })
   const [activeColorPart, setActiveColorPart] = useState<string | null>(null)
   const [hue, setHue] = useState(210)
   const [lightness, setLightness] = useState(45)
@@ -348,6 +354,39 @@ export default function CustomizeProduct() {
     setToastMessage(message)
     setShowToast(true)
     setTimeout(() => setShowToast(false), 2000)
+  }
+
+    /** 全局清除纹样：当前预览 + 所有产品 session/草稿 */
+  const handleClearPattern = () => {
+    setSelectedPatternImage(null)
+    setSelectedElement(null)
+
+    try {
+      sessionStorage.removeItem('customize:selectedPattern:global')
+      sessionStorage.removeItem(`customize:selectedPattern:${selectedProduct}`)
+      products.forEach((p) => {
+        sessionStorage.removeItem(`customize:selectedPattern:${p.id}`)
+      })
+    } catch { /* ignore */ }
+
+    try {
+      localStorage.removeItem('last_generated_pattern')
+    } catch { /* ignore */ }
+
+    products.forEach((p) => {
+      const draftKey = `product_config_draft_${p.id}`
+      const raw = safeGetItem(draftKey)
+      if (!raw) return
+      try {
+        const draft = JSON.parse(raw)
+        if (draft && 'patternImage' in draft) {
+          draft.patternImage = null
+          safeSetItem(draftKey, JSON.stringify(draft))
+        }
+      } catch { /* ignore */ }
+    })
+
+    showToastMessage('已清除纹样')
   }
 
   const handleExport = async (format: 'png' | 'jpg') => {
@@ -399,13 +438,23 @@ export default function CustomizeProduct() {
     safeSetItem('selected_product_id', productId)
     pruneOldDrafts(productId)
 
-    const savedPattern = safeSessionGet(`customize:selectedPattern:${productId}`)
+    // 优先使用全局纹样，不清空
+    const globalPattern = safeSessionGet('customize:selectedPattern:global')
     let restoredPatternUrl: string | null = null
-    if (savedPattern) {
+    if (globalPattern) {
       try {
-        const p = JSON.parse(savedPattern)
+        const p = JSON.parse(globalPattern)
         if (p?.image_url) restoredPatternUrl = p.image_url
       } catch { /* ignore */ }
+    }
+    if (!restoredPatternUrl) {
+      const savedPattern = safeSessionGet(`customize:selectedPattern:${productId}`)
+      if (savedPattern) {
+        try {
+          const p = JSON.parse(savedPattern)
+          if (p?.image_url) restoredPatternUrl = p.image_url
+        } catch { /* ignore */ }
+      }
     }
 
     const defaultPatternArea: PatternAreaKey = productId === 'tote' ? 'center' : 'chest'
@@ -418,10 +467,13 @@ export default function CustomizeProduct() {
         const draft = JSON.parse(savedDraft)
         setSelectedProduct(productId)
         setSelectedMaterial(draft.materialId || (productMaterials[productId]?.[0] || ''))
+        // 全局纹样优先，再草稿
         if (restoredPatternUrl) {
           setSelectedPatternImage(restoredPatternUrl)
         } else if (draft.patternImage) {
           setSelectedPatternImage(draft.patternImage)
+        } else {
+          setSelectedPatternImage(null)
         }
         setScale(Math.round(draft.params?.scale || 100))
         setRotation(Math.round(draft.params?.rotation || 0))
@@ -450,9 +502,8 @@ export default function CustomizeProduct() {
     setSelectedProduct(productId)
     const availableMaterials = productMaterials[productId] || []
     setSelectedMaterial(availableMaterials[0] || '')
-    if (restoredPatternUrl) {
-      setSelectedPatternImage(restoredPatternUrl)
-    }
+    // 保持全局纹样，不清空
+    setSelectedPatternImage(restoredPatternUrl || null)
     setScale(100)
     setRotation(0)
     setPositionX(50)
@@ -488,8 +539,15 @@ export default function CustomizeProduct() {
   const [patternTab, setPatternTab] = useState<'work' | 'favorite'>('work')
   const [userPatterns, setUserPatterns] = useState<UserPattern[]>([])
   const [selectedPatternImage, setSelectedPatternImage] = useState<string | null>(() => {
+    const globalPattern = safeSessionGet('customize:selectedPattern:global')
+    if (globalPattern) {
+      try {
+        const p = JSON.parse(globalPattern)
+        if (p?.image_url) return p.image_url
+      } catch { /* ignore */ }
+    }
     const lastPattern = safeGetItem('last_generated_pattern')
-    return lastPattern || 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20blue%20calico%20pattern%20minimal%20elegant&image_size=square'
+    return lastPattern || null
   })
   const [patternModalLoading, setPatternModalLoading] = useState(false)
   const [fetchError, setFetchError] = useState(false)
@@ -520,7 +578,7 @@ export default function CustomizeProduct() {
     const draftKey = `product_config_draft_${selectedProduct}`
     const savedDraft = safeGetItem(draftKey)
 
-    const savedPattern = safeSessionGet(`customize:selectedPattern:${selectedProduct}`)
+    const savedPattern = safeSessionGet('customize:selectedPattern:global')
     if (savedPattern) {
       try {
         const p = JSON.parse(savedPattern)
@@ -562,7 +620,8 @@ export default function CustomizeProduct() {
   useEffect(() => {
     const draftKey = `product_config_draft_${selectedProduct}`
     // base64 大图不写入草稿，避免撑爆 localStorage 配额；仅存 URL 或标记
-    const patternImageForDraft = isBase64DataUrl(selectedPatternImage) ? null : selectedPatternImage
+    const spi = selectedPatternImage ?? ''
+    const patternImageForDraft = spi && isBase64DataUrl(spi) ? null : selectedPatternImage
     const draft = {
       productId: selectedProduct,
       materialId: selectedMaterial,
@@ -614,12 +673,16 @@ export default function CustomizeProduct() {
   const patternsCacheRef = useRef<{ userId: string; ts: number; data: UserPattern[] } | null>(null)
 
   const fetchUserPatterns = async (force = false) => {
-    if (!force && patternsCacheRef.current?.data && Date.now() - patternsCacheRef.current.ts < 60_000) {
+    // 缓存 5 分钟内直接用
+    if (!force && patternsCacheRef.current?.data && Date.now() - patternsCacheRef.current.ts < 300_000) {
       setUserPatterns(patternsCacheRef.current.data)
+      setPatternModalLoading(false)
       return
     }
 
     setPatternModalLoading(true)
+    setFetchError(false)
+    let sessionUser: { id: string } | null = null
     try {
       const { data: { session } } = await Promise.race([
         supabase.auth?.getSession(),
@@ -627,32 +690,48 @@ export default function CustomizeProduct() {
       ]) as any
 
       if (!session?.user) {
+        // 未登录：立即跳登录，先关 loading，不要显示"加载失败"
+        setPatternModalLoading(false)
+        setShowPatternModal(false)
         navigate('/login')
         return
       }
+      sessionUser = session.user
 
       const patterns: UserPattern[] = []
 
-      const [myWorksResult, favoritesResult] = await Promise.all([
-        supabase
-          .from('generations')
-          .select('id, image_url, params')
-          .eq('user_id', session.user.id)
-          .order('created_at', { ascending: false })
-          .limit(30),
-        supabase
-          .from('favorites')
-          .select('generation_id')
-          .eq('user_id', session.user.id)
-          .limit(30),
+      // 作品 + 收藏并行查询，整体 15s 超时
+      const queryPromise = (async () => {
+        const [myWorksResult, favoritesResult] = await Promise.all([
+          supabase
+            .from('generations')
+            .select('id, image_url, params')
+            .eq('user_id', sessionUser!.id)
+            .order('created_at', { ascending: false })
+            .limit(40),
+          supabase
+            .from('favorites')
+            .select('generation_id')
+            .eq('user_id', sessionUser!.id)
+            .limit(40),
+        ])
+        return { myWorksResult, favoritesResult }
+      })()
+
+      const { myWorksResult, favoritesResult } = await Promise.race([
+        queryPromise,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('query timeout')), 15000)),
       ])
+
+      if (myWorksResult.error) throw new Error(`作品查询失败: ${myWorksResult.error.message || String(myWorksResult.error)}`)
+      if (favoritesResult.error) throw new Error(`收藏查询失败: ${favoritesResult.error.message || String(favoritesResult.error)}`)
 
       if (myWorksResult.data) {
         myWorksResult.data.forEach((work: any) => {
           patterns.push({
             id: work.id,
             image_url: work.image_url,
-            title: work.params?.title || `我的作品 #${work.id.slice(0, 8)}`,
+            title: work.params?.title || `我的作品 #${String(work.id).slice(0, 8)}`,
             type: 'work',
           })
         })
@@ -661,18 +740,19 @@ export default function CustomizeProduct() {
       const favRecords = favoritesResult.data
       if (favRecords && favRecords.length > 0) {
         const generationIds = favRecords.map((f: any) => f.generation_id)
-        const { data: favGenerations } = await supabase
+        const favResult = await supabase
           .from('generations')
           .select('id, image_url, params')
           .in('id', generationIds)
-
-        if (favGenerations) {
-          favGenerations.forEach((fav: any) => {
+          .limit(40)
+        if (favResult.error) throw new Error(`收藏作品查询失败: ${favResult.error.message || String(favResult.error)}`)
+        if (favResult.data) {
+          favResult.data.forEach((fav: any) => {
             if (!patterns.find(p => p.id === fav.id)) {
               patterns.push({
                 id: fav.id,
                 image_url: fav.image_url,
-                title: fav.params?.title || `收藏作品 #${fav.id.slice(0, 8)}`,
+                title: fav.params?.title || `收藏作品 #${String(fav.id).slice(0, 8)}`,
                 type: 'favorite',
               })
             }
@@ -681,11 +761,14 @@ export default function CustomizeProduct() {
       }
 
       setUserPatterns(patterns)
-      patternsCacheRef.current = { userId: session.user.id, ts: Date.now(), data: patterns }
+      patternsCacheRef.current = { userId: sessionUser!.id, ts: Date.now(), data: patterns }
     } catch (err) {
       console.error('Fetch patterns error:', err)
-      if (!userPatterns.length) {
+      // 有旧缓存仍展示，无缓存才报错
+      if (!patternsCacheRef.current?.data) {
         setFetchError(true)
+      } else {
+        setUserPatterns(patternsCacheRef.current.data)
       }
     } finally {
       setPatternModalLoading(false)
@@ -695,38 +778,28 @@ export default function CustomizeProduct() {
   const handleSelectPattern = (pattern: UserPattern) => {
     setSelectedPatternImage(pattern.image_url)
     try {
-      safeSessionSet(`customize:selectedPattern:${selectedProduct}`, JSON.stringify({
+      // 写入全局 + 当前产品
+      const data = JSON.stringify({
         id: pattern.id,
         image_url: pattern.image_url,
         title: pattern.title,
-      }))
+      })
+      safeSessionSet('customize:selectedPattern:global', data)
+      safeSessionSet(`customize:selectedPattern:${selectedProduct}`, data)
     } catch { /* ignore */ }
     setShowPatternModal(false)
   }
 
   const handleOpenPatternModal = () => {
     setShowPatternModal(true)
-    setFetchError(false)
     setPatternRenderLimit(12)
     setPatternImageStates({})
-    if (patternsCacheRef.current?.data && Date.now() - patternsCacheRef.current.ts < 60_000) {
-      setUserPatterns(patternsCacheRef.current.data)
-      setPatternModalLoading(false)
-    }
-    fetchUserPatterns()
+    void fetchUserPatterns(false)
   }
 
   const handleRetryPatterns = () => {
     setFetchError(false)
     fetchUserPatterns(true)
-  }
-
-  const handleClearPattern = () => {
-    setSelectedPatternImage(null)
-    try {
-      sessionStorage.removeItem(`customize:selectedPattern:${selectedProduct}`)
-    } catch { /* ignore */ }
-    showToastMessage('已清除纹样')
   }
 
   const handleClearColors = () => {
@@ -787,11 +860,14 @@ export default function CustomizeProduct() {
 
   const saveDraft = () => {
     const draftKey = `product_config_draft_${selectedProduct}`
-    const patternImageForDraft = isBase64DataUrl(selectedPatternImage) ? null : selectedPatternImage
+    const spi = selectedPatternImage ?? ''
     const draft = {
       productId: selectedProduct,
       materialId: selectedMaterial,
-      patternImage: patternImageForDraft,
+      patternImage:
+        spi && !isBase64DataUrl(spi)
+          ? selectedPatternImage
+          : null,
       layoutMode,
       params: { scale, rotation, positionX, positionY, blendMode },
       text: { textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
@@ -1287,13 +1363,15 @@ export default function CustomizeProduct() {
                         textureTargetMaterials={product3DConfig.meshConfig?.textureTargetMaterials}
                         colorTargetMaterials={product3DConfig.meshConfig?.colorTargetMaterials}
                         colorMaterials={product3DConfig.meshConfig?.colorMaterials || []}
-                        patternImage={selectedPatternImage}
+                        patternImage={selectedPatternImage || null}
                         colorMap={productColors}
                         modelRotation={product3DConfig.modelRotation ?? [0, 0, 0]}
                         modelScale={product3DConfig.modelScale ?? 0.35}
                         cameraPosition={product3DConfig.cameraDefault?.position ?? [0, 0.12, 1.7]}
-                        patternArea={patternArea}
-                        colorArea={colorArea}
+                        patternArea={selectedProduct === 'tote'
+                          ? (patternArea === 'full' ? 'full' : 'center')
+                          : patternArea}
+                        colorArea={selectedProduct === 'tote' ? (colorArea ?? 'center') : undefined}
                         captureRef={viewerCaptureRef}
                       />
 
@@ -1363,21 +1441,23 @@ export default function CustomizeProduct() {
                                   onDragStart={(e) => e.preventDefault()}
                                   onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
                                 />
-                                <PatternRenderer
-                                  layoutMode={layoutMode}
-                                  patternImage={selectedPatternImage}
-                                  scale={scale}
-                                  rotation={rotation}
-                                  positionX={positionX}
-                                  positionY={positionY}
-                                  blendMode={blendMode}
-                                  isSelected={selectedElement === 'pattern'}
-                                  onSelect={() => setSelectedElement('pattern')}
-                                  onMouseDown={handleMouseDown}
-                                  onTouchStart={handleTouchStart}
-                                  onTouchMove={handleTouchMove}
-                                  imageSize="small"
-                                />
+                                {selectedPatternImage && (
+                                  <PatternRenderer
+                                    layoutMode={layoutMode}
+                                    patternImage={selectedPatternImage}
+                                    scale={scale}
+                                    rotation={rotation}
+                                    positionX={positionX}
+                                    positionY={positionY}
+                                    blendMode={blendMode}
+                                    isSelected={selectedElement === 'pattern'}
+                                    onSelect={() => setSelectedElement('pattern')}
+                                    onMouseDown={handleMouseDown}
+                                    onTouchStart={handleTouchStart}
+                                    onTouchMove={handleTouchMove}
+                                    imageSize="small"
+                                  />
+                                )}
                                 {textOverlay && (
                                   <DraggableText
                                     text={textOverlay}
@@ -1422,21 +1502,23 @@ export default function CustomizeProduct() {
                                 onDragStart={(e) => e.preventDefault()}
                                 onClick={(e) => { e.stopPropagation(); setSelectedElement(null); }}
                               />
-                              <PatternRenderer
-                                layoutMode={layoutMode}
-                                patternImage={selectedPatternImage}
-                                scale={scale}
-                                rotation={rotation}
-                                positionX={positionX}
-                                positionY={positionY}
-                                blendMode={blendMode}
-                                isSelected={selectedElement === 'pattern'}
-                                onSelect={() => setSelectedElement('pattern')}
-                                onMouseDown={handleMouseDown}
-                                onTouchStart={handleTouchStart}
-                                onTouchMove={handleTouchMove}
-                                imageSize="large"
-                              />
+                              {selectedPatternImage && (
+                                <PatternRenderer
+                                  layoutMode={layoutMode}
+                                  patternImage={selectedPatternImage}
+                                  scale={scale}
+                                  rotation={rotation}
+                                  positionX={positionX}
+                                  positionY={positionY}
+                                  blendMode={blendMode}
+                                  isSelected={selectedElement === 'pattern'}
+                                  onSelect={() => setSelectedElement('pattern')}
+                                  onMouseDown={handleMouseDown}
+                                  onTouchStart={handleTouchStart}
+                                  onTouchMove={handleTouchMove}
+                                  imageSize="large"
+                                />
+                              )}
                               {textOverlay && (
                                 <DraggableText
                                   text={textOverlay}
@@ -1575,11 +1657,14 @@ export default function CustomizeProduct() {
                             const rightLabel = selectedProduct === 'tote' ? '全包' : '全身'
                             return (
                               <div className="mt-4 pt-4 border-t border-deep-blue-100">
-                                <div className="font-song text-xs text-deep-blue-light mb-2">贴图范围</div>
+                                <div className="font-song text-xs text-deep-blue-light mb-2">纹样范围</div>
                                 <div className="flex gap-2">
                                   <button
                                     type="button"
-                                    onClick={() => setPatternArea(leftKey)}
+                                    onClick={() => {
+                                      setPatternArea('center')
+                                      if (selectedProduct === 'tote') setColorArea('center')
+                                    }}
                                     className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
                                       patternArea === leftKey
                                         ? 'bg-palace-red text-rice-paper shadow-sm'
@@ -1590,7 +1675,10 @@ export default function CustomizeProduct() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => setPatternArea(rightKey)}
+                                    onClick={() => {
+                                      setPatternArea('full')
+                                      if (selectedProduct === 'tote') setColorArea('full')
+                                    }}
                                     className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
                                       patternArea === rightKey
                                         ? 'bg-palace-red text-rice-paper shadow-sm'
@@ -1752,7 +1840,10 @@ export default function CustomizeProduct() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => setColorArea('full')}
+                                    onClick={() => {
+                                      setPatternArea('full')
+                                      setColorArea('full')
+                                    }}
                                     className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
                                       colorArea === 'full'
                                         ? 'bg-palace-red text-rice-paper shadow-sm'
@@ -2116,7 +2207,7 @@ export default function CustomizeProduct() {
                       <div className="w-8 h-8 border-4 border-deep-blue-200 border-t-palace-red rounded-full animate-spin mx-auto mb-4"></div>
                       <p className="font-song text-deep-blue-light">加载中...</p>
                     </div>
-                  ) : fetchError ? (
+                  ) : fetchError && userPatterns.filter(p => p.type === patternTab).length === 0 ? (
                     <div className="text-center py-16">
                       <p className="font-song text-deep-blue-light mb-4">加载失败</p>
                       <button

@@ -1,17 +1,23 @@
 [
   {
     "productId": "tote",
-    "productName": "托特包",
+    "productName": "手提包",
     "modelUrl": "tote_bag.glb",
     "meshConfig": {
-      "textureTargetMaterial": "tripo_part_0",
+      "textureTargetMaterial": "tripo_part_new_0_0",
       "textureTargetMaterials": {
-        "center": ["tripo_part_0"],
-        "full": ["tripo_part_0", "tripo_part_new_0_0"]
+        "center": ["tripo_part_new_0_0"],
+        "full": [
+          "tripo_part_0",
+          "tripo_part_new_0_0"
+        ]
       },
       "colorTargetMaterials": {
-        "center": ["tripo_part_0"],
-        "full": ["tripo_part_0", "tripo_part_new_0_0"]
+        "center": ["tripo_part_new_0_0"],
+        "full": [
+          "tripo_part_0",
+          "tripo_part_new_0_0"
+        ]
       },
       "colorMaterials": [
         {
@@ -21,7 +27,7 @@
         },
         {
           "name": "bag_body",
-          "materialName": "tripo_part_new_0_0",
+          "materialName": "tripo_part_0",
           "label": "帆布包身"
         }
       ]

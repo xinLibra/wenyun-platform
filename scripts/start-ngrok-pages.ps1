@@ -78,7 +78,10 @@ try {
 $existingEnv = @{}
 $prodConfig = $project.result.deployment_configs.production
 if ($prodConfig.env_vars) {
-    $existingEnv = $prodConfig.env_vars
+    # Cloudflare API 返回 PSObject，需转为 hashtable 才能按 key 赋值
+    foreach ($prop in $prodConfig.env_vars.PSObject.Properties) {
+        $existingEnv[$prop.Name] = @{ type = $prop.Value.type; value = $prop.Value.value }
+    }
 }
 
 # Update the target env var

@@ -5,7 +5,7 @@ export type LayoutMode = 'tile' | 'band' | 'corner' | 'center' | 'free'
 
 export interface ExportParams {
   productImage: string
-  patternImage: string
+  patternImage?: string | null
   layoutMode: LayoutMode
   scale: number
   rotation: number
@@ -202,7 +202,7 @@ export async function renderCompositeCanvas(params: ExportParams): Promise<HTMLC
 
   const [productImg, patternImg] = await Promise.all([
     loadImage(params.productImage),
-    loadImage(params.patternImage),
+    params.patternImage ? loadImage(params.patternImage) : Promise.resolve(null),
   ])
 
   if (params.textOverlay) {
@@ -225,22 +225,24 @@ export async function renderCompositeCanvas(params: ExportParams): Promise<HTMLC
   const drawH = productImg.height * scaleRatio
   ctx.drawImage(productImg, (canvasW - drawW) / 2, (canvasH - drawH) / 2, drawW, drawH)
 
-  // 按排版模式画纹样
-  switch (params.layoutMode) {
-    case 'tile':
-      drawTileMode(ctx, patternImg, params, canvasW, canvasH)
-      break
-    case 'band':
-      drawBandMode(ctx, patternImg, params, canvasW, canvasH)
-      break
-    case 'corner':
-      drawCornerMode(ctx, patternImg, params, canvasW, canvasH)
-      break
-    case 'center':
-    case 'free':
-    default:
-      drawCenterOrFreeMode(ctx, patternImg, params, canvasW, canvasH)
-      break
+  // 按排版模式画纹样（无纹样时跳过）
+  if (patternImg) {
+    switch (params.layoutMode) {
+      case 'tile':
+        drawTileMode(ctx, patternImg, params, canvasW, canvasH)
+        break
+      case 'band':
+        drawBandMode(ctx, patternImg, params, canvasW, canvasH)
+        break
+      case 'corner':
+        drawCornerMode(ctx, patternImg, params, canvasW, canvasH)
+        break
+      case 'center':
+      case 'free':
+      default:
+        drawCenterOrFreeMode(ctx, patternImg, params, canvasW, canvasH)
+        break
+    }
   }
 
   // 重置混合模式，避免影响文字绘制
