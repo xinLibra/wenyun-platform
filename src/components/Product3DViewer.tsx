@@ -27,6 +27,8 @@ interface Product3DViewerProps {
   colorArea?: PatternAreaKey
   captureRef?: React.MutableRefObject<(() => string | null) | null>
   className?: string
+  /** patternArea=full 时，不贴图的材质列表（用于兜底 full 配置不全） */
+  excludeFromPatternAreaFull?: string[]
 }
 
 function hexToColor(hex: string): THREE.Color {
@@ -65,6 +67,7 @@ function Model({
   modelScale = 0.35,
   patternArea = 'chest',
   colorArea,
+  excludeFromPatternAreaFull = [],
 }: {
   modelUrl: string
   textureTargetMaterial: string
@@ -77,6 +80,8 @@ function Model({
   modelScale?: number
   patternArea?: PatternAreaKey
   colorArea?: PatternAreaKey
+  /** full 贴图时，这些材质名绝对不贴图（如手提带）；用于兜底 full 配置不全的 JSON */
+  excludeFromPatternAreaFull?: string[]
 }) {
   const { scene } = useGLTF(modelUrl)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
@@ -238,6 +243,18 @@ function Model({
 
         const hitTextureTarget = targets.some((t) => matchTarget(t))
 
+        // 兜底：patternArea === 'full' 且配置了 excludeFromPatternAreaFull（如手提带材质）
+        // 当 JSON textureTargetMaterials.full 未命中但当前材质又不是"明确排除项"时 → 也贴 full
+        // 这解决了托特包 full 数组写不全导致"只有正中贴花、其余包身变纯色冒充"的问题
+        let hitByExcludeFallback = false
+        if (patternArea === 'full' && excludeFromPatternAreaFull.length > 0 && !hitTextureTarget) {
+          const isExcluded = excludeFromPatternAreaFull.some((ex) => matchTarget(ex))
+          if (!isExcluded) {
+            hitByExcludeFallback = true
+          }
+        }
+        const effectiveHitTexture = hitTextureTarget || hitByExcludeFallback
+
         if (typeof mat.metalness === 'number') {
           mat.metalness = Math.min(mat.metalness, 0.15)
         }
@@ -246,7 +263,7 @@ function Model({
         }
 
         // ===== 纹样贴图：严格按规则 =====
-        if (texture && hitTextureTarget) {
+        if (texture && effectiveHitTexture) {
           mat.map = texture
           mat.color.set('#ffffff') // 贴图区必须纯白，否则乘脏贴图
           mat.needsUpdate = true
@@ -324,6 +341,7 @@ export function Product3DViewer({
   colorArea,
   captureRef,
   className = '',
+  excludeFromPatternAreaFull = [],
 }: Product3DViewerProps) {
   const rot = modelRotation ?? [0, 0, 0]
   const scl = modelScale ?? 0.35
@@ -376,6 +394,7 @@ export function Product3DViewer({
             modelScale={scl}
             patternArea={patternArea}
             colorArea={colorArea}
+            excludeFromPatternAreaFull={excludeFromPatternAreaFull}
           />
         </Suspense>
 

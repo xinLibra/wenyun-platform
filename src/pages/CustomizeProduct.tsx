@@ -1337,6 +1337,13 @@ export default function CustomizeProduct() {
                           ? (patternArea === 'full' ? 'full' : 'center')
                           : patternArea}
                         colorArea={selectedProduct === 'tote' ? (colorArea ?? 'center') : undefined}
+                        excludeFromPatternAreaFull={
+                          selectedProduct === 'tote'
+                            ? (product3DConfig.meshConfig?.colorMaterials || [])
+                                .filter((cm) => cm.name === 'handle')
+                                .map((cm) => cm.materialName)
+                            : undefined
+                        }
                         captureRef={viewerCaptureRef}
                       />
 
