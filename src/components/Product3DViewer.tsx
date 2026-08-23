@@ -16,7 +16,6 @@ interface Product3DViewerProps {
   modelUrl: string
   textureTargetMaterial: string
   textureTargetMaterials?: TextureTargetMaterials
-  colorTargetMaterials?: TextureTargetMaterials
   colorMaterials?: ColorMaterial[]
   patternImage?: string | null
   colorMap?: Record<string, string>
@@ -24,7 +23,6 @@ interface Product3DViewerProps {
   modelRotation?: [number, number, number]
   modelScale?: number
   patternArea?: PatternAreaKey
-  colorArea?: PatternAreaKey
   captureRef?: React.MutableRefObject<(() => string | null) | null>
   className?: string
   /** patternArea=full 时，不贴图的材质列表（用于兜底 full 配置不全） */
@@ -61,28 +59,24 @@ function Model({
   modelUrl,
   textureTargetMaterial,
   textureTargetMaterials,
-  colorTargetMaterials,
   colorMaterials = [],
   patternImage,
   colorMap = {},
   modelRotation = [0, 0, 0],
   modelScale = 0.35,
   patternArea = 'chest',
-  colorArea,
   excludeFromPatternAreaFull = [],
   patternOpacity = 1,
 }: {
   modelUrl: string
   textureTargetMaterial: string
   textureTargetMaterials?: TextureTargetMaterials
-  colorTargetMaterials?: TextureTargetMaterials
   colorMaterials?: ColorMaterial[]
   patternImage?: string | null
   colorMap?: Record<string, string>
   modelRotation?: [number, number, number]
   modelScale?: number
   patternArea?: PatternAreaKey
-  colorArea?: PatternAreaKey
   /** full 贴图时，这些材质名绝对不贴图（如手提带）；用于兜底 full 配置不全的 JSON */
   excludeFromPatternAreaFull?: string[]
   /** 纹样透明度 0-1，仅对命中贴图目标的材质生效 */
@@ -96,8 +90,8 @@ function Model({
   const initialColorReadyRef = useRef(false)
 
   useEffect(() => {
-    console.log('[Model] url=', modelUrl, 'rot=', modelRotation, 'scale=', modelScale, 'patternArea=', patternArea, 'colorArea=', colorArea)
-  }, [modelUrl, modelRotation, modelScale, patternArea, colorArea])
+    console.log('[Model] url=', modelUrl, 'rot=', modelRotation, 'scale=', modelScale, 'patternArea=', patternArea)
+  }, [modelUrl, modelRotation, modelScale, patternArea])
 
   useEffect(() => {
     if (!patternImage) {
@@ -130,18 +124,32 @@ function Model({
     if (loggedModels.has(modelUrl)) return
     loggedModels.add(modelUrl)
     const meshInfo: string[] = []
+    const targets = getTextureTargets(textureTargetMaterial, textureTargetMaterials, patternArea)
     clonedScene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
         const mat = mesh.material as THREE.MeshStandardMaterial
+        const names = [mat?.name || '', mesh.name || '', child.name || '']
+          .map((s) => s.toLowerCase().trim())
+          .filter((s) => s && s !== '-')
+        const hitTarget = targets.some((t) => {
+          const tt = (t || '').toLowerCase().trim()
+          if (!tt) return false
+          return names.some((n) => {
+            if (!n) return false
+            if (n === tt) return true
+            const minLen = /[\u4e00-\u9fff]/.test(tt) || /[\u4e00-\u9fff]/.test(n) ? 2 : 3
+            if (n.length < minLen || tt.length < minLen) return false
+            return n.includes(tt) || tt.includes(n)
+          })
+        })
         meshInfo.push(
-          `  node="${child.name || '-'}" mesh="${mesh.name || '-'}" mat="${mat?.name || '-'}" hasMap=${!!mat?.map} color=${mat?.color?.getHexString() || '-'}`
+          `  node="${child.name || '-'}" mesh="${mesh.name || '-'}" mat="${mat?.name || '-'}" hitTextureTarget=${hitTarget ? '✓' : '✗'} hasMap=${!!mat?.map} color=${mat?.color?.getHexString() || '-'}`
         )
       }
     })
     console.log(`[3D Viewer] ${modelUrl} 材质/节点清单:\n${meshInfo.join('\n')}`)
     // 打印当前 targets 和 colorMaterials 供调试
-    const targets = getTextureTargets(textureTargetMaterial, textureTargetMaterials, patternArea)
     console.log(`[3D Viewer] patternArea=${patternArea} targets=`, targets)
     console.log(`[3D Viewer] colorMaterials=`, colorMaterials.map(cm => `${cm.name}=${cm.materialName}`))
     console.log(`[3D Viewer] colorMap=`, colorMap)
@@ -263,11 +271,17 @@ function Model({
           }
         }
 
-        // 换色部件（colorMaterials 命中）一律不贴纹样：
-        // 修复笔记本线圈 "材质.002" 被过宽目标 "材质" 子串命中 → 线圈被纹样染色
+        // 换色部件拦截：仅当"纹样目标为子串命中（非精确）"且该材质是换色部件时才拦截贴图。
+        // 修复笔记本线圈 "材质.002" 被过宽目标 "材质" 子串命中 → 线圈被纹样染色；
+        // 同时保证"本身就是精确贴图目标的换色部件"仍能贴纹样（抱枕整枕 / T恤胸前）。
         const hitColorMaterial = colorMaterials.some((cm) => matchTarget(cm.materialName))
+        const exactTextureTargetHit = targets.some((t) => {
+          const tt = (t || '').toLowerCase().trim()
+          return tt && names.includes(tt)
+        })
 
-        const effectiveHitTexture = (hitTextureTarget || hitByExcludeFallback) && !hitColorMaterial
+        const effectiveHitTexture =
+          (hitTextureTarget || hitByExcludeFallback) && (!hitColorMaterial || exactTextureTargetHit)
 
         if (typeof mat.metalness === 'number') {
           mat.metalness = Math.min(mat.metalness, 0.15)
@@ -327,7 +341,7 @@ function Model({
         }
       })
     })
-  }, [clonedScene, texture, scene, textureTargetMaterial, textureTargetMaterials, patternArea, colorTargetMaterials, colorArea, colorMaterials, colorMap, patternOpacity])
+  }, [clonedScene, texture, scene, textureTargetMaterial, textureTargetMaterials, patternArea, colorMaterials, colorMap, patternOpacity])
 
   return (
     <group rotation={modelRotation as [number, number, number]} scale={modelScale}>
@@ -351,7 +365,6 @@ export function Product3DViewer({
   modelUrl,
   textureTargetMaterial,
   textureTargetMaterials,
-  colorTargetMaterials,
   colorMaterials = [],
   patternImage,
   colorMap = {},
@@ -359,7 +372,6 @@ export function Product3DViewer({
   modelRotation,
   modelScale,
   patternArea = 'chest',
-  colorArea,
   captureRef,
   className = '',
   excludeFromPatternAreaFull = [],
@@ -408,14 +420,12 @@ export function Product3DViewer({
             modelUrl={modelUrl}
             textureTargetMaterial={textureTargetMaterial}
             textureTargetMaterials={textureTargetMaterials}
-            colorTargetMaterials={colorTargetMaterials}
             colorMaterials={colorMaterials}
             patternImage={patternImage}
             colorMap={colorMap}
             modelRotation={rot}
             modelScale={scl}
             patternArea={patternArea}
-            colorArea={colorArea}
             excludeFromPatternAreaFull={excludeFromPatternAreaFull}
             patternOpacity={patternOpacity}
           />

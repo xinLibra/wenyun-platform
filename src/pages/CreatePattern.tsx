@@ -205,6 +205,7 @@ export default function CreatePattern() {
     }
 
     const auto = parsePromptToTags(rawText)
+    const subId = auto.subcategoryId || (result.dimension as any)?.subcategory || ''
 
     const newDimension: PatternDimension = {
       ...DEFAULT_DIMENSION,
@@ -214,7 +215,7 @@ export default function CreatePattern() {
       theme: result.dimension?.theme || [],
       application: result.dimension?.application || [],
       mainTheme: auto.themeId || (result.dimension as any)?.mainTheme || '',
-      subcategory: auto.subcategoryId || (result.dimension as any)?.subcategory || '',
+      subcategory: subId,
       scenes: auto.sceneIds.length
         ? auto.sceneIds
         : (result.dimension as any)?.scenes || [],
@@ -227,18 +228,24 @@ export default function CreatePattern() {
       newDimension.application = newDimension.scenes
     }
 
+    // 数值类参数：未命中的字段用该子类的 generationPresets 默认值（applyPreset），
+    // 解析出的字段覆盖预设，避免留空/NaN 或套用无关全局默认
+    const presetBase = applyPreset(
+      { ...DEFAULT_GENERATION_PARAMS, dimension: newDimension },
+      subId || null
+    )
     const newParams: GenerationParams = {
-      ...DEFAULT_GENERATION_PARAMS,
+      ...presetBase,
       dimension: newDimension,
-      complexity: result.complexity ?? DEFAULT_GENERATION_PARAMS.complexity,
-      textureDetail: result.textureDetail ?? DEFAULT_GENERATION_PARAMS.textureDetail,
+      complexity: result.complexity ?? presetBase.complexity,
+      textureDetail: result.textureDetail ?? presetBase.textureDetail,
       colorScheme: result.colorScheme
-        ? { ...DEFAULT_GENERATION_PARAMS.colorScheme, ...result.colorScheme }
-        : DEFAULT_GENERATION_PARAMS.colorScheme,
-      arrangement: result.arrangement || DEFAULT_GENERATION_PARAMS.arrangement,
-      symmetry: result.symmetry || DEFAULT_GENERATION_PARAMS.symmetry,
+        ? { ...presetBase.colorScheme, ...result.colorScheme }
+        : presetBase.colorScheme,
+      arrangement: result.arrangement || presetBase.arrangement,
+      symmetry: result.symmetry || presetBase.symmetry,
       culturalIntensity:
-        result.culturalIntensity ?? DEFAULT_GENERATION_PARAMS.culturalIntensity,
+        result.culturalIntensity ?? presetBase.culturalIntensity,
     }
 
     setDimension(newDimension)
@@ -260,7 +267,7 @@ export default function CreatePattern() {
           (newDimension.scenes && newDimension.scenes.length > 0)
       )
     )
-    setExpandedStep(2)
+    // 解析/推荐后不自动收起「描述你想要的纹样」板块，用户通过折叠箭头手动收起
   }
 
   const handleGenerate = async () => {

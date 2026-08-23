@@ -317,10 +317,6 @@ export default function CustomizeProduct() {
     const pid = safeGetItem('selected_product_id') || products[0]?.id || ''
     return pid === 'tote' ? 'center' : 'chest'
   })
-    const [colorArea, setColorArea] = useState<PatternAreaKey | undefined>(() => {
-    const pid = safeGetItem('selected_product_id') || products[0]?.id || ''
-    return pid === 'tote' ? 'center' : undefined
-  })
   const [activeColorPart, setActiveColorPart] = useState<string | null>(null)
   const [hue, setHue] = useState(210)
   const [lightness, setLightness] = useState(45)
@@ -507,7 +503,6 @@ export default function CustomizeProduct() {
         setProductColors(draft.colors || {})
         setActiveColorPart(null)
         setPatternArea(defaultPatternArea)
-        setColorArea(productId === 'tote' ? 'center' : undefined)
         return
       } catch {
         // 解析失败，使用默认值
@@ -534,7 +529,6 @@ export default function CustomizeProduct() {
     setProductColors({})
     setActiveColorPart(null)
     setPatternArea(defaultPatternArea)
-    setColorArea(productId === 'tote' ? 'center' : undefined)
   }
   
   const [isBuying, setIsBuying] = useState(false)
@@ -1377,7 +1371,6 @@ export default function CustomizeProduct() {
                         modelUrl={`/models/${product3DConfig.modelUrl}`}
                         textureTargetMaterial={product3DConfig.meshConfig?.textureTargetMaterial || ''}
                         textureTargetMaterials={product3DConfig.meshConfig?.textureTargetMaterials}
-                        colorTargetMaterials={product3DConfig.meshConfig?.colorTargetMaterials}
                         colorMaterials={product3DConfig.meshConfig?.colorMaterials || []}
                         patternImage={selectedPatternImage || null}
                         colorMap={productColors}
@@ -1387,7 +1380,6 @@ export default function CustomizeProduct() {
                         patternArea={selectedProduct === 'tote'
                           ? (patternArea === 'full' ? 'full' : 'center')
                           : patternArea}
-                        colorArea={selectedProduct === 'tote' ? (colorArea ?? 'center') : undefined}
                         excludeFromPatternAreaFull={
                           selectedProduct === 'tote'
                             ? (product3DConfig.meshConfig?.colorMaterials || [])
@@ -1584,52 +1576,6 @@ export default function CustomizeProduct() {
                             })}
                           </div>
 
-                          {(() => {
-                            const tm = product3DConfig?.meshConfig?.textureTargetMaterials
-                            if (!tm) return null
-                            const hasChest = !!tm.chest?.length
-                            const hasCenter = !!tm.center?.length
-                            if (!hasChest && !hasCenter) return null
-                            const leftKey: PatternAreaKey = hasCenter ? 'center' : 'chest'
-                            const leftLabel = hasCenter ? '正中区域' : '仅胸前'
-                            const rightKey: PatternAreaKey = 'full'
-                            const rightLabel = selectedProduct === 'tote' ? '全包' : '全身'
-                            return (
-                              <div className="mt-4 pt-4 border-t border-deep-blue-100">
-                                <div className="font-song text-xs text-deep-blue-light mb-2">纹样范围</div>
-                                <div className="flex gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setPatternArea('center')
-                                      if (selectedProduct === 'tote') setColorArea('center')
-                                    }}
-                                    className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
-                                      patternArea === leftKey
-                                        ? 'bg-palace-red text-rice-paper shadow-sm'
-                                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                                    }`}
-                                  >
-                                    {leftLabel}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setPatternArea('full')
-                                      if (selectedProduct === 'tote') setColorArea('full')
-                                    }}
-                                    className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
-                                      patternArea === rightKey
-                                        ? 'bg-palace-red text-rice-paper shadow-sm'
-                                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                                    }`}
-                                  >
-                                    {rightLabel}
-                                  </button>
-                                </div>
-                              </div>
-                            )
-                          })()}
                         </div>
                       )}
                     </div>
@@ -1657,6 +1603,53 @@ export default function CustomizeProduct() {
                         </div>
                       </div>
                     )}
+
+                    {/* ===== 区块：纹样范围（仅 3D 产品；T恤胸前/全身、手提包正中/全包） ===== */}
+                    {is3DProduct && (() => {
+                      const tm = product3DConfig?.meshConfig?.textureTargetMaterials
+                      if (!tm) return null
+                      const hasChest = !!tm.chest?.length
+                      const hasCenter = !!tm.center?.length
+                      if (!hasChest && !hasCenter) return null
+                      const leftKey: PatternAreaKey = hasCenter ? 'center' : 'chest'
+                      const leftLabel = hasCenter ? '正中贴花' : '仅胸前'
+                      const rightKey: PatternAreaKey = 'full'
+                      const rightLabel = selectedProduct === 'tote' ? '全包贴花' : '全身'
+                      return (
+                        <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
+                          <div className="flex items-center justify-between px-3 py-2.5 bg-deep-blue/5">
+                            <span className="font-shufa text-sm text-deep-blue flex items-center">
+                              <span className="w-5 h-5 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">纹</span>
+                              纹样范围
+                            </span>
+                          </div>
+                          <div className="p-4 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setPatternArea(leftKey)}
+                              className={`flex-1 py-2 text-sm font-song rounded-sm transition-all duration-300 ${
+                                patternArea === leftKey
+                                  ? 'bg-palace-red text-rice-paper shadow-sm'
+                                  : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                              }`}
+                            >
+                              {leftLabel}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPatternArea('full')}
+                              className={`flex-1 py-2 text-sm font-song rounded-sm transition-all duration-300 ${
+                                patternArea === rightKey
+                                  ? 'bg-palace-red text-rice-paper shadow-sm'
+                                  : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                              }`}
+                            >
+                              {rightLabel}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                     {/* ===== 区块二：部件配色 ===== */}
                     {product3DConfig?.meshConfig?.colorMaterials?.length ? (
@@ -1786,38 +1779,6 @@ export default function CustomizeProduct() {
                               )
                             })}
 
-                            {product3DConfig.meshConfig.colorTargetMaterials?.center?.length ? (
-                              <div className="pt-3 border-t border-deep-blue-100">
-                                <div className="font-song text-xs text-deep-blue-light mb-2">上色范围</div>
-                                <div className="flex gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => setColorArea('center')}
-                                    className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
-                                      colorArea === 'center'
-                                        ? 'bg-palace-red text-rice-paper shadow-sm'
-                                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                                    }`}
-                                  >
-                                    正中区域
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setPatternArea('full')
-                                      setColorArea('full')
-                                    }}
-                                    className={`flex-1 py-1.5 text-sm font-song rounded-sm transition-all duration-300 ${
-                                      colorArea === 'full'
-                                        ? 'bg-palace-red text-rice-paper shadow-sm'
-                                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                                    }`}
-                                  >
-                                    全包
-                                  </button>
-                                </div>
-                              </div>
-                            ) : null}
                           </div>
                         )}
                       </div>

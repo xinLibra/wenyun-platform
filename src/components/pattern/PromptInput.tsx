@@ -92,15 +92,33 @@ const APPLICATION_KEYWORDS: Record<string, string> = {
   '毕业': 'cultural',
 }
 
-const COLOR_KEYWORDS: Record<string, number> = {
-  '红色': 0,
-  '橙色': 30,
-  '黄色': 60,
-  '绿色': 120,
-  '青色': 180,
-  '蓝色': 240,
-  '紫色': 300,
+interface ColorKeywordDef {
+  /** 匹配关键词（按顺序取首个命中；长词/专属词放前面避免子串误命中） */
+  keyword: string
+  mode: 'hue' | 'pantone'
+  hue?: number
+  brightness?: number
+  pantone?: string
 }
+
+const COLOR_KEYWORDS: ColorKeywordDef[] = [
+  { keyword: '大红', mode: 'hue', hue: 0 },
+  { keyword: '红色', mode: 'hue', hue: 0 },
+  { keyword: '橙色', mode: 'hue', hue: 30 },
+  { keyword: '黄色', mode: 'hue', hue: 60 },
+  { keyword: '金色', mode: 'hue', hue: 45, brightness: 70 },
+  { keyword: '鎏金', mode: 'hue', hue: 45, brightness: 70 },
+  { keyword: '青花', mode: 'pantone', pantone: '19-3920 TCX' },
+  { keyword: '绿色', mode: 'hue', hue: 120 },
+  { keyword: '青色', mode: 'hue', hue: 180 },
+  { keyword: '蓝色', mode: 'hue', hue: 240 },
+  { keyword: '水墨', mode: 'hue', hue: 0, brightness: 15 },
+  { keyword: '墨色', mode: 'hue', hue: 0, brightness: 15 },
+  { keyword: '黑白', mode: 'hue', hue: 0, brightness: 20 },
+  { keyword: '白色', mode: 'hue', hue: 0, brightness: 95 },
+  { keyword: '黑色', mode: 'hue', hue: 0, brightness: 10 },
+  { keyword: '紫色', mode: 'hue', hue: 300 },
+]
 
 function parsePrompt(prompt: string): PromptParseResult {
   const dimension = {
@@ -168,21 +186,52 @@ function parsePrompt(prompt: string): PromptParseResult {
     dimension.style.handmade = 80
   }
 
-  for (const [keyword, hue] of Object.entries(COLOR_KEYWORDS)) {
-    if (prompt.includes(keyword)) {
-      result.colorScheme = { mode: 'hue', hue }
+  for (const def of COLOR_KEYWORDS) {
+    if (prompt.includes(def.keyword)) {
+      if (def.mode === 'pantone') {
+        result.colorScheme = { mode: 'pantone', pantone: def.pantone }
+      } else {
+        result.colorScheme = { mode: 'hue', hue: def.hue, brightness: def.brightness }
+      }
       break
     }
   }
 
-  if (prompt.includes('四方')) {
+  // 复杂度：简单/极简/几何 → 偏低；复杂/满铺/精细 → 偏高
+  if (/复杂|繁复|满铺|精细/.test(prompt)) {
+    result.complexity = 85
+  } else if (/简单|极简/.test(prompt)) {
+    result.complexity = 35
+  }
+
+  // 肌理还原：平面/线稿 → 偏低；刺绣/肌理/立体 → 偏高
+  if (/刺绣|肌理|立体|浮雕/.test(prompt)) {
+    result.textureDetail = 85
+  } else if (/平面|线稿|扁平/.test(prompt)) {
+    result.textureDetail = 35
+  }
+
+  // 文化符号强度：传统/经典/写实 → 偏高；抽象/现代/简约 → 偏低
+  if (/传统|经典|写实|古典/.test(prompt)) {
+    result.culturalIntensity = 85
+  } else if (/抽象|现代|简约|极简/.test(prompt)) {
+    result.culturalIntensity = 25
+  }
+
+  // 排布：单独/居中 → 单独纹样；连续/四方/底纹 → 四方连续；适合 → 适合纹样
+  if (/连续|四方|底纹/.test(prompt)) {
     result.arrangement = 'seamless'
   } else if (prompt.includes('适合')) {
     result.arrangement = 'adapted'
+  } else if (/单独|居中|独立/.test(prompt)) {
+    result.arrangement = 'single'
   }
 
-  if (prompt.includes('对称')) {
+  // 对称：对称/镜像 → 镜像对称；旋转/回旋 → 旋转对称
+  if (/对称|镜像|对偶/.test(prompt)) {
     result.symmetry = 'mirror'
+  } else if (/旋转|回旋/.test(prompt)) {
+    result.symmetry = 'rotation'
   }
 
   return result

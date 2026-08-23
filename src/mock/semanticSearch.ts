@@ -1,4 +1,5 @@
 import { searchCulturalSemantics, type CulturalSemantic } from '../config/culturalSemantics'
+import { getPatternThumbnail } from '../config/patternThumbnails'
 
 export interface PatternRecommendation {
   patternId: string
@@ -14,15 +15,6 @@ export interface PatternRecommendation {
 interface SemanticSearchResult {
   matchedTags: string[]
   recommendations: PatternRecommendation[]
-}
-
-/** 根据 patternId 选择占位图（两个占位图交替，避免列表千篇一律） */
-function placeholderFor(patternId: string): string {
-  let hash = 0
-  for (let i = 0; i < patternId.length; i++) {
-    hash = (hash * 31 + patternId.charCodeAt(i)) & 0x7fffffff
-  }
-  return hash % 2 === 0 ? '/placeholder-pattern-a.png' : '/placeholder-pattern-b.png'
 }
 
 /**
@@ -52,7 +44,7 @@ export async function mockSemanticSearch(query: string): Promise<SemanticSearchR
     recs.push({
       patternId: hit.patternId,
       patternName: hit.patternLabel,
-      imageUrl: placeholderFor(hit.patternId),
+      imageUrl: getPatternThumbnail(hit.patternId, hit.patternLabel),
       meaning: hit.meaning,
       region: hit.scene,
       matchScore: Math.max(80, 100 - recs.length * 3),
