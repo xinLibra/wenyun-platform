@@ -19,7 +19,6 @@ import {
   parsePromptToTags,
   findSubcategory,
   PATTERN_THEMES,
-  //SCENE_OPTIONS,
   getSubcategories,
   type PatternThemeId,
 } from '../data/patternTaxonomy'
@@ -205,7 +204,15 @@ export default function CreatePattern() {
     }
 
     const auto = parsePromptToTags(rawText)
-    const subId = auto.subcategoryId || (result.dimension as any)?.subcategory || ''
+    // 推荐应用时携带明确的维度信息（主题/子类/场景），优先采用；普通文本解析走 auto
+    const explicitTheme = (result.dimension as any)?.mainTheme as string | undefined
+    const explicitSub = (result.dimension as any)?.subcategory as string | undefined
+    const explicitScenes = (result.dimension as any)?.scenes as string[] | undefined
+    const subId = explicitSub || auto.subcategoryId || ''
+    const mainTheme: PatternThemeId | undefined =
+      explicitTheme === 'floral' || explicitTheme === 'beast'
+        ? explicitTheme
+        : auto.themeId || undefined
 
     const newDimension: PatternDimension = {
       ...DEFAULT_DIMENSION,
@@ -214,11 +221,13 @@ export default function CreatePattern() {
       ethnic: result.dimension?.ethnic || [],
       theme: result.dimension?.theme || [],
       application: result.dimension?.application || [],
-      mainTheme: auto.themeId || (result.dimension as any)?.mainTheme || '',
+      mainTheme,
       subcategory: subId,
-      scenes: auto.sceneIds.length
-        ? auto.sceneIds
-        : (result.dimension as any)?.scenes || [],
+      scenes: explicitScenes?.length
+        ? explicitScenes
+        : auto.sceneIds.length
+          ? auto.sceneIds
+          : [],
       style: {
         ...DEFAULT_DIMENSION.style,
         ...(result.dimension?.style || {}),

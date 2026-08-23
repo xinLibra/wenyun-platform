@@ -67,14 +67,13 @@ export interface LoraMapEntry {
  *   - plum           → ICH_plum_blossom_pattern_lora_v2    trigger: ichpattern_plum_blossom（训练原词）+ 兼容旧 ichpattern_plum
  *   - lotus          → ICH_lotus_pattern_lora_v3_attr      trigger: ich_flower_pattern + ich_lotus_pattern
  *   - flower_bird    → ICH_flower_bird_pattern_lora_v3     trigger: ich_flower_pattern + ich_flower_bird_pattern
- *   - floral_other   → ICH_flower_general_final            trigger: ich_flower_pattern
  *   - gourd / interlocking_floral / plant                  → 无专属模型 → 通用花卉 ICH_flower_general_final
  *
  * 注：ICH_qilin_pattern_lora_v1（麒麟纹）源文件已训练，但 patternTaxonomy 中暂无 qilin 子类，
  *     此处不挂载。如需启用，需先在 patternTaxonomy.ts 增 qilin 子类。
  */
 export const LORA_MAP: LoraMapEntry[] = [
-  // ============ 花卉（6 专属 + 3 通用 fallback 共 9 条）============
+  // ============ 花卉（专属 + 通用 fallback）============
   // 通用花卉 fallback：无专属模型的花卉子类统一走 ICH_flower_general_final + ich_flower_pattern
   {
     subcategoryId: 'gourd',
@@ -99,15 +98,6 @@ export const LORA_MAP: LoraMapEntry[] = [
     themeId: 'floral',
     subLabelZh: '植物纹',
     subLabelEn: 'plant',
-    trigger: 'ich_flower_pattern',
-    loraFile: 'ICH_flower_general_final',
-    loraWeight: FLOWER_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'floral_other',
-    themeId: 'floral',
-    subLabelZh: '其他花卉',
-    subLabelEn: 'floral',
     trigger: 'ich_flower_pattern',
     loraFile: 'ICH_flower_general_final',
     loraWeight: FLOWER_LORA_WEIGHT,

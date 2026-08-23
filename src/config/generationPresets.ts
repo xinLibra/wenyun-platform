@@ -94,8 +94,6 @@ export const SUBCATEGORY_PANTONE_MAP: Record<string, SubcategoryPantone> = {
   furong:               { pantoneCode: '16-1720 TCX', label: '桃粉',   englishName: 'peach pink',       promptTag: 'monochrome-black', reason: '芙蓉娇艳，桃粉' },
   // 石榴花：多子多福，中国红
   pomegranate_flower:   { pantoneCode: '18-1662 TCX', label: '宫墙红', englishName: 'palace red',       promptTag: 'monochrome-black', reason: '石榴多子，朱红' },
-  // 其他花卉：通用粉色兜底
-  floral_other:         { pantoneCode: '16-1450 TCX', label: '藕粉',   englishName: 'light pink',       promptTag: 'monochrome-black', reason: '通用花卉，藕粉兜底' },
 }
 
 /**
@@ -316,14 +314,6 @@ export const GENERATION_PRESETS: Record<string, GenerationPreset> = {
     textureDetail: 28,
     culturalIntensity: 75,
     colorScheme: { mode: 'pantone', pantone: '18-1662 TCX' },
-  },
-  floral_other: {
-    arrangement: 'single',
-    symmetry: 'none',
-    complexity: 55,
-    textureDetail: 30,
-    culturalIntensity: 70,
-    colorScheme: { mode: 'pantone', pantone: '16-1450 TCX' },
   },
 }
 

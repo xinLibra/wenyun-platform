@@ -1,4 +1,4 @@
-import { searchCulturalSemantics, type CulturalSemantic } from '../config/culturalSemantics'
+import { searchCulturalSemantics, sceneToSceneId, type CulturalSemantic } from '../config/culturalSemantics'
 import { getPatternThumbnail } from '../config/patternThumbnails'
 
 export interface PatternRecommendation {
@@ -10,6 +10,8 @@ export interface PatternRecommendation {
   matchScore: number
   /** 纹样所属主题（floral/beast），用于自动勾选主题 */
   themeId?: 'floral' | 'beast'
+  /** 场景标准 id（由语义表 scene 归并而来），用于自动勾选「使用场景」 */
+  sceneId?: string
 }
 
 interface SemanticSearchResult {
@@ -49,6 +51,7 @@ export async function mockSemanticSearch(query: string): Promise<SemanticSearchR
       region: hit.scene,
       matchScore: Math.max(80, 100 - recs.length * 3),
       themeId: hit.themeId,
+      sceneId: sceneToSceneId(hit.scene),
     })
     if (recs.length >= 8) break
   }

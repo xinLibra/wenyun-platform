@@ -12,6 +12,8 @@ interface PatternRecommendation {
   matchScore: number
   /** 纹样所属主题（floral/beast），用于点击后自动切主题 */
   themeId?: 'floral' | 'beast'
+  /** 场景标准 id（映射自语义表 scene），用于点击后自动勾选「使用场景」 */
+  sceneId?: string
 }
 
 interface PromptInputProps {
@@ -254,6 +256,11 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
     if (!prompt.trim()) return
 
     setIsParsing(true)
+    // 先清除旧的推荐应用状态，按当前文案重新识别，避免沿用旧推荐/旧勾选
+    setSelectedRecommendationId(null)
+    setJustSelectedRecommendation(false)
+    setRecommendations([])
+    setMatchedTags([])
     await new Promise((resolve) => setTimeout(resolve, 500))
 
     const result = parsePrompt(prompt)
@@ -262,15 +269,31 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
     localStorage.setItem('last_pattern_prompt', prompt.trim())
     setIsParsed(true)
     onParseComplete?.(true)
-    setJustSelectedRecommendation(false)
 
     setIsParsing(false)
+
+    // 解析完成后以当前文案重算推荐列表（识别到标签 + 推荐卡片），不沿用旧结果
+    if (onSemanticSearch && prompt.trim()) {
+      setHasSearched(true)
+      try {
+        const sres = await onSemanticSearch(prompt.trim())
+        setMatchedTags(sres.matchedTags)
+        setRecommendations(sres.recommendations)
+      } catch {
+        // 语义搜索失败不阻塞解析结果
+      }
+    }
   }
 
   const handleGetRecommendations = async () => {
     if (!prompt.trim() || !onSemanticSearch) return
     setIsSearching(true)
     setHasSearched(true)
+    // 以当前文案为准，先清空旧列表，避免展示上一次推荐
+    setRecommendations([])
+    setMatchedTags([])
+    setSelectedRecommendationId(null)
+    setJustSelectedRecommendation(false)
     try {
       const result = await onSemanticSearch(prompt.trim())
       setMatchedTags(result.matchedTags)
@@ -289,14 +312,13 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
     }
   }
 
-  /** 应用一条推荐：保留用户原文，把「纹样名 + 寓意」并入输入框并直接解析，
-   *  让父组件切主题/勾子类；寓意随 rawText 并入 prompt 标签 */
+  /**
+   * 应用一条推荐：整段替换输入框（场景 + 纹样名 + 寓意），一次只保留当前这一条，
+   * 绝不叠加旧文案；并直接解析，让父组件切主题/勾子类/选场景。
+   */
   const applyRecommendation = (rec: PatternRecommendation) => {
     previousPromptRef.current = prompt
-    const base = prompt.trim()
-    const text = base
-      ? `${base}，${rec.patternName}，${rec.meaning}`
-      : `${rec.patternName}，${rec.meaning}`
+    const text = `${rec.region}，${rec.patternName}，${rec.meaning}`
     setPrompt(text)
     setJustSelectedRecommendation(true)
     setSelectedRecommendationId(`${rec.patternId}:${rec.region}`)
@@ -306,6 +328,7 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
       dimension: {
         mainTheme: rec.themeId === 'beast' ? 'beast' : rec.themeId === 'floral' ? 'floral' : undefined,
         subcategory: rec.patternId,
+        scenes: rec.sceneId ? [rec.sceneId] : [],
       } as any,
       rawText: text,
     })
@@ -327,6 +350,16 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value
     setPrompt(newValue)
+    if (newValue !== prompt) {
+      // 文案已变：旧推荐、识别标签、已应用状态一律失效，禁止展示上一次推荐
+      setRecommendations([])
+      setMatchedTags([])
+      setSelectedRecommendationId(null)
+      setJustSelectedRecommendation(false)
+      if (newValue.trim() === '') {
+        setHasSearched(false)
+      }
+    }
     if (isParsed && newValue !== prompt) {
       setIsParsed(false)
       onParseComplete?.(false)

@@ -269,3 +269,222 @@ export function searchCulturalSemantics(query: string): CulturalSemantic[] {
   }
   return results
 }
+
+/** 使用场景选项：展示名 + 场景提示文案 */
+export interface SceneOption {
+  id: string
+  label: string
+  promptHint: string
+}
+
+/**
+ * 同义场景归并表：语义表 scene 原始值 → 标准场景 id（id 稳定，跨页/跨版本不变）。
+ * 列表从 CULTURAL_SEMANTICS 的 scene 字段自动去重生成，此处只负责「合并同义」。
+ */
+export const SCENE_ALIAS: Record<string, string> = {
+  // 毕业 / 升学
+  '毕业/升学': 'graduation',
+  '毕业/成才': 'graduation',
+  '学业/中举': 'graduation',
+  '励志/求学': 'graduation',
+  // 婚礼 / 婚恋（含婚庆相关细分）
+  '婚礼/新婚': 'wedding',
+  '婚恋/爱情': 'wedding',
+  '爱情/伴侣': 'wedding',
+  '婚礼/成双': 'wedding',
+  '新婚/婚庆': 'wedding',
+  '新婚/婚后': 'wedding',
+  '婚礼/爱情': 'wedding',
+  '新婚/美满': 'wedding',
+  '订婚/良缘': 'wedding',
+  '婚礼请柬': 'wedding',
+  '嫁妆/陪嫁': 'wedding',
+  '婚房布置': 'wedding',
+  '婚礼回礼': 'wedding',
+  '新婚/早生贵子': 'wedding',
+  '姻缘/情缘': 'wedding',
+  '婚嫁/传家': 'wedding',
+  // 寿辰 / 生辰
+  '寿辰/祝寿': 'longevity',
+  '长辈寿辰': 'longevity',
+  '祝寿/延年': 'longevity',
+  '重阳节': 'longevity',
+  '生日/生辰': 'birthday',
+  // 开业 / 创业 / 仕途
+  '开业/升职': 'opening',
+  '开业/庆典': 'opening',
+  '开业/开张': 'opening',
+  '创业/开疆': 'venture',
+  '开疆/创业': 'venture',
+  '事业/腾飞': 'venture',
+  '仕途/功名': 'career',
+  '升职/高升': 'career',
+  '功名利禄': 'career',
+  '升官/禄位': 'career',
+  '太狮少狮': 'career',
+  // 乔迁 / 新居
+  '乔迁/新居': 'housewarming',
+  '居家/纳福': 'housewarming',
+  // 新春 / 庆典
+  '新年/春节': 'newyear',
+  '春季节庆': 'newyear',
+  '报春/新生': 'newyear',
+  '节日庆典': 'festival',
+  '节庆/盛宴': 'festival',
+  '节日/庆典': 'festival',
+  '喜庆/热闹': 'festival',
+  '端午/龙舟': 'festival',
+  // 礼赠 / 文创周边
+  '文化礼品': 'cultural',
+  '长辈馈赠': 'cultural',
+  // 服饰 / 家居
+  '传统服饰': 'apparel',
+  '家居装饰': 'home',
+  // 护佑 / 辟邪
+  '镇宅/祈福': 'protection',
+  '护佑/辟邪': 'protection',
+  '辟邪/镇宅': 'protection',
+  '辟邪/保平安': 'protection',
+  '祈福/平安': 'protection',
+  '中元/祈福': 'protection',
+  // 富贵 / 繁荣
+  '富贵/繁荣': 'prosperity',
+  '富贵/荣华': 'prosperity',
+  '荣华/富贵': 'prosperity',
+  '福禄双全': 'prosperity',
+  '福禄/吉祥': 'prosperity',
+  '锦上添花': 'prosperity',
+  '红火/喜庆': 'prosperity',
+  // 文人雅趣 / 雅集
+  '文人雅趣': 'elegance',
+  '文人/雅士': 'elegance',
+  '文人/四君子': 'elegance',
+  '文房/书斋': 'elegance',
+  '书房/文雅': 'elegance',
+  '工笔/雅趣': 'elegance',
+  '高雅/清幽': 'elegance',
+  '君子/品德': 'elegance',
+  '高洁/雅士': 'elegance',
+  // 少女 / 女儿
+  '少女/闺秀': 'daughter',
+  '女儿/闺秀': 'daughter',
+  '女儿/嫁娶': 'daughter',
+  // 童趣 / 成人礼 / 生肖
+  '童趣/虎头': 'children',
+  '童趣/玩偶': 'children',
+  '成年礼/加冠': 'coming_of_age',
+  '生肖/本命年': 'zodiac',
+  // 勇武 / 尊贵
+  '勇武/气魄': 'valor',
+  '军人/武职': 'valor',
+  '勇猛/守护': 'valor',
+  '尊贵/高雅': 'noble',
+  '尊贵/权威': 'noble',
+  '男子/顶梁': 'noble',
+  '中和/平衡': 'noble',
+  // 自然 / 四季
+  '山林/自然': 'nature',
+  '春天/踏青': 'nature',
+  '春天/春意': 'nature',
+  '夏日/清凉': 'nature',
+  '夏日/时节': 'nature',
+  '夏天/赏花': 'nature',
+  '秋日/丰收': 'nature',
+  '丰收/收获': 'nature',
+  '冬日/雪景': 'nature',
+  // 家业 / 传承
+  '多子/人丁': 'family',
+  '多子/繁衍': 'family',
+  '家业/传承': 'family',
+  '家族/传承': 'family',
+  '绵延/长久': 'family',
+  // 静心 / 禅意
+  '宁静养生': 'zen',
+  '静心/禅意': 'zen',
+  '宗教/禅意': 'zen',
+  // 清廉 / 坚韧
+  '纯洁/清廉': 'integrity',
+  '隐逸/淡泊': 'integrity',
+  '坚贞/傲骨': 'integrity',
+  '坚韧/傲骨': 'integrity',
+  // 其他
+  '友谊/金兰': 'friendship',
+  '母亲/感恩': 'gratitude',
+  '喜事/报喜': 'joy',
+  '生机/和谐': 'joy',
+  '瓷器/青花': 'craft',
+  '织锦/刺绣': 'craft',
+  '建筑/雕梁': 'craft',
+  '建筑/石雕': 'craft',
+}
+
+/** 标准场景 id → 展示名 + 场景提示文案（未列出的场景自动用语义表寓意兜底） */
+const SCENE_META: Record<string, { label: string; hint?: string }> = {
+  graduation: { label: '毕业', hint: '寓意成长与高升；宜用鹤、梅、牡丹等；色调明快，适合礼品与书签。' },
+  wedding: { label: '婚礼', hint: '寓意喜庆成双；宜用龙凤、牡丹、莲花；红金或柔和配色。' },
+  longevity: { label: '寿辰', hint: '寓意长寿康宁；宜用鹤、鹿、桃、松；沉稳雅致。' },
+  birthday: { label: '生辰', hint: '寓意庆生纳福；宜用牡丹、石榴、蝴蝶；明快喜庆。' },
+  opening: { label: '开业', hint: '寓意开业兴隆；宜用凤鸟、狮子、牡丹；红金配色显热闹。' },
+  venture: { label: '创业', hint: '寓意事业腾飞；宜用龙、虎、鹿；气势昂扬。' },
+  career: { label: '仕途', hint: '寓意功名亨通；宜用鹿、孔雀、鹤；端庄贵气。' },
+  housewarming: { label: '乔迁', hint: '寓意新居纳福；宜用凤鸟、鹿、葫芦、缠枝；温馨吉庆。' },
+  newyear: { label: '新春', hint: '寓意新春吉庆；宜用龙、凤、梅、虎；红金喜庆。' },
+  festival: { label: '庆典', hint: '寓意隆重热闹；宜用龙凤、狮子、孔雀；华美大气。' },
+  cultural: { label: '文创周边', hint: '适合手机壳、帆布包、礼盒等；主体清晰、背景干净。' },
+  apparel: { label: '服饰', hint: '适合面料与绣片；注意边缘完整与对称。' },
+  home: { label: '家居', hint: '装饰性强、可连续铺陈；宜团花、缠枝；色调和谐。' },
+  protection: { label: '护佑', hint: '寓意镇宅护佑；宜用虎、龙、狮子、葫芦；稳重有威。' },
+  prosperity: { label: '富贵', hint: '寓意富贵繁荣；宜用牡丹、孔雀、石榴；华丽丰盛。' },
+  elegance: { label: '雅集', hint: '寓意文人雅趣；宜用梅兰竹菊、鹤、莲；清雅含蓄。' },
+  daughter: { label: '少女礼', hint: '寓意少女美好；宜用蝴蝶、芙蓉、石榴花；柔美灵动。' },
+  children: { label: '童趣', hint: '寓意孩童守护；宜用虎头、狮、蝴蝶；可爱生动。' },
+  coming_of_age: { label: '成人礼', hint: '寓意长大成才；宜用虎、龙、凤；精神昂扬。' },
+  zodiac: { label: '生肖', hint: '寓意本命年护佑；宜用对应生肖纹样；生动有趣。' },
+  valor: { label: '勇武', hint: '寓意勇武气魄；宜用虎、狮、龙；刚健有力。' },
+  noble: { label: '尊贵', hint: '寓意尊贵权威；宜用龙、凤、孔雀；雍容华贵。' },
+  nature: { label: '自然四季', hint: '寓意自然生机；宜用花鸟、蝴蝶、菊梅；清新明快。' },
+  family: { label: '家业传承', hint: '寓意子孙绵延、家业兴旺；宜用石榴、葫芦、缠枝。' },
+  zen: { label: '静心禅意', hint: '寓意宁静祥和；宜用莲、鹤、兰；素雅沉静。' },
+  integrity: { label: '清廉高洁', hint: '寓意清正高洁；宜用莲、兰、梅；淡雅端正。' },
+  friendship: { label: '友谊金兰', hint: '寓意情谊相投；宜用兰、鹤、梅；清雅隽永。' },
+  gratitude: { label: '感恩', hint: '寓意感恩敬重；宜用牡丹、鹤、兰；温暖真诚。' },
+  joy: { label: '喜事报喜', hint: '寓意喜事临门；宜用花鸟、喜鹊、牡丹；欢快明亮。' },
+  craft: { label: '工艺雅器', hint: '适用于瓷器、织绣、建筑装饰；宜缠枝、花鸟、龙凤。' },
+}
+
+/** 语义表 scene 原始值 → 标准场景 id（未归并的值原样返回） */
+export function sceneToSceneId(scene: string): string {
+  return SCENE_ALIAS[scene] ?? scene
+}
+
+/** 从语义表 scene 字段自动去重生成「使用场景」选项 */
+function buildSceneOptions(): SceneOption[] {
+  const seen = new Set<string>()
+  const options: SceneOption[] = []
+  for (const s of CULTURAL_SEMANTICS) {
+    const id = sceneToSceneId(s.scene)
+    if (seen.has(id)) continue
+    seen.add(id)
+    const meta = SCENE_META[id]
+    options.push({
+      id,
+      label: meta?.label ?? s.scene.split('/')[0],
+      promptHint: meta?.hint ?? s.meaning,
+    })
+  }
+  return options
+}
+
+export const SCENE_OPTIONS: SceneOption[] = buildSceneOptions()
+
+/** 标准场景 id → 触发关键词（自动汇总语义表 keywords + 场景名，供自然语言解析场景使用） */
+export const SCENE_KEYWORDS: Record<string, string[]> = (() => {
+  const map: Record<string, Set<string>> = {}
+  for (const s of CULTURAL_SEMANTICS) {
+    const id = sceneToSceneId(s.scene)
+    const set = (map[id] ??= new Set<string>())
+    set.add(s.scene)
+    for (const kw of s.keywords) set.add(kw)
+  }
+  return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, [...v]]))
+})()

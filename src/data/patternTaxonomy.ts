@@ -1,4 +1,5 @@
 /** 纹样主题 / 子类 / 场景 — 与 LoRA 训练目录对齐 */
+import { SCENE_KEYWORDS } from '../config/culturalSemantics'
 
 export type PatternThemeId = 'floral' | 'beast'
 
@@ -31,7 +32,6 @@ export const PATTERN_THEMES: PatternTheme[] = [
       { id: 'furong', label: '芙蓉花纹', trigger: 'ichpattern_furong' },
       { id: 'pomegranate_flower', label: '石榴花纹', trigger: 'ichpattern_pomegranate_flower' },
       { id: 'plant', label: '植物纹', trigger: 'ichpattern_plant' },
-      { id: 'floral_other', label: '其他花卉', trigger: 'ichpattern_floral' },
     ],
   },
   {
@@ -51,14 +51,8 @@ export const PATTERN_THEMES: PatternTheme[] = [
   },
 ]
 
-export const SCENE_OPTIONS = [
-  { id: 'graduation', label: '毕业', promptHint: '寓意成长与高升；宜用鹤、梅、牡丹等；色调明快，适合礼品与书签。' },
-  { id: 'wedding', label: '婚礼', promptHint: '寓意喜庆成双；宜用龙凤、牡丹、莲花；红金或柔和配色。' },
-  { id: 'longevity', label: '寿辰', promptHint: '寓意长寿康宁；宜用鹤、鹿、桃、松；沉稳雅致。' },
-  { id: 'home', label: '家居', promptHint: '装饰性强、可连续铺陈；宜团花、缠枝；色调和谐。' },
-  { id: 'apparel', label: '服饰', promptHint: '适合面料与绣片；注意边缘完整与对称。' },
-  { id: 'cultural', label: '文创周边', promptHint: '适合手机壳、帆布包等；主体清晰、背景干净。' },
-] as const
+/** 使用场景选项：从文化语义表 scene 字段自动去重生成（见 culturalSemantics.ts） */
+export { SCENE_OPTIONS } from '../config/culturalSemantics'
 
 export function parsePromptToTags(text: string): {
   themeId?: PatternThemeId
@@ -67,12 +61,12 @@ export function parsePromptToTags(text: string): {
 } {
   const t = text.trim()
   const sceneIds: string[] = []
-  if (/毕业|成长|升学/.test(t)) sceneIds.push('graduation')
-  if (/婚礼|结婚|喜庆|新婚/.test(t)) sceneIds.push('wedding')
-  if (/寿|长寿|康宁|生日/.test(t)) sceneIds.push('longevity')
-  if (/家居|室内|装饰/.test(t)) sceneIds.push('home')
-  if (/服饰|衣服/.test(t)) sceneIds.push('apparel')
-  if (/文创|周边|礼物|礼品/.test(t)) sceneIds.push('cultural')
+  // 场景识别：遍历语义表自动汇总的关键词，命中的标准场景全部勾选
+  for (const [id, kws] of Object.entries(SCENE_KEYWORDS)) {
+    if (kws.some((kw) => t.includes(kw)) && !sceneIds.includes(id)) {
+      sceneIds.push(id)
+    }
+  }
 
   let themeId: PatternThemeId | undefined
   let subcategoryId: string | undefined
