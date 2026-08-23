@@ -13,6 +13,11 @@ import { useCart } from '../hooks/useCart'
 import { supabase } from '../lib/supabase'
 import { Product3DViewer } from '../components/Product3DViewer'
 import { loadProduct3DConfig, has3DConfig, COLOR_PALETTE, type Product3DConfig, type PatternAreaKey } from '../config/product3D'
+import {
+  readPendingPattern,
+  clearPendingPattern,
+  SELECTED_PATTERN_GLOBAL_KEY,
+} from '../utils/customizeTransfer'
 
 /** 结构化错误序列化：保留 Supabase PostgrestError 的 message/code/details/hint/status，避免 Console 只显示 Error {} */
 function serializeError(error: any) {
@@ -531,6 +536,21 @@ export default function CustomizeProduct() {
   const productBoxRef = useRef<HTMLDivElement>(null)   // 新增：拖拽比例计算改用这个更小、更准确的容器
 
   useEffect(() => {
+    // ===== 消费「创作页 → 定制页」的待套用纹样（自动选中并贴图） =====
+    const pending = readPendingPattern()
+    if (pending) {
+      setSelectedPatternImage(pending.imageUrl)
+      const globalData = JSON.stringify({
+        id: pending.workId,
+        image_url: pending.imageUrl,
+        title: pending.name || '',
+      })
+      safeSessionSet(SELECTED_PATTERN_GLOBAL_KEY, globalData)
+      safeSessionSet(`customize:selectedPattern:${selectedProduct}`, globalData)
+    }
+    // 无论有效/过期都清除 pending 键，避免刷新反复套用旧图
+    clearPendingPattern()
+
     const reorderProduct = safeGetItem('reorder_product')
     
     if (reorderProduct) {

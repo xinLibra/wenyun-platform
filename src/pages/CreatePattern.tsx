@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Button, StampButton } from '../components/ui/Button'
 import { GeneratingPulse } from '../components/ui/GeneratingPulse'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
@@ -23,6 +23,11 @@ import {
   type PatternThemeId,
 } from '../data/patternTaxonomy'
 import { downloadImage } from '../utils/downloadImage'
+import {
+  writePendingPattern,
+  writeGlobalSelectedPattern,
+  LAST_GENERATED_PATTERN_KEY,
+} from '../utils/customizeTransfer'
 
 
 const DEFAULT_DIMENSION: PatternDimension = {
@@ -536,6 +541,56 @@ export default function CreatePattern() {
     }
   }
 
+  /**
+   * 「下一步：定制产品」
+   * - 未生成纹样 → toast 提示，不跳转
+   * - 未保存过 → 与「保存」一致的逻辑自动保存（is_public 走默认 false），拿回 workId
+   * - 已保存过 → 沿用 currentWorkId，不重复 insert
+   * - 写入 sessionStorage（customize:pendingPattern），跳转 /customize
+   */
+  const handleProceedToCustomize = async () => {
+    if (!generatedImage) {
+      showToastMessage('请先生成纹样')
+      return
+    }
+
+    let workId: string | null = currentWorkId
+    if (!workId) {
+      workId = await handleSave({ silent: true })
+      if (!workId) {
+        showToastMessage('保存失败，无法进入定制，请重试')
+        return
+      }
+    }
+
+    const name = workTitle || `纹样作品 #${Date.now().toString(36).toUpperCase()}`
+
+    // 写入跨页待套用数据（定制页消费后即删除）
+    writePendingPattern({
+      workId,
+      imageUrl: generatedImage,
+      name,
+      from: 'create',
+      ts: Date.now(),
+    })
+
+    // 写入定制页「选择纹样」同款全局 session 键，保证初始选中即生效
+    writeGlobalSelectedPattern({
+      id: workId,
+      image_url: generatedImage,
+      title: name,
+    })
+
+    // 保留旧兜底 key，与定制页初始 state 兼容
+    try {
+      localStorage.setItem(LAST_GENERATED_PATTERN_KEY, generatedImage)
+    } catch (err) {
+      console.warn('CreatePattern - save last_generated_pattern failed:', err)
+    }
+
+    navigate('/customize')
+  }
+
   const [createMode, setCreateMode] = useState<'ai' | 'fusion'>('ai')
   const [userPatterns, setUserPatterns] = useState<{ patternId: string; patternName: string; imageUrl: string }[]>([])
   const [isLoadingUserPatterns, setIsLoadingUserPatterns] = useState(false)
@@ -1032,17 +1087,12 @@ export default function CreatePattern() {
                 )}
               </StampButton>
 
-              <Link to="/customize" onClick={() => {
-                console.log('CreatePattern - generatedImage:', generatedImage)
-                if (generatedImage) {
-                  localStorage.setItem('last_generated_pattern', generatedImage)
-                  console.log('CreatePattern - saved to localStorage')
-                } else {
-                  console.log('CreatePattern - generatedImage is empty, not saving')
-                }
-              }}>
-                <Button variant="secondary">下一步：定制产品</Button>
-              </Link>
+              <Button
+                variant="secondary"
+                onClick={() => void handleProceedToCustomize()}
+              >
+                下一步：定制产品
+              </Button>
             </motion.div>
           </div>
 
