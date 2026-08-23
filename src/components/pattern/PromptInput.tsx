@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '../ui/Button'
 import { PromptParseResult } from '../../types/pattern'
+import { parsePromptToTags } from '../../data/patternTaxonomy'
 
 interface PatternRecommendation {
   patternId: string
@@ -272,7 +273,14 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
 
     setIsParsing(false)
 
-    // 解析完成后以当前文案重算推荐列表（识别到标签 + 推荐卡片），不沿用旧结果
+    // 若用户已明确写出具体纹样，只勾选筛选项，不再弹出推荐卡片
+    const { subcategoryId } = parsePromptToTags(prompt.trim())
+    if (subcategoryId) {
+      setHasSearched(false)
+      return
+    }
+
+    // 未写出具体纹样时，解析完成后以当前文案重算推荐列表
     if (onSemanticSearch && prompt.trim()) {
       setHasSearched(true)
       try {
