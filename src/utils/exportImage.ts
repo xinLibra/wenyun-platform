@@ -255,16 +255,6 @@ export async function renderCompositeCanvas(params: ExportParams): Promise<HTMLC
   return canvas
 }
 
-// 生成文件名：产品名_时间戳
-function generateFileName(productName: string, ext: string): string {
-  const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(
-    now.getHours()
-  )}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  return `${productName}_${timestamp}.${ext}`
-}
-
 // 生成定制预览图（返回 base64 dataURL，用于订单缩略图等场景）
 export async function generatePreviewDataUrl(
   params: ExportParams,
@@ -276,38 +266,4 @@ export async function generatePreviewDataUrl(
     canvasHeight: size,
   })
   return canvas.toDataURL('image/png')
-}
-
-// 导出为指定格式并触发下载
-export async function exportAndDownload(
-  params: ExportParams,
-  format: 'png' | 'jpg',
-  productName: string = '纹韵定制'
-) {
-  const canvas = await renderCompositeCanvas(params)
-
-  const mimeType = format === 'png' ? 'image/png' : 'image/jpeg'
-  const quality = format === 'jpg' ? 0.92 : undefined
-
-  return new Promise<void>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          reject(new Error('导出图片失败'))
-          return
-        }
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = generateFileName(productName, format)
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        resolve()
-      },
-      mimeType,
-      quality
-    )
-  })
 }

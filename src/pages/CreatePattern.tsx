@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button, StampButton } from '../components/ui/Button'
@@ -22,6 +22,7 @@ import {
   getSubcategories,
   type PatternThemeId,
 } from '../data/patternTaxonomy'
+import { downloadImage } from '../utils/downloadImage'
 
 
 const DEFAULT_DIMENSION: PatternDimension = {
@@ -127,6 +128,18 @@ export default function CreatePattern() {
   const [showDnaAnalysis, setShowDnaAnalysis] = useState(false)
   /** 真实生成失败时的降级提示信息；为 null 表示最近一次生成是真实成功（或尚未生成） */
   const [fallbackInfo, setFallbackInfo] = useState<{ reason: string } | null>(null)
+  /** 已保存作品的 id；未保存时为空。用于「分享时只更新不重复保存」 */
+  const [currentWorkId, setCurrentWorkId] = useState<string>('')
+  /** 融合模式已保存作品的 id；未保存时为空 */
+  const [fusionCurrentWorkId, setFusionCurrentWorkId] = useState<string>('')
+  const [toastMessage, setToastMessage] = useState('')
+  const toastTimerRef = useRef<number | null>(null)
+
+  const showToastMessage = (message: string) => {
+    setToastMessage(message)
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = window.setTimeout(() => setToastMessage(''), 3000)
+  }
 
   const handleDimensionChange = (value: PatternDimension) => {
     setDimension(value)
@@ -286,6 +299,8 @@ export default function CreatePattern() {
     try {
       const result = await generatePatternWithFallback(generationParams)
       setGeneratedImage(result.imageUrl)
+      // 新生成一张图后，之前的已保存 id 失效，避免分享错作品
+      setCurrentWorkId('')
       localStorage.setItem('last_generated_pattern', result.imageUrl)
       if (result.fallback) {
         // 真实链路失败 → 已自动降级 mock，给出明确原因便于排查
@@ -308,17 +323,17 @@ export default function CreatePattern() {
     }
   }
 
-  const handleSave = async () => {
+  const handleSave = async (options?: { isPublic?: boolean; silent?: boolean }): Promise<string | null> => {
     if (!generatedImage) {
       alert('请先生成纹样后再保存')
-      return
+      return null
     }
 
     const { data: { session } } = await supabase.auth?.getSession()
     if (!session?.user) {
       alert('请先登录后再保存作品')
       navigate('/login')
-      return
+      return null
     }
 
     setIsSaving(true)
@@ -348,7 +363,7 @@ export default function CreatePattern() {
           if (existingTitles.includes(workTitle)) {
             setIsSaving(false)
             alert('该名称已被使用，请换一个')
-            return
+            return null
           }
         }
       }
@@ -402,24 +417,31 @@ export default function CreatePattern() {
       const uniqueTags = [...new Set(autoTags)]
       const title = workTitle || `纹样作品 #${Date.now().toString(36).toUpperCase()}`
 
-      const { error } = await supabase.from('generations').insert({
+      const { data: savedData, error } = await supabase.from('generations').insert({
         user_id: session.user.id,
         style_id: dimension.craft[0] || null,
         params: { ...generationParams, tags: uniqueTags, title },
         image_url: generatedImage,
         author_nickname: nickname,
-        is_public: false,
-      })
+        is_public: options?.isPublic ?? false,
+      }).select('id').single()
 
       if (error) {
         console.error('Save error:', error)
         alert(`保存失败: ${error.message}`)
-      } else {
-        alert('已保存至我的作品')
+        return null
       }
+
+      const newId = savedData?.id || ''
+      setCurrentWorkId(newId)
+      if (!options?.silent) {
+        alert(options?.isPublic ? '已保存并设为公开' : '已保存至我的作品')
+      }
+      return newId
     } catch (err: any) {
       console.error('Save error:', err)
       alert(`保存失败: ${err.message || '未知错误'}`)
+      return null
     } finally {
       setIsSaving(false)
     }
@@ -429,83 +451,88 @@ export default function CreatePattern() {
 
   const handleShare = async () => {
     if (!generatedImage) {
-      alert('请先生成纹样后再分享')
+      showToastMessage('请先生成纹样后再分享')
       return
     }
 
     const { data: { session } } = await supabase.auth?.getSession()
     
     let shareUrl = `${window.location.origin}/gallery`
-    
+
     if (session?.user) {
-      const confirmed = window.confirm('分享前会自动保存这件作品并设为公开可见，是否继续？')
+      // 分享确认：说明分享需要公开作品，用户选择「是」才继续
+      const confirmed = window.confirm('分享需要公开作品，是否公开并继续分享？')
       if (!confirmed) {
         return
       }
 
       try {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('nickname')
-          .eq('id', session.user.id)
-          .single()
-        
-        const isGuest = localStorage.getItem('is_guest') === 'true'
-        const nickname = isGuest ? '游客' : (profileData?.nickname || session.user.email?.split('@')[0] || '用户')
-
-        const autoTags: string[] = []
-        const arrangementOption = ARRANGEMENT_OPTIONS.find(o => o.value === generationParams.arrangement)
-        if (arrangementOption) autoTags.push(arrangementOption.label)
-        const symmetryOption = SYMMETRY_OPTIONS.find(o => o.value === generationParams.symmetry)
-        if (symmetryOption) autoTags.push(symmetryOption.label)
-        if (generationParams.dimension.style.figurative < 40) {
-          autoTags.push('抽象风格')
-        } else if (generationParams.dimension.style.figurative > 60) {
-          autoTags.push('具象风格')
+        // 若当前作品尚未保存 → 先保存（公开 = true），拿回新 id
+        // 若已保存过（已有 currentWorkId）→ 只更新 is_public = true，不重复插入
+        let workId: string | null = currentWorkId
+        if (!workId) {
+          workId = await handleSave({ isPublic: true, silent: true })
+          if (!workId) return
+        } else {
+          const { error } = await supabase
+            .from('generations')
+            .update({ is_public: true })
+            .eq('id', workId)
+          if (error) {
+            console.error('Update public error:', error)
+            showToastMessage('设置公开失败，请重试')
+            return
+          }
         }
-        if (generationParams.dimension.style.simplicity < 40) {
-          autoTags.push('繁复风格')
-        } else if (generationParams.dimension.style.simplicity > 60) {
-          autoTags.push('简约风格')
-        }
-        if (generationParams.dimension.style.handmade < 40) {
-          autoTags.push('数字科技感')
-        } else if (generationParams.dimension.style.handmade > 60) {
-          autoTags.push('手作感')
-        }
-        const uniqueTags = [...new Set(autoTags)]
-        const title = workTitle || `纹样作品 #${Date.now().toString(36).toUpperCase()}`
-        
-        const { data: savedData } = await supabase.from('generations').insert({
-          user_id: session.user.id,
-          style_id: dimension.craft[0] || null,
-          params: { ...generationParams, tags: uniqueTags, title },
-          image_url: generatedImage,
-          author_nickname: nickname,
-          is_public: true,
-        }).select('id').single()
-        
-        if (savedData?.id) {
-          shareUrl = `${window.location.origin}/gallery/${savedData.id}`
-        }
+        shareUrl = `${window.location.origin}/gallery/${workId}`
       } catch (error) {
         console.error('Share save error:', error)
+        showToastMessage('分享准备失败，请稍后重试')
+        return
       }
     }
 
+    // 执行分享：支持 Web Share 则调系统分享（可带图片），否则复制链接降级
     if (navigator.share) {
       try {
-        await navigator.share({ 
-          title: '我在纹韵设计的纹样', 
+        let shareData: ShareData = {
+          title: '我在纹韵设计的纹样',
           text: '快来看看我设计的非遗纹样！',
-          url: shareUrl 
-        })
-      } catch {
-        // 用户取消分享，忽略
+          url: shareUrl,
+        }
+        // 可分享图片文件时优先附带图片
+        if (navigator.canShare) {
+          try {
+            const res = await fetch(generatedImage)
+            const blob = await res.blob()
+            const file = new File([blob], `纹韵纹样_${Date.now()}.png`, { type: 'image/png' })
+            const filesData: ShareData = { ...shareData, files: [file] }
+            if (navigator.canShare(filesData)) {
+              shareData = filesData
+            }
+          } catch {
+            // 图片拉取失败时降级为纯链接分享
+          }
+        }
+        await navigator.share(shareData)
+      } catch (err) {
+        // 用户取消系统分享面板（AbortError）不算报错
+        if ((err as any)?.name === 'AbortError') return
+        console.error('Share error:', err)
+        await copyShareLink(shareUrl)
       }
     } else {
+      await copyShareLink(shareUrl)
+    }
+  }
+
+  const copyShareLink = async (shareUrl: string) => {
+    try {
       await navigator.clipboard.writeText(shareUrl)
-      alert('链接已复制到剪贴板')
+      showToastMessage('作品链接已复制到剪贴板')
+    } catch (err) {
+      console.error('Copy share link error:', err)
+      window.prompt('复制作品链接：', shareUrl)
     }
   }
 
@@ -615,6 +642,8 @@ export default function CreatePattern() {
       // TODO(Wu): 这里目前仍是 mock（取权重较高一方的图作为占位结果），
       // 等真实的融合接口/模型接好后，把这行换成接口返回的融合图 URL。
       setFusionResultImage(ratioA >= ratioB ? fusionSelectedA.imageUrl : fusionSelectedB.imageUrl)
+      // 新生成融合图后，之前的已保存 id 失效，避免分享错作品
+      setFusionCurrentWorkId('')
       setLastFusionRatio({ a: ratioA, b: ratioB })
       setShowDnaAnalysis(true)
     } finally {
@@ -626,17 +655,17 @@ export default function CreatePattern() {
   // 再次点击已选中的项目会取消选中（第二个位置会自动补位到第一个位置）；
   // 两个位置都选满后再点新项目，会替换掉第二个位置
 
-  const handleFusionSave = async () => {
+  const handleFusionSave = async (options?: { isPublic?: boolean; silent?: boolean }): Promise<string | null> => {
     if (!fusionResultImage) {
       alert('请先生成融合纹样后再保存')
-      return
+      return null
     }
 
     const { data: { session } } = await supabase.auth?.getSession()
     if (!session?.user) {
       alert('请先登录后再保存作品')
       navigate('/login')
-      return
+      return null
     }
 
     setIsFusionSaving(true)
@@ -666,7 +695,7 @@ export default function CreatePattern() {
           if (existingTitles.includes(fusionWorkTitle)) {
             setIsFusionSaving(false)
             alert('该名称已被使用，请换一个')
-            return
+            return null
           }
         }
       }
@@ -675,7 +704,7 @@ export default function CreatePattern() {
       const uniqueTags = [...new Set(autoTags)]
       const title = fusionWorkTitle || `融合纹样 #${Date.now().toString(36).toUpperCase()}`
 
-      const { error } = await supabase.from('generations').insert({
+      const { data: savedData, error } = await supabase.from('generations').insert({
         user_id: session.user.id,
         style_id: null,
         params: {
@@ -690,18 +719,25 @@ export default function CreatePattern() {
         },
         image_url: fusionResultImage,
         author_nickname: nickname,
-        is_public: false,
-      })
+        is_public: options?.isPublic ?? false,
+      }).select('id').single()
 
       if (error) {
         console.error('Save error:', error)
         alert(`保存失败: ${error.message}`)
-      } else {
-        alert('已保存至我的作品')
+        return null
       }
+
+      const newId = savedData?.id || ''
+      setFusionCurrentWorkId(newId)
+      if (!options?.silent) {
+        alert(options?.isPublic ? '已保存并设为公开' : '已保存至我的作品')
+      }
+      return newId
     } catch (err: any) {
       console.error('Save error:', err)
       alert(`保存失败: ${err.message || '未知错误'}`)
+      return null
     } finally {
       setIsFusionSaving(false)
     }
@@ -718,62 +754,63 @@ export default function CreatePattern() {
     let shareUrl = `${window.location.origin}/gallery`
 
     if (session?.user) {
-      const confirmed = window.confirm('分享前会自动保存这件作品并设为公开可见，是否继续？')
+      const confirmed = window.confirm('分享需要公开作品，是否公开并继续分享？')
       if (!confirmed) return
 
       try {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('nickname')
-          .eq('id', session.user.id)
-          .single()
-
-        const isGuest = localStorage.getItem('is_guest') === 'true'
-        const nickname = isGuest ? '游客' : (profileData?.nickname || session.user.email?.split('@')[0] || '用户')
-
-        const autoTags = ['纹样融合', fusionSelectedA?.patternName, fusionSelectedB?.patternName].filter(Boolean) as string[]
-        const uniqueTags = [...new Set(autoTags)]
-        const title = fusionWorkTitle || `融合纹样 #${Date.now().toString(36).toUpperCase()}`
-
-        const { data: savedData } = await supabase.from('generations').insert({
-          user_id: session.user.id,
-          style_id: null,
-          params: {
-            tags: uniqueTags,
-            title,
-            fusion: {
-              patternAId: fusionSelectedA?.patternId,
-              patternBId: fusionSelectedB?.patternId,
-              ratioA: lastFusionRatio.a,
-              ratioB: lastFusionRatio.b,
-            },
-          },
-          image_url: fusionResultImage,
-          author_nickname: nickname,
-          is_public: true,
-        }).select('id').single()
-
-        if (savedData?.id) {
-          shareUrl = `${window.location.origin}/gallery/${savedData.id}`
+        // 未保存 → 先公开保存拿新 id；已保存 → 仅更新 is_public = true，不重复插入
+        let workId: string | null = fusionCurrentWorkId
+        if (!workId) {
+          workId = await handleFusionSave({ isPublic: true, silent: true })
+          if (!workId) return
+        } else {
+          const { error } = await supabase
+            .from('generations')
+            .update({ is_public: true })
+            .eq('id', workId)
+          if (error) {
+            console.error('Update public error:', error)
+            showToastMessage('设置公开失败，请重试')
+            return
+          }
         }
+        shareUrl = `${window.location.origin}/gallery/${workId}`
       } catch (error) {
         console.error('Share save error:', error)
+        showToastMessage('分享准备失败，请稍后重试')
+        return
       }
     }
 
     if (navigator.share) {
       try {
-        await navigator.share({
+        let shareData: ShareData = {
           title: '我在纹韵设计的融合纹样',
           text: '快来看看我融合设计的非遗纹样！',
-          url: shareUrl
-        })
-      } catch {
-        // 用户取消分享，忽略
+          url: shareUrl,
+        }
+        if (navigator.canShare) {
+          try {
+            const res = await fetch(fusionResultImage)
+            const blob = await res.blob()
+            const file = new File([blob], `融合纹样_${Date.now()}.png`, { type: 'image/png' })
+            const filesData: ShareData = { ...shareData, files: [file] }
+            if (navigator.canShare(filesData)) {
+              shareData = filesData
+            }
+          } catch {
+            // 图片拉取失败时降级为纯链接分享
+          }
+        }
+        await navigator.share(shareData)
+      } catch (err) {
+        // 用户取消系统分享面板（AbortError）不算报错
+        if ((err as any)?.name === 'AbortError') return
+        console.error('Share error:', err)
+        await copyShareLink(shareUrl)
       }
     } else {
-      await navigator.clipboard.writeText(shareUrl)
-      alert('链接已复制到剪贴板')
+      await copyShareLink(shareUrl)
     }
   }
 
@@ -1115,7 +1152,7 @@ export default function CreatePattern() {
                   variant="outline" 
                   size="sm" 
                   className="flex-1" 
-                  onClick={handleSave}
+                  onClick={() => handleSave()}
                   disabled={isSaving}
                 >
                   {isSaving ? '保存中...' : '保存'}
@@ -1326,7 +1363,7 @@ export default function CreatePattern() {
               variant="outline"
               size="sm"
               className="flex-1"
-              onClick={handleFusionSave}
+              onClick={() => handleFusionSave()}
               disabled={isFusionSaving}
             >
               {isFusionSaving ? '保存中...' : '保存'}
@@ -1379,15 +1416,16 @@ export default function CreatePattern() {
               
               <div className="mt-4 flex justify-center">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const imgUrl = createMode === 'fusion' ? fusionResultImage : generatedImage
-                    const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(imgUrl)}`
-                    const link = document.createElement('a')
-                    link.href = proxyUrl
-                    link.download = `纹韵纹样_${Date.now()}.png`
-                    document.body.appendChild(link)
-                    link.click()
-                    document.body.removeChild(link)
+                    if (!imgUrl) return
+                    try {
+                      await downloadImage(imgUrl, `纹韵纹样_${Date.now()}.png`)
+                      showToastMessage('图片已开始下载')
+                    } catch (err) {
+                      console.error('下载失败:', err)
+                      showToastMessage('下载失败，请检查网络或图片链接后重试')
+                    }
                   }}
                   className="px-6 py-3 bg-palace-red text-rice-paper font-song rounded-sm hover:bg-palace-red-dark transition-colors shadow-md"
                 >
@@ -1430,6 +1468,13 @@ export default function CreatePattern() {
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence></>
+    </AnimatePresence>
+
+    {toastMessage && (
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] px-4 py-2.5 bg-ink-black/90 text-rice-paper font-song text-sm rounded-md shadow-lg pointer-events-none">
+        {toastMessage}
+      </div>
+    )}
+    </>
   )
 }
