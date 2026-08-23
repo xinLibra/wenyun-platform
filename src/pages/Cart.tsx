@@ -11,7 +11,7 @@ import PatternPreview from '../components/PatternPreview'
 
 export default function Cart() {
   const navigate = useNavigate()
-  const { items, removeFromCart, updateQuantity, clearCart } = useCart()
+  const { items, removeFromCart, updateQuantity, clearCart, hydrated } = useCart()
   const [showCheckout, setShowCheckout] = useState(false)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
   const [formData, setFormData] = useState({
@@ -125,6 +125,33 @@ export default function Cart() {
     } finally {
       setIsCheckingOut(false)
     }
+  }
+
+  // 首次读取完成前显示加载态，避免"先闪空态再出商品"
+  if (!hydrated) {
+    return (
+      <div className="min-h-screen py-8 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <motion.h1
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="font-shufa text-4xl md:text-5xl text-deep-blue mb-4"
+            >
+              购物车
+            </motion.h1>
+            <BranchDivider />
+          </div>
+
+          <FrameDecorations className="bg-rice-paper-light p-12">
+            <div className="flex flex-col items-center justify-center py-8">
+              <div className="w-12 h-12 border-4 border-deep-blue-100 border-t-palace-red rounded-full animate-spin mb-6" />
+              <p className="font-song text-deep-blue-light">正在加载购物车…</p>
+            </div>
+          </FrameDecorations>
+        </div>
+      </div>
+    )
   }
 
   if (items.length === 0) {

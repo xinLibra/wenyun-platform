@@ -13,12 +13,22 @@ const STORAGE_KEY = 'cart_items_local'
 const DEBOUNCE_MS = 500
 
 export function useCart() {
-  const [items, setItems] = useState<CartItem[]>([])
+  // 惰性初始化：从 localStorage 同步读取，避免第一帧就是空数组导致"闪空态"
+  const [items, setItems] = useState<CartItem[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+    } catch {
+      return []
+    }
+  })
+  // 首次读取（localStorage / 远端）是否完成。完成前 UI 应显示加载态而不是空态
+  const [hydrated, setHydrated] = useState(false)
   const isLoaded = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const syncCart = async () => {
+      setHydrated(false)
       const { data: { session } } = await supabase.auth?.getSession()
       
       if (session?.user) {
@@ -58,6 +68,7 @@ export function useCart() {
       }
       
       isLoaded.current = true
+      setHydrated(true)
     }
 
     syncCart()
@@ -192,5 +203,5 @@ export function useCart() {
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0)
 
-  return { items, addToCart, removeFromCart, updateQuantity, clearCart, totalItems }
+  return { items, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, hydrated }
 }
