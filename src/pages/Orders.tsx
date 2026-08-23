@@ -219,7 +219,15 @@ export default function Orders() {
                     onClick={() => setSelectedOrder(order)}
                   >
                     <div className="flex-shrink-0">
-                      {order.image_url && order.product_image ? (
+                      {order.customization?.previewImage ? (
+                        <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
+                          <img
+                            src={order.customization.previewImage}
+                            alt={product?.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : order.image_url && order.product_image ? (
                         <PatternPreview
                           productImage={order.product_image}
                           patternImage={order.image_url}
@@ -321,7 +329,15 @@ export default function Orders() {
                   <>
                     <div className="flex gap-4 mb-4">
                       <div className="flex-shrink-0">
-                        {selectedOrder.image_url && selectedOrder.product_image ? (
+                        {selectedOrder.customization?.previewImage ? (
+                          <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
+                            <img
+                              src={selectedOrder.customization.previewImage}
+                              alt={products[selectedOrder.product_id]?.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : selectedOrder.image_url && selectedOrder.product_image ? (
                           <PatternPreview
                             productImage={selectedOrder.product_image}
                             patternImage={selectedOrder.image_url}
@@ -534,8 +550,16 @@ export default function Orders() {
 
                 <div className="border-t border-deep-blue-100 pt-4 mb-4">
                   <div className="flex items-center gap-4 mb-3">
-                      <div className="flex-shrink-0">
-                        {selectedOrder.image_url && selectedOrder.product_image ? (
+                    <div className="flex-shrink-0">
+                      {selectedOrder.customization?.previewImage ? (
+                        <div className="w-16 h-16 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
+                          <img
+                            src={selectedOrder.customization.previewImage}
+                            alt={products[selectedOrder.product_id]?.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : selectedOrder.image_url && selectedOrder.product_image ? (
                           <PatternPreview
                             productImage={selectedOrder.product_image}
                             patternImage={selectedOrder.image_url}

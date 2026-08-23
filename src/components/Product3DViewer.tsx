@@ -29,6 +29,8 @@ interface Product3DViewerProps {
   className?: string
   /** patternArea=full 时，不贴图的材质列表（用于兜底 full 配置不全） */
   excludeFromPatternAreaFull?: string[]
+  /** 纹样透明度 0-1，仅对命中贴图目标的材质生效（默认 1 不透明） */
+  patternOpacity?: number
 }
 
 function hexToColor(hex: string): THREE.Color {
@@ -68,6 +70,7 @@ function Model({
   patternArea = 'chest',
   colorArea,
   excludeFromPatternAreaFull = [],
+  patternOpacity = 1,
 }: {
   modelUrl: string
   textureTargetMaterial: string
@@ -82,6 +85,8 @@ function Model({
   colorArea?: PatternAreaKey
   /** full 贴图时，这些材质名绝对不贴图（如手提带）；用于兜底 full 配置不全的 JSON */
   excludeFromPatternAreaFull?: string[]
+  /** 纹样透明度 0-1，仅对命中贴图目标的材质生效 */
+  patternOpacity?: number
 }) {
   const { scene } = useGLTF(modelUrl)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
@@ -218,6 +223,10 @@ function Model({
         if (!oldMat) return
 
         const mat = oldMat.clone() as THREE.MeshStandardMaterial
+        // 记录原始透明度，未命中贴图时恢复（避免半透明材质被破坏）
+        const origOpacity = oldMat.opacity
+        const origTransparent = oldMat.transparent
+        const origDepthWrite = oldMat.depthWrite
 
         if (Array.isArray(mesh.material)) {
           ;(mesh.material as THREE.Material[])[idx] = mat
@@ -253,7 +262,12 @@ function Model({
             hitByExcludeFallback = true
           }
         }
-        const effectiveHitTexture = hitTextureTarget || hitByExcludeFallback
+
+        // 换色部件（colorMaterials 命中）一律不贴纹样：
+        // 修复笔记本线圈 "材质.002" 被过宽目标 "材质" 子串命中 → 线圈被纹样染色
+        const hitColorMaterial = colorMaterials.some((cm) => matchTarget(cm.materialName))
+
+        const effectiveHitTexture = (hitTextureTarget || hitByExcludeFallback) && !hitColorMaterial
 
         if (typeof mat.metalness === 'number') {
           mat.metalness = Math.min(mat.metalness, 0.15)
@@ -266,10 +280,17 @@ function Model({
         if (texture && effectiveHitTexture) {
           mat.map = texture
           mat.color.set('#ffffff') // 贴图区必须纯白，否则乘脏贴图
+          // 纹样透明度：命中贴图的材质按 patternOpacity 生效
+          mat.opacity = patternOpacity
+          mat.transparent = patternOpacity < 1
+          mat.depthWrite = patternOpacity >= 1
           mat.needsUpdate = true
         } else {
           // 未命中贴图目标：清 map + 严格恢复 initialColor（绝不会黑，因为存时已修正）
           mat.map = null
+          mat.opacity = origOpacity
+          mat.transparent = origTransparent
+          mat.depthWrite = origDepthWrite
           const initC = getInitialColor(names, mesh.name, idx)
           mat.color.copy(initC)
           mat.needsUpdate = true
@@ -306,7 +327,7 @@ function Model({
         }
       })
     })
-  }, [clonedScene, texture, scene, textureTargetMaterial, textureTargetMaterials, patternArea, colorTargetMaterials, colorArea, colorMaterials, colorMap])
+  }, [clonedScene, texture, scene, textureTargetMaterial, textureTargetMaterials, patternArea, colorTargetMaterials, colorArea, colorMaterials, colorMap, patternOpacity])
 
   return (
     <group rotation={modelRotation as [number, number, number]} scale={modelScale}>
@@ -342,6 +363,7 @@ export function Product3DViewer({
   captureRef,
   className = '',
   excludeFromPatternAreaFull = [],
+  patternOpacity = 1,
 }: Product3DViewerProps) {
   const rot = modelRotation ?? [0, 0, 0]
   const scl = modelScale ?? 0.35
@@ -370,7 +392,7 @@ export function Product3DViewer({
       <Canvas
         key={modelUrl}
         camera={{ position: cam, fov: 35 }}
-        gl={{ antialias: true, alpha: true }}
+        gl={{ antialias: true, alpha: true, preserveDrawingBuffer: true }}
         onCreated={handleCreated}
       >
         <ambientLight intensity={1.25} />
@@ -395,6 +417,7 @@ export function Product3DViewer({
             patternArea={patternArea}
             colorArea={colorArea}
             excludeFromPatternAreaFull={excludeFromPatternAreaFull}
+            patternOpacity={patternOpacity}
           />
         </Suspense>
 

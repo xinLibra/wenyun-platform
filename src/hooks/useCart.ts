@@ -83,7 +83,7 @@ export function useCart() {
     }
   }, [])
 
-  const COMPARE_FIELDS = ['scale', 'rotation', 'positionX', 'positionY', 'blendMode']
+  const COMPARE_FIELDS = ['scale', 'rotation', 'positionX', 'positionY', 'blendMode', 'patternOpacity']
 
   const saveToDB = useCallback(async (currentItems: CartItem[]) => {
     if (!isLoaded.current) return

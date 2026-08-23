@@ -281,6 +281,7 @@ export default function CustomizeProduct() {
   const [positionY, setPositionY] = useState(getInitialParams(getInitialProduct()).positionY)
 
   const [blendMode, setBlendMode] = useState(getInitialParams(getInitialProduct()).blendMode)
+  const [patternOpacity, setPatternOpacity] = useState(100)
   const [selectedCategory, setSelectedCategory] = useState(getInitialCategory())
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
     const savedProduct = safeGetItem('selected_product_id') || 'scarf_front'
@@ -566,6 +567,7 @@ export default function CustomizeProduct() {
         setPositionX(customization?.positionX || 50)
         setPositionY(customization?.positionY || 50)
         setBlendMode(customization?.blendMode || 'normal')
+        setPatternOpacity(customization?.patternOpacity ?? 100)
         try { localStorage.removeItem('reorder_product') } catch { /* ignore */ }
         return
       } catch {
@@ -881,6 +883,8 @@ export default function CustomizeProduct() {
     alert('配置已保存')
   }
 
+  const is3DProduct = !!product3DConfig?.modelUrl
+
   const handleAddToCart = () => {
     setQuantityAction('cart')
     setQuantity(1)
@@ -904,10 +908,15 @@ export default function CustomizeProduct() {
     setShowQuantityModal(false)
     
     if (quantityAction === 'cart') {
+      // 3D 产品：用 3D 预览截图作为购物车图，避免购物车用 2D 合成图
+      let previewImage: string | undefined
+      if (is3DProduct && viewerCaptureRef.current) {
+        previewImage = viewerCaptureRef.current() || undefined
+      }
       addToCart({
         productId: selectedProduct,
         generationId: null,
-        customization: { scale, rotation, positionX, positionY, blendMode, patternImage: selectedPatternImage, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
+        customization: { scale, rotation, positionX, positionY, blendMode, patternImage: selectedPatternImage, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, previewImage },
         quantity: quantity
       })
       alert('已加入购物车')
@@ -996,7 +1005,7 @@ export default function CustomizeProduct() {
         generation_id: null,
         image_url: selectedPatternImage,
         product_image: currentProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
+        customization: { scale, rotation, positionX, positionY, blendMode, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, previewImage: orderPreviewImg || undefined },
         quantity: quantity,
         status: 'demo',
         created_at: new Date().toISOString(),
@@ -1345,6 +1354,7 @@ export default function CustomizeProduct() {
                             : undefined
                         }
                         captureRef={viewerCaptureRef}
+                        patternOpacity={patternOpacity / 100}
                       />
 
                       {/* 底部信息条 */}
@@ -1496,7 +1506,9 @@ export default function CustomizeProduct() {
 
                 {activeTab === 'pattern' && (
                   <div className="space-y-3">
-                    {/* ===== 区块一：纹样排版 ===== */}
+                    {/* ===== 区块一：纹样排版（仅 2D 产品） ===== */}
+                    {!is3DProduct && (
+                      <>
                     <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
                       <button
                         onClick={() => setPanelExpanded(p => ({ ...p, layout: !p.layout }))}
@@ -1579,6 +1591,30 @@ export default function CustomizeProduct() {
                         </div>
                       )}
                     </div>
+                      </>
+                    )}
+
+                    {/* ===== 区块：纹样透明度（仅 3D 产品） ===== */}
+                    {is3DProduct && (
+                      <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2.5 bg-deep-blue/5">
+                          <span className="font-shufa text-sm text-deep-blue flex items-center">
+                            <span className="w-5 h-5 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">透</span>
+                            纹样透明度
+                          </span>
+                        </div>
+                        <div className="p-4">
+                          <InkSlider
+                            label="透明度"
+                            value={patternOpacity}
+                            min={0}
+                            max={100}
+                            onChange={setPatternOpacity}
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     {/* ===== 区块二：部件配色 ===== */}
                     {product3DConfig?.meshConfig?.colorMaterials?.length ? (
@@ -1745,7 +1781,9 @@ export default function CustomizeProduct() {
                       </div>
                     ) : null}
 
-                    {/* ===== 区块三：定制调节 ===== */}
+                    {/* ===== 区块三：定制调节（仅 2D 产品） ===== */}
+                    {!is3DProduct && (
+                      <>
                     <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
                       <button
                         onClick={() => setPanelExpanded(p => ({ ...p, adjust: !p.adjust }))}
@@ -1815,6 +1853,8 @@ export default function CustomizeProduct() {
                         </div>
                       )}
                     </div>
+                      </>
+                    )}
                   </div>
                 )}
 

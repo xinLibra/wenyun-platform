@@ -244,7 +244,15 @@ export default function Cart() {
                     />
                   </label>
                   <div className="flex-shrink-0">
-                      {item.customization?.patternImage && product?.image ? (
+                      {item.customization?.previewImage ? (
+                        <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
+                          <img
+                            src={item.customization.previewImage}
+                            alt={product?.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : item.customization?.patternImage && product?.image ? (
                         <PatternPreview
                           productImage={product.image}
                           patternImage={item.customization.patternImage}
