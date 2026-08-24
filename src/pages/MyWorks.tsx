@@ -1,10 +1,35 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase, Generation } from '../lib/supabase'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { useFavorites } from '../context/FavoriteContext'
+import { withTimeout, classifyError, sleep, logSupabaseConfig } from '../lib/async'
+
+const SESSION_TIMEOUT_MS = 8000
+const DB_TIMEOUT_MS = 8000
+const MAX_ATTEMPTS = 3
+const RETRY_DELAY_MS = 1000
+const WORKS_CACHE_PREFIX = 'myworks_local_cache_'
+
+function readWorksCache(userId: string): Generation[] | null {
+  try {
+    const raw = localStorage.getItem(`${WORKS_CACHE_PREFIX}${userId}`)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+function writeWorksCache(userId: string, data: Generation[]) {
+  try {
+    localStorage.setItem(`${WORKS_CACHE_PREFIX}${userId}`, JSON.stringify(data))
+  } catch (e: any) {
+    console.warn('[MyWorks] write cache failed:', e?.message ?? e)
+  }
+}
 
 export default function MyWorksPage() {
   const navigate = useNavigate()
@@ -12,13 +37,13 @@ export default function MyWorksPage() {
   const [generations, setGenerations] = useState<Generation[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [staleNotice, setStaleNotice] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let mounted = true
-    let timeoutId: ReturnType<typeof setTimeout>
 
     const loadWorks = async () => {
       try {
@@ -32,20 +57,26 @@ export default function MyWorksPage() {
           return
         }
 
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        logSupabaseConfig('MyWorks')
+
+        // 会话校验（8s 超时）
+        const sessionRes = await withTimeout(
+          supabase.auth.getSession(),
+          SESSION_TIMEOUT_MS,
+          '会话校验'
+        ).catch((e) => {
+          console.error('[MyWorks] getSession failed:', e?.message ?? e, e)
+          return { data: { session: null }, error: e } as any
+        })
+        const sessionError = sessionRes?.error
+        const session = sessionRes?.data?.session
         if (sessionError) {
-          console.error('[MyWorks] getSession failed:', {
-            message: sessionError.message,
-            code: (sessionError as any).code,
-            status: (sessionError as any).status,
-          })
           if (mounted) {
-            setError(`登录状态校验失败：${sessionError.message || '请重新登录'}`)
+            setError(classifyError(sessionError).message)
             setIsLoading(false)
           }
           return
         }
-
         if (!session?.user) {
           console.info('[MyWorks] no active session, redirect to login')
           if (mounted) {
@@ -56,56 +87,75 @@ export default function MyWorksPage() {
           return
         }
 
-        const { data: generationsData, error: fetchError } = await supabase
-          .from('generations')
-          .select('id, image_url, params, is_public, created_at')
-          .eq('user_id', session.user.id)
-          .order('created_at', { ascending: false })
-          .limit(60)
+        const userId = session.user.id
 
-        if (fetchError) {
-          console.error('[MyWorks] query generations failed:', {
-            message: fetchError.message,
-            code: fetchError.code,
-            details: fetchError.details,
-            hint: fetchError.hint,
-          })
-          if (mounted) setError(`获取作品失败：${fetchError.message || '请稍后重试'}`)
+        // 拉取作品：自动重试 3 次，每次 8s 超时
+        let rows: any[] = []
+        let lastError: any = null
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          try {
+            const { data, error } = await withTimeout(
+              supabase
+                .from('generations')
+                .select('id, image_url, params, is_public, created_at')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(60),
+              DB_TIMEOUT_MS,
+              '获取作品'
+            )
+            if (error) throw error
+            rows = data ?? []
+            lastError = null
+            break
+          } catch (e: any) {
+            console.error(`[MyWorks] Fetch works failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, e?.message ?? e, e)
+            lastError = e
+            if (attempt < MAX_ATTEMPTS) await sleep(RETRY_DELAY_MS)
+          }
+        }
+
+        if (lastError) {
+          const cached = readWorksCache(userId)
+          if (cached && cached.length > 0) {
+            if (mounted) {
+              setGenerations(cached)
+              setStaleNotice(true)
+              setError('')
+              setIsLoading(false)
+            }
+          } else {
+            if (mounted) {
+              setError(classifyError(lastError).message)
+              setIsLoading(false)
+            }
+          }
           return
         }
 
-        // select 只取必要字段，行类型为字段子集，用轻量 Row 类型处理
-        const rows = generationsData ?? []
         const generationIds = rows.map((gen) => gen.id)
 
         let favoriteCounts: Record<string, number> = {}
         if (generationIds.length > 0) {
           try {
-            const { data: favoritesData, error: favError } = await supabase
-              .from('favorites')
-              .select('generation_id')
-              .in('generation_id', generationIds)
-
+            const { data: favoritesData, error: favError } = await withTimeout(
+              supabase
+                .from('favorites')
+                .select('generation_id')
+                .in('generation_id', generationIds),
+              DB_TIMEOUT_MS,
+              '获取点赞数'
+            )
             if (favError) {
-              console.error('[MyWorks] query favorites failed:', {
-                message: favError.message,
-                code: (favError as any).code,
-                details: (favError as any).details,
-                hint: (favError as any).hint,
-              })
+              console.error('[MyWorks] query favorites failed:', favError?.message ?? favError, favError)
             } else if (favoritesData) {
               favoriteCounts = {}
               favoritesData.forEach((fav: { generation_id: string }) => {
                 favoriteCounts[fav.generation_id] = (favoriteCounts[fav.generation_id] || 0) + 1
               })
             }
-          } catch (favErr) {
-            const anyFavErr = favErr as any
-            console.error('[MyWorks] favorites query threw:', {
-              message: anyFavErr?.message ?? 'unknown error',
-              code: anyFavErr?.code,
-              raw: favErr,
-            })
+          } catch (favErr: any) {
+            console.error('[MyWorks] favorites query threw:', favErr?.message ?? favErr, favErr)
           }
         }
 
@@ -113,9 +163,14 @@ export default function MyWorksPage() {
           ...gen,
           favorite_count: favoriteCounts[gen.id] || 0
         })) as unknown as Generation[]
+
+        // 写入本地缓存，供下次网络失败时展示
+        writeWorksCache(userId, updatedGenerations)
+
         if (mounted) {
           setGenerations(updatedGenerations)
           setError('')
+          setStaleNotice(false)
         }
       } catch (err) {
         const anyErr = err as any
@@ -130,28 +185,16 @@ export default function MyWorksPage() {
         })
         if (mounted) setError('获取作品失败，请稍后重试')
       } finally {
-        clearTimeout(timeoutId)
         if (mounted) setIsLoading(false)
       }
     }
 
     setIsLoading(true)
     setError('')
-
-    // 30 秒超时兜底：防止网络或 Supabase 无响应导致一直 loading
-    timeoutId = setTimeout(() => {
-      if (mounted) {
-        console.warn('[MyWorks] load timed out after 30s')
-        setIsLoading(false)
-        setError('加载超时，请检查网络连接或稍后重试')
-      }
-    }, 30000)
-
     loadWorks()
 
     return () => {
       mounted = false
-      clearTimeout(timeoutId)
     }
   }, [navigate, reloadKey])
 
@@ -312,7 +355,28 @@ export default function MyWorksPage() {
             <p className="font-song text-deep-blue-light mt-4">查看和管理您保存的纹样作品</p>
           </div>
 
-          {error && (
+          {/* 弱提示：缓存数据可能不是最新 */}
+          <AnimatePresence>
+            {staleNotice && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-sm font-song text-center mb-6"
+              >
+                <p>当前展示的是上次缓存的作品，可能不是最新</p>
+                <button
+                  onClick={() => setReloadKey((k) => k + 1)}
+                  className="mt-2 px-4 py-1.5 bg-palace-red text-rice-paper rounded-sm font-song text-sm hover:bg-palace-red-dark transition-colors"
+                >
+                  重试
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* 仅无缓存数据时才展示红色报错 */}
+          {error && generations.length === 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
