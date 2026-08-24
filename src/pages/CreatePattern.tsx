@@ -1390,7 +1390,7 @@ export default function CreatePattern() {
           <div>
             <h3 className="font-shufa text-lg text-deep-blue">选择两个纹样分类进行融合</h3>
             <p className="font-song text-xs text-deep-blue-light mt-0.5">
-              每个位置先选主题，再选一个子类（对应 LoRA）
+              每个位置先选主题，再选一个子类
             </p>
           </div>
           <span className="flex-shrink-0 font-song text-xs text-deep-blue-light flex items-center gap-1">

@@ -45,6 +45,16 @@ function norm(x: unknown): string {
   return String(x ?? '').trim().toLowerCase()
 }
 
+/** 命中判断：mesh 名 或 材质名 精确匹配（二者都认，抱枕等 GLB 只有 mesh 名可用的产品依赖此函数） */
+function hitTarget(mesh: THREE.Mesh, target: string): boolean {
+  const t = norm(target)
+  if (!t) return false
+  if (norm(mesh.name) === t) return true
+  const raw = mesh.material
+  const mats = (Array.isArray(raw) ? raw : [raw]) as THREE.MeshStandardMaterial[]
+  return mats.some((m) => norm(m?.name) === t)
+}
+
 function getTextureTargets(
   textureTargetMaterial: string | string[],
   textureTargetMaterials: TextureTargetMaterials | undefined,
@@ -98,6 +108,7 @@ function Model({
   // 只存一次的「原始色」缓存：key = mat.name/mesh.name 组合，值 = 修正后的 THREE.Color
   const initialColorsRef = useRef<Map<string, THREE.Color>>(new Map())
   const initialColorReadyRef = useRef(false)
+  const materialDumpLoggedRef = useRef(false)
 
   useEffect(() => {
     console.log('[Model] url=', modelUrl, 'rot=', modelRotation, 'scale=', modelScale, 'patternArea=', patternArea)
@@ -170,6 +181,16 @@ function Model({
 
   useEffect(() => {
     const targets = getTextureTargets(textureTargetMaterial, textureTargetMaterials, patternArea)
+
+    // 统计场景 mesh 数：只有 1 个 mesh 时，贴图/上色无条件命中（抱枕等单网格产品兜底）
+    const allMeshes: THREE.Mesh[] = []
+    clonedScene.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) allMeshes.push(o as THREE.Mesh)
+    })
+    const isSingleMesh = allMeshes.length === 1
+    if (isSingleMesh) {
+      console.log(`[3D Viewer] ${modelUrl} fallback single mesh: 场景仅 ${allMeshes.length} 个 mesh，贴图/上色强制命中`)
+    }
 
     // ===== 1. 一次性从原始 scene 捕获初始色（只跑一次）=====
     if (!initialColorReadyRef.current) {
@@ -260,13 +281,14 @@ function Model({
           mesh.material = mat
         }
 
-        const names = [String(mat.name ?? ''), String(mesh.name ?? ''), String(child.name ?? '')]
-          .map((s) => String(s ?? '').toLowerCase().trim())
+        const names = [norm(mat.name), norm(mesh.name), norm(child.name)]
           .filter((s) => s && s !== '-')
 
+        // mesh 名 + 材质名都认（hitTarget 精确匹配），再叠加旧子串匹配兼容其它产品
         const matchTarget = (target: string): boolean => {
-          const t = String(target ?? '').toLowerCase().trim()
+          const t = norm(target)
           if (!t) return false
+          if (hitTarget(mesh, target)) return true
           return names.some((n) => {
             if (!n) return false
             if (n === t) return true
@@ -298,8 +320,10 @@ function Model({
           return tt && names.includes(tt)
         })
 
-        const effectiveHitTexture =
-          (hitTextureTarget || hitByExcludeFallback) && (!hitColorMaterial || exactTextureTargetHit)
+        // 单 mesh 兜底：场景只有 1 个 mesh 时无条件贴图（json 名字对不上也强制生效）
+        const effectiveHitTexture = isSingleMesh
+          ? true
+          : (hitTextureTarget || hitByExcludeFallback) && (!hitColorMaterial || exactTextureTargetHit)
 
         if (typeof mat.metalness === 'number') {
           mat.metalness = Math.min(mat.metalness, 0.15)
@@ -328,10 +352,10 @@ function Model({
           mat.needsUpdate = true
         }
 
-        // ===== 换色：仅用户显式设置的部件覆盖 =====
+        // ===== 换色：仅用户显式设置的部件覆盖（单 mesh 时无条件命中）=====
         let userColored = false
         colorMaterials.forEach((cm) => {
-          if (!matchTarget(cm.materialName)) return
+          if (!isSingleMesh && !matchTarget(cm.materialName)) return
           const hex = colorMap[cm.name]
           if (!hex) return
           userColored = true
@@ -359,6 +383,23 @@ function Model({
         }
       })
     })
+
+    // ===== 一次性材质 dump：在默认材质创建后打印真实 material.name（供 json 对齐）=====
+    if (!materialDumpLoggedRef.current) {
+      materialDumpLoggedRef.current = true
+      const dump: string[] = []
+      clonedScene.traverse((child) => {
+        if (!(child as THREE.Mesh).isMesh) return
+        const mesh = child as THREE.Mesh
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+        mats.forEach((m, i) => {
+          dump.push(
+            `[3D Viewer dump] node="${child.name || '-'}" meshName="${mesh.name || '-'}" materialName="${m?.name || '-'}" matIndex=${i} type=${m?.type || '-'}`
+          )
+        })
+      })
+      console.log(`[3D Viewer] ${modelUrl} 材质 dump（创建默认材质后）:\n${dump.join('\n')}`)
+    }
   }, [clonedScene, texture, scene, textureTargetMaterial, textureTargetMaterials, patternArea, colorMaterials, colorMap, patternOpacity])
 
   return (
