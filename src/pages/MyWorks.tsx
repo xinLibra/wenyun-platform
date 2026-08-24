@@ -9,6 +9,7 @@ import { withTimeout, classifyError, sleep, logSupabaseConfig } from '../lib/asy
 
 const SESSION_TIMEOUT_MS = 20000
 const DB_TIMEOUT_MS = 25000
+const FAV_TIMEOUT_MS = 5000
 const MAX_ATTEMPTS = 3
 const RETRY_DELAY_MS = 1000
 const WORKS_CACHE_PREFIX = 'myworks_local_cache_'
@@ -107,7 +108,7 @@ export default function MyWorksPage() {
 
         const userId = session.user.id
 
-        // 拉取作品：自动重试 3 次，每次 8s 超时
+        // 拉取作品：自动重试 3 次，每次 25s 兜底超时
         let rows: any[] = []
         let lastError: any = null
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -120,7 +121,7 @@ export default function MyWorksPage() {
                 .select('id, is_public, created_at, title:params->>title, tags:params->tags')
                 .eq('user_id', userId)
                 .order('created_at', { ascending: false })
-                .limit(50),
+                .limit(20),
               DB_TIMEOUT_MS,
               '获取作品'
             )
@@ -165,44 +166,51 @@ export default function MyWorksPage() {
           return
         }
 
-        const generationIds = rows.map((gen) => gen.id)
+        // 列表优先秒出：先渲染（favorite_count 默认 0），点赞数后台异步补，绝不让它阻塞列表
+        const baseRows = rows.map((gen) => ({
+          ...gen,
+          favorite_count: 0
+        })) as unknown as Generation[]
+        writeWorksCache(userId, baseRows)
 
-        let favoriteCounts: Record<string, number> = {}
+        if (mounted) {
+          setGenerations(baseRows)
+          setError('')
+          setStaleNotice(false)
+        }
+
+        // 后台补点赞数（独立 5s 短超时，失败仅打一次日志，不影响列表渲染）
+        const generationIds = rows.map((gen) => gen.id)
         if (generationIds.length > 0) {
-          try {
-            const { data: favoritesData, error: favError } = await withTimeout(
-              supabase
-                .from('favorites')
-                .select('generation_id')
-                .in('generation_id', generationIds),
-              DB_TIMEOUT_MS,
-              '获取点赞数'
-            )
-            if (favError) {
-              console.error('[MyWorks] query favorites failed:', favError?.message ?? favError, favError)
-            } else if (favoritesData) {
-              favoriteCounts = {}
+          withTimeout(
+            supabase
+              .from('favorites')
+              .select('generation_id')
+              .in('generation_id', generationIds),
+            FAV_TIMEOUT_MS,
+            '获取点赞数'
+          )
+            .then((res: any) => {
+              if (!mounted) return
+              const favError = res?.error
+              if (favError) {
+                console.error('[MyWorks] query favorites failed:', favError?.message ?? favError, favError)
+                return
+              }
+              const favoritesData = res?.data
+              if (!favoritesData) return
+              const favoriteCounts: Record<string, number> = {}
               favoritesData.forEach((fav: { generation_id: string }) => {
                 favoriteCounts[fav.generation_id] = (favoriteCounts[fav.generation_id] || 0) + 1
               })
-            }
-          } catch (favErr: any) {
-            console.error('[MyWorks] favorites query threw:', favErr?.message ?? favErr, favErr)
-          }
-        }
-
-        const updatedGenerations = rows.map((gen) => ({
-          ...gen,
-          favorite_count: favoriteCounts[gen.id] || 0
-        })) as unknown as Generation[]
-
-        // 写入本地缓存，供下次网络失败时展示
-        writeWorksCache(userId, updatedGenerations)
-
-        if (mounted) {
-          setGenerations(updatedGenerations)
-          setError('')
-          setStaleNotice(false)
+              setGenerations((prev) =>
+                prev.map((g) => ({ ...g, favorite_count: favoriteCounts[g.id] || 0 }))
+              )
+            })
+            .catch((favErr: any) => {
+              if (!mounted) return
+              console.error('[MyWorks] favorites query threw:', favErr?.message ?? favErr, favErr)
+            })
         }
       } catch (err) {
         const anyErr = err as any
