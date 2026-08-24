@@ -168,3 +168,31 @@ SELECT tgname AS trigger_name, tgrelid::regclass AS table_name,
        pg_get_triggerdef(oid) AS definition
 FROM pg_trigger WHERE NOT tgisinternal;
 ```
+
+---
+
+## 九、性能优化：查询索引（建议在 Supabase SQL Editor 执行）
+
+Postgres 日志曾出现 `canceling statement due to statement timeout`，前端列表查询（「我的作品」「订单」）按 `user_id` 过滤 + `created_at` 倒序，若表数据量大且缺少复合索引，会触发全表扫描 + 排序导致超时。请在 Supabase Dashboard → SQL Editor 执行以下语句：
+
+```sql
+-- 我的作品：按用户过滤 + 按时间倒序，覆盖列表查询
+CREATE INDEX IF NOT EXISTS idx_generations_user_created
+  ON generations (user_id, created_at DESC);
+
+-- 我的订单：按用户过滤 + 按时间倒序，覆盖列表查询
+CREATE INDEX IF NOT EXISTS idx_orders_user_created
+  ON orders (user_id, created_at DESC);
+
+-- 收藏数统计：按作品统计收藏数（我的作品页 favorites 查询）
+CREATE INDEX IF NOT EXISTS idx_favorites_generation_id
+  ON favorites (generation_id);
+```
+
+查询侧已同步优化（`src/pages/MyWorks.tsx` / `src/pages/Orders.tsx`）：
+
+1. 禁止 `select *`，只选列表必需列；
+2. `generations` 用 JSON 投影 `params->>title` / `params->tags`，不拉整个 `params`（其中可能含 base64 预览图、完整 prompt / DNA 等大字段）；
+3. `orders` 用 JSON 投影只取 `customization` / `shipping_info` 的渲染所需小字段，明确排除 `previewImage`（可能是 base64 大图）；
+4. `limit`：作品 50、订单 20，均按 `created_at desc`；
+5. 均带 `user_id` 过滤，超时 / 错误日志打印 `message` 而非空 `Error {}`。

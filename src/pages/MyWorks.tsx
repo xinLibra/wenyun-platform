@@ -97,15 +97,26 @@ export default function MyWorksPage() {
             const { data, error } = await withTimeout(
               supabase
                 .from('generations')
-                .select('id, image_url, params, is_public, created_at')
+                // 只取列表必需列 + JSON 投影（名称 / 标签）；不拉整个 params，
+                // 避免一次传输 base64 预览图、完整 prompt / DNA 等大字段
+                .select('id, image_url, is_public, created_at, title:params->>title, tags:params->tags')
                 .eq('user_id', userId)
                 .order('created_at', { ascending: false })
-                .limit(60),
+                .limit(50),
               DB_TIMEOUT_MS,
               '获取作品'
             )
             if (error) throw error
-            rows = data ?? []
+            rows = (data ?? []).map((row: any) => ({
+              id: row.id,
+              image_url: row.image_url,
+              is_public: row.is_public,
+              created_at: row.created_at,
+              params: {
+                title: row.title ?? '',
+                tags: Array.isArray(row.tags) ? row.tags : [],
+              },
+            }))
             lastError = null
             break
           } catch (e: any) {
@@ -295,9 +306,22 @@ export default function MyWorksPage() {
     const generation = generations.find((g) => g.id === editingId)
     if (!generation) return
 
+    // 列表查询只投影了 params 的 title/tags，更新标题前先拉完整 params，避免覆盖丢失 prompt / DNA 等字段
+    let fullParams = generation.params
+    try {
+      const { data, error } = await supabase
+        .from('generations')
+        .select('params')
+        .eq('id', editingId)
+        .single()
+      if (!error && data?.params) fullParams = data.params
+    } catch (e: any) {
+      console.error('[MyWorks] fetch full params failed:', e?.message ?? e, e)
+    }
+
     const { error } = await supabase
       .from('generations')
-      .update({ params: { ...generation.params, title: editTitle.trim() } })
+      .update({ params: { ...fullParams, title: editTitle.trim() } })
       .eq('id', editingId)
 
     if (error) {

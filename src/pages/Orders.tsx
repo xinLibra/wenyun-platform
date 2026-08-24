@@ -200,7 +200,16 @@ export default function Orders() {
           const { data: ordersData, error: queryError } = await withTimeout(
             supabase
               .from('orders')
-              .select('id, user_id, product_id, generation_id, image_url, product_image, customization, status, created_at, quantity, shipping_info')
+              // 列表只取必要列；customization / shipping_info 用 JSON 投影只取渲染所需小字段，
+              // 不拉 previewImage（可能是 base64 大图）与整段 customization / shipping_info
+              .select(`id, user_id, product_id, generation_id, image_url, product_image, status, created_at, quantity,
+                c_scale:customization->scale, c_rotation:customization->rotation,
+                c_positionX:customization->positionX, c_positionY:customization->positionY,
+                c_blendMode:customization->blendMode, c_layoutMode:customization->layoutMode,
+                c_textOverlay:customization->textOverlay, c_textFont:customization->textFont,
+                c_textSize:customization->textSize, c_textPositionX:customization->textPositionX,
+                c_textPositionY:customization->textPositionY,
+                s_name:shipping_info->name, s_phone:shipping_info->phone, s_address:shipping_info->address`)
               .eq('user_id', userId)
               .order('created_at', { ascending: false })
               .limit(20),
@@ -214,10 +223,41 @@ export default function Orders() {
             throw queryError
           }
 
-          setOrders(ordersData || [])
+          // 把投影出的平铺字段重组为 Order 结构（previewImage 被刻意排除）
+          const orders = (ordersData ?? []).map((r: any) => ({
+            id: r.id,
+            user_id: r.user_id,
+            product_id: r.product_id,
+            generation_id: r.generation_id,
+            image_url: r.image_url,
+            product_image: r.product_image,
+            status: r.status,
+            created_at: r.created_at,
+            quantity: r.quantity,
+            customization: {
+              scale: r.c_scale,
+              rotation: r.c_rotation,
+              positionX: r.c_positionX,
+              positionY: r.c_positionY,
+              blendMode: r.c_blendMode,
+              layoutMode: r.c_layoutMode,
+              textOverlay: r.c_textOverlay,
+              textFont: r.c_textFont,
+              textSize: r.c_textSize,
+              textPositionX: r.c_textPositionX,
+              textPositionY: r.c_textPositionY,
+            },
+            shipping_info: {
+              name: r.s_name,
+              phone: r.s_phone,
+              address: r.s_address,
+            },
+          }))
+
+          setOrders(orders)
           setError(null)
           setStaleNotice(false)
-          writeOrdersCache(userId, ordersData || [])
+          writeOrdersCache(userId, orders)
           return
         } catch (e: any) {
           lastError = e
