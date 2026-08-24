@@ -70,3 +70,29 @@ export const FUSION_RECOMMENDATIONS: Record<string, string[]> = mirror(BASE_RECO
 export function getFusionRecommendations(subcategoryId: string): string[] {
   return FUSION_RECOMMENDATIONS[subcategoryId] ?? []
 }
+
+import { getPantoneForSubcategory } from './generationPresets'
+import { findPantoneEntry, PantoneEntry } from './pantoneMap'
+
+/** 计算双纹样推荐色列表（按交集优先排序），供融合预设 fallback 使用 */
+export function getDualPantoneRecommendations(subcategoryIds: string[]): PantoneEntry[] {
+  const recs: PantoneEntry[] = []
+  subcategoryIds.forEach((id) => {
+    const sp = getPantoneForSubcategory(id)
+    if (!sp?.pantoneCode) return
+    const entry = findPantoneEntry(sp.pantoneCode)
+    if (entry) recs.push(entry)
+  })
+
+  const codeCount: Record<string, number> = {}
+  subcategoryIds.forEach((id) => {
+    const sp = getPantoneForSubcategory(id)
+    if (!sp?.pantoneCode) return
+    const entry = findPantoneEntry(sp.pantoneCode)
+    if (entry) codeCount[entry.code] = (codeCount[entry.code] || 0) + 1
+  })
+
+  return Array.from(
+    new Map(recs.map((p) => [p.code, p])).values()
+  ).sort((a, b) => (codeCount[b.code] || 0) - (codeCount[a.code] || 0))
+}

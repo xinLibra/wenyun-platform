@@ -12,6 +12,7 @@
 import type { GenerationParams } from '../types/pattern'
 import { findPantoneEntry } from './pantoneMap'
 import { DEFAULT_PRESET, GENERATION_PRESETS } from './generationPresets'
+import { getDualPantoneRecommendations } from './fusionRecommendations'
 
 export interface FusionPairPreset {
   /** 排布（layoutMode）：single / seamless / adapted */
@@ -90,6 +91,10 @@ export function getFusionPairPreset(a: string, b: string): FusionPairPreset {
   const pb = GENERATION_PRESETS[b] ?? DEFAULT_PRESET
   const bothBeast = BEAST_SUBCATEGORY_IDS.has(a) && BEAST_SUBCATEGORY_IDS.has(b)
 
+  // fallback 颜色：优先使用双纹样推荐色的第一项（避免硬编码宫墙红）
+  const dualRecs = getDualPantoneRecommendations([a, b])
+  const defaultColor = dualRecs[0]?.code ?? '18-1662 TCX'
+
   const preset: FusionPairPreset = {
     arrangement:
       pa.arrangement === 'seamless' || pb.arrangement === 'seamless'
@@ -103,8 +108,8 @@ export function getFusionPairPreset(a: string, b: string): FusionPairPreset {
     complexity: clamp(round((pa.complexity + pb.complexity) / 2) + 5, 55, 75),
     culturalIntensity: clamp(round((pa.culturalIntensity + pb.culturalIntensity) / 2), 55, 75),
     textureDetail: round((pa.textureDetail + pb.textureDetail) / 2),
-    // 安全色：宫墙红（必在 pantoneMap 内）
-    pantoneCode: '18-1662 TCX',
+    // 使用双纹样推荐色第一项，无推荐时才回退安全色
+    pantoneCode: defaultColor,
     lightness: 50,
     fusionRatio: 50,
   }

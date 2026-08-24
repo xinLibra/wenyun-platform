@@ -52,7 +52,7 @@ function getTextureTargets(
     // 数组目标：展开为 string[]，避免整段数组当 string 导致 toLowerCase 崩溃
     return textureTargetMaterial.filter((t): t is string => typeof t === 'string')
   }
-  if (textureTargetMaterial) {
+  if (typeof textureTargetMaterial === 'string') {
     return [textureTargetMaterial]
   }
   return []

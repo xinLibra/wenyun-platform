@@ -48,7 +48,6 @@ export interface Generation {
   author_nickname: string
   is_public: boolean
   created_at: string
-  title: string
   tags: string[]
 }
 

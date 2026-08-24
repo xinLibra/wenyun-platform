@@ -58,7 +58,7 @@ export default function MyWorksPage() {
 
         const { data: generationsData, error: fetchError } = await supabase
           .from('generations')
-          .select('id, title, image_url, params, is_public, created_at')
+          .select('id, image_url, params, is_public, created_at')
           .eq('user_id', session.user.id)
           .order('created_at', { ascending: false })
           .limit(60)

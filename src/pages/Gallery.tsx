@@ -204,7 +204,7 @@ export default function Gallery() {
           
           return {
             id: gen.id,
-            title: gen.params?.title || gen.title || `纹样作品 #${gen.id.slice(0, 8)}`,
+            title: gen.params?.title || `纹样作品 #${gen.id.slice(0, 8)}`,
             author: authorName,
             category: gen.style_id || 'custom',
             likes: Math.floor(Math.random() * 300) + 50,
