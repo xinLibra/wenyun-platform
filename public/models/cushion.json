@@ -4,11 +4,11 @@
     "productName": "抱枕",
     "modelUrl": "cushion.glb",
     "meshConfig": {
-      "textureTargetMaterial": "",
+      "textureTargetMaterial": "tripo_mesh_6726b74a",
       "colorMaterials": [
         {
           "name": "body",
-          "materialName": "",
+          "materialName": "tripo_mesh_6726b74a",
           "label": "抱枕（整枕）"
         }
       ]

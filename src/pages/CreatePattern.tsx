@@ -1662,7 +1662,7 @@ export default function CreatePattern() {
       </div>
     </div>
 
-    {/* 右侧：融合比例 + 预览（桌面端 sticky：预览 + 比例条 + 生成按钮滚动时常驻视口） */}
+    {/* 右侧：融合比例 + 预览（桌面端 sticky：预览 + 比例条 + 生成按钮 + 工具栏滚动时常驻视口） */}
     <div className="space-y-4">
       <div className="lg:sticky lg:top-20 space-y-4">
       {fallbackInfo && (
@@ -1679,68 +1679,79 @@ export default function CreatePattern() {
         isGenerating={isFusing}
         resultImage={fusionResultImage}
       />
-      </div>
 
-      {fusionResultImage && (
-        <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-3">
-          <div>
-            <label className="block font-song text-sm text-deep-blue-light mb-1">作品名称</label>
-            <input
-              type="text"
-              value={fusionWorkTitle}
-              onChange={(e) => setFusionWorkTitle(e.target.value)}
-              placeholder="为您的融合作品起个名字"
-              className="w-full px-3 py-2 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
-              maxLength={50}
-            />
+      {/* 工具栏：常驻渲染，无生成图时按钮禁用（hover 提示） */}
+      <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-3">
+        <div>
+          <label className="block font-song text-sm text-deep-blue-light mb-1">作品名称</label>
+          <input
+            type="text"
+            value={fusionWorkTitle}
+            onChange={(e) => setFusionWorkTitle(e.target.value)}
+            placeholder="为您的融合作品起个名字"
+            className="w-full px-3 py-2 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red"
+            maxLength={50}
+          />
+        </div>
+        <div>
+          <label className="block font-song text-sm text-deep-blue-light mb-1">标签</label>
+          <div className="flex flex-wrap gap-1">
+            {[fusionSelectedA?.patternName, fusionSelectedB?.patternName, '纹样融合']
+              .filter(Boolean)
+              .map((tag, index) => (
+                <span
+                  key={index}
+                  className="px-2 py-1 bg-deep-blue-50 text-deep-blue-light text-xs font-song rounded-sm"
+                >
+                  #{tag}
+                </span>
+              ))}
           </div>
-          <div>
-            <label className="block font-song text-sm text-deep-blue-light mb-1">标签</label>
-            <div className="flex flex-wrap gap-1">
-              {[fusionSelectedA?.patternName, fusionSelectedB?.patternName, '纹样融合']
-                .filter(Boolean)
-                .map((tag, index) => (
-                  <span
-                    key={index}
-                    className="px-2 py-1 bg-deep-blue-50 text-deep-blue-light text-xs font-song rounded-sm"
-                  >
-                    #{tag}
-                  </span>
-                ))}
-            </div>
-          </div>
-          <div className="flex gap-2 pt-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => handleFusionSave()}
-              disabled={isFusionSaving}
-            >
-              {isFusionSaving ? '保存中...' : '保存'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => setShowImagePreview(true)}
-            >
-              下载
-            </Button>
-            <Button variant="outline" size="sm" className="flex-1" onClick={handleFusionShare}>
-              分享
-            </Button>
-          </div>
+        </div>
+        <div className="flex gap-2 pt-1">
           <Button
-            variant="secondary"
+            variant="outline"
             size="sm"
-            className="w-full"
-            onClick={() => void handleFusionProceedToCustomize()}
+            className="flex-1"
+            onClick={() => handleFusionSave()}
+            disabled={isFusionSaving || !fusionResultImage}
+            title={!fusionResultImage ? '请先生成融合纹样' : undefined}
           >
-            下一步：定制产品
+            {isFusionSaving ? '保存中...' : '保存'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => setShowImagePreview(true)}
+            disabled={!fusionResultImage}
+            title={!fusionResultImage ? '请先生成融合纹样' : undefined}
+          >
+            下载
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={handleFusionShare}
+            disabled={!fusionResultImage}
+            title={!fusionResultImage ? '请先生成融合纹样' : undefined}
+          >
+            分享
           </Button>
         </div>
-      )}
+        <Button
+          variant="secondary"
+          size="sm"
+          className="w-full"
+          onClick={() => void handleFusionProceedToCustomize()}
+          disabled={!fusionResultImage}
+          title={!fusionResultImage ? '请先生成融合纹样' : undefined}
+        >
+          下一步：定制产品
+        </Button>
+      </div>
+      </div>
     </div>
   </div>
 )}

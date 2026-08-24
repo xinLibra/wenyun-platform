@@ -40,6 +40,11 @@ function hexToColor(hex: string): THREE.Color {
   }
 }
 
+/** 统一名称归一化：先 String(x ?? '') 再 trim + toLowerCase，禁止未 String 就 toLowerCase */
+function norm(x: unknown): string {
+  return String(x ?? '').trim().toLowerCase()
+}
+
 function getTextureTargets(
   textureTargetMaterial: string | string[],
   textureTargetMaterials: TextureTargetMaterials | undefined,
@@ -133,12 +138,12 @@ function Model({
     clonedScene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
-        const mat = mesh.material as THREE.MeshStandardMaterial
-        const names = [String(mat?.name ?? ''), String(mesh.name ?? ''), String(child.name ?? '')]
-          .map((s) => String(s ?? '').toLowerCase().trim())
+        const raw = mesh.material
+        const matList = (Array.isArray(raw) ? raw : [raw]) as THREE.MeshStandardMaterial[]
+        const names = [norm(mesh.name), norm(child.name), ...matList.map((m) => norm(m?.name))]
           .filter((s) => s && s !== '-')
         const hitTarget = targets.some((t) => {
-          const tt = String(t ?? '').toLowerCase().trim()
+          const tt = norm(t)
           if (!tt) return false
           return names.some((n) => {
             if (!n) return false
@@ -148,8 +153,11 @@ function Model({
             return n.includes(tt) || tt.includes(n)
           })
         })
+        const matNames = matList.map((m) => `"${m?.name || '-'}"`).join(', ')
+        const matHex = matList.map((m) => m?.color?.getHexString() || '-').join(', ')
+        const hasMap = matList.some((m) => !!m?.map)
         meshInfo.push(
-          `  node="${child.name || '-'}" mesh="${mesh.name || '-'}" mat="${mat?.name || '-'}" hitTextureTarget=${hitTarget ? '✓' : '✗'} hasMap=${!!mat?.map} color=${mat?.color?.getHexString() || '-'}`
+          `  node="${child.name || '-'}" mesh="${mesh.name || '-'}" mat=[${matNames}] hasMap=${hasMap} color=[${matHex}] hitTextureTarget=${hitTarget ? '✓' : '✗'}`
         )
       }
     })
