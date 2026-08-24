@@ -125,3 +125,14 @@ export function getSubcategories(themeId: PatternThemeId) {
 export function findSubcategory(themeId: PatternThemeId, subId: string) {
   return getSubcategories(themeId).find((s) => s.id === subId)
 }
+
+/** 跨主题按子类 id 查找（融合推荐、双槽互斥校验用）；找不到返回 null */
+export function findSubcategoryById(
+  subId: string
+): { id: string; label: string; themeId: PatternThemeId } | null {
+  for (const theme of PATTERN_THEMES) {
+    const sub = theme.subcategories.find((s) => s.id === subId)
+    if (sub) return { id: sub.id, label: sub.label, themeId: theme.id }
+  }
+  return null
+}

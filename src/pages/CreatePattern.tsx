@@ -6,7 +6,7 @@ import { GeneratingPulse } from '../components/ui/GeneratingPulse'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { DimensionFilter } from '../components/pattern/DimensionFilter'
-import { GenerationParamsPanel } from '../components/pattern/GenerationParams'
+import { GenerationParamsPanel, ColorPicker } from '../components/pattern/GenerationParams'
 import { PromptInput } from '../components/pattern/PromptInput'
 import { generatePatternWithFallback, generateFusionWithFallback } from '../services/patternGeneration'
 import { InkSlider } from '../components/ui/InkSlider'
@@ -20,10 +20,12 @@ import { PatternFusionSlider } from '../components/PatternFusionSlider'
 import {
   parsePromptToTags,
   findSubcategory,
+  findSubcategoryById,
   PATTERN_THEMES,
   getSubcategories,
   type PatternThemeId,
 } from '../data/patternTaxonomy'
+import { getFusionRecommendations } from '../config/fusionRecommendations'
 import { downloadImage } from '../utils/downloadImage'
 import {
   writePendingPattern,
@@ -77,18 +79,7 @@ const DEFAULT_FUSION_GENERATION_PARAMS: GenerationParams = {
   culturalIntensity: 50,
 }
 
-/** 融合结果参数区：主题色/配色快捷色板（hue 色相模式） */
-const FUSION_HUE_SWATCHES: { id: string; label: string; css: string; hue: number }[] = [
-  { id: 'palace-red', label: '宫墙红', css: '#C3423F', hue: 0 },
-  { id: 'orange-red', label: '橙红', css: '#FF6F00', hue: 24 },
-  { id: 'gold', label: '鎏金', css: '#D4AF37', hue: 46 },
-  { id: 'pine-green', label: '松绿', css: '#5F9E6E', hue: 128 },
-  { id: 'teal', label: '黛青', css: '#009688', hue: 174 },
-  { id: 'cobalt', label: '钴蓝', css: '#1565C0', hue: 212 },
-  { id: 'ink-blue', label: '藏青', css: '#26364B', hue: 220 },
-  { id: 'purple', label: '黛紫', css: '#6A5ACD', hue: 260 },
-  { id: 'lotus-pink', label: '藕粉', css: '#E8B4B8', hue: 336 },
-]
+/** 融合结果参数区：配色已复用 AI 生成页的 ColorPicker，这里不再维护独立色板 */
 
 /**
  * 将当前生成参数映射到 DNA 雷达图 7 维度
@@ -746,6 +737,10 @@ export default function CreatePattern() {
       showToastMessage('请先选满两个纹样子类')
       return
     }
+    if (fusionASub === fusionBSub) {
+      showToastMessage('请选择两个不同的纹样再生成')
+      return
+    }
     setIsFusing(true)
     try {
       // 真实融合链路：sd_proxy → A1111 txt2img，失败自动降级 mock（generateFusionWithFallback 内部处理）
@@ -1383,6 +1378,12 @@ export default function CreatePattern() {
                       patternName: s.label,
                       imageUrl: '',
                     })
+                    // 第一槽改选后若与第二槽冲突：清空第二槽并提示重选
+                    if (fusionBSub === s.id) {
+                      setFusionBSub('')
+                      setFusionSelectedB(null)
+                      showToastMessage('两个纹样不能相同，已清空第二槽请重选')
+                    }
                     setFusionResultImage('')
                   }}
                   className={`px-3 py-1.5 text-sm font-song rounded-sm border transition-all ${
@@ -1428,37 +1429,140 @@ export default function CreatePattern() {
               </button>
             ))}
           </div>
+          {/* 第一槽选定后：第二槽显示「可融合」推荐（点击直接填入主题+子类） */}
+          {fusionASub && (() => {
+            const recs = getFusionRecommendations(fusionASub)
+              .filter((rid) => rid !== fusionASub)
+              .map((rid) => findSubcategoryById(rid))
+              .filter((r): r is NonNullable<typeof r> => Boolean(r))
+            if (recs.length === 0) return null
+            return (
+              <div className="mb-3 p-2.5 bg-ming-yellow/10 border border-ming-yellow/40 rounded-sm">
+                <p className="font-song text-xs text-deep-blue-light mb-1.5">
+                  常与「{fusionSelectedA?.patternName ?? '第一纹样'}」一起融合：
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {recs.map((r) => (
+                    <button
+                      key={`b-rec-${r.id}`}
+                      type="button"
+                      onClick={() => {
+                        setFusionBTheme(r.themeId)
+                        setFusionBSub(r.id)
+                        setFusionSelectedB({
+                          patternId: r.id,
+                          patternName: r.label,
+                          imageUrl: '',
+                        })
+                        setFusionResultImage('')
+                      }}
+                      className="px-2.5 py-1 text-xs font-song rounded-sm border border-ming-yellow bg-rice-paper text-deep-blue hover:bg-ming-yellow/20 transition-all"
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
           <p className="font-song text-xs text-deep-blue-light mb-2">子类</p>
           <div className="flex flex-wrap gap-2">
             {fusionBTheme ? (
-              getSubcategories(fusionBTheme).map((s) => (
-                <button
-                  key={`b-sub-${s.id}`}
-                  type="button"
-                  onClick={() => {
-                    setFusionBSub(s.id)
-                    setFusionSelectedB({
-                      patternId: s.id,
-                      patternName: s.label,
-                      imageUrl: '',
-                    })
-                    setFusionResultImage('')
-                  }}
-                  className={`px-3 py-1.5 text-sm font-song rounded-sm border transition-all ${
-                    fusionBSub === s.id
-                      ? 'bg-deep-blue text-rice-paper border-deep-blue'
-                      : 'bg-rice-paper text-deep-blue border-deep-blue-200 hover:border-deep-blue'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))
+              getSubcategories(fusionBTheme).map((s) => {
+                // 任务：两槽不能选同一子类 —— 第二槽禁用与第一槽相同的子类
+                const disabled = s.id === fusionASub
+                return (
+                  <button
+                    key={`b-sub-${s.id}`}
+                    type="button"
+                    disabled={disabled}
+                    title={disabled ? '请选择不同纹样' : s.label}
+                    onClick={() => {
+                      if (disabled) {
+                        showToastMessage('请选择不同的纹样')
+                        return
+                      }
+                      setFusionBSub(s.id)
+                      setFusionSelectedB({
+                        patternId: s.id,
+                        patternName: s.label,
+                        imageUrl: '',
+                      })
+                      setFusionResultImage('')
+                    }}
+                    className={`px-3 py-1.5 text-sm font-song rounded-sm border transition-all ${
+                      disabled
+                        ? 'bg-deep-blue-50 text-deep-blue-light/50 border-deep-blue-100 cursor-not-allowed'
+                        : fusionBSub === s.id
+                          ? 'bg-deep-blue text-rice-paper border-deep-blue'
+                          : 'bg-rice-paper text-deep-blue border-deep-blue-200 hover:border-deep-blue'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                )
+              })
             ) : (
               <p className="font-song text-xs text-deep-blue-light">请先选择主题</p>
             )}
           </div>
         </div>
       </div>
+
+      {/* 融合结果参数区（已移至左侧）：两槽共用一套参数，写入最终 prompt */}
+      <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-shufa text-base text-deep-blue">融合结果参数</h3>
+            <span className="font-song text-[11px] text-deep-blue-light">调节后点「生成融合纹样」生效</span>
+          </div>
+
+          {/* 主题色 / 配色：复用 AI 生成页同一套 ColorPicker（色相/明度/潘通/吸色），双子类推荐色交集优先 */}
+          <ColorPicker
+            value={fusionParams.colorScheme}
+            onChange={(cs) => setFusionParams((p) => ({ ...p, colorScheme: cs }))}
+            subcategoryId={fusionASub || undefined}
+            subcategoryIds={[fusionASub, fusionBSub].filter(Boolean)}
+          />
+
+          <InkSlider
+            label="复杂度"
+            leftLabel="极简"
+            rightLabel="繁复"
+            value={fusionParams.complexity}
+            min={0}
+            max={100}
+            onChange={(v) => setFusionParams((p) => ({ ...p, complexity: v }))}
+          />
+          <InkSlider
+            label="文化符号强度"
+            leftLabel="抽象"
+            rightLabel="还原"
+            value={fusionParams.culturalIntensity}
+            min={0}
+            max={100}
+            onChange={(v) => setFusionParams((p) => ({ ...p, culturalIntensity: v }))}
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-song text-sm text-deep-blue-light mb-2">排布</label>
+              <BambooToggle
+                options={ARRANGEMENT_OPTIONS}
+                value={fusionParams.arrangement}
+                onChange={(v) => setFusionParams((p) => ({ ...p, arrangement: v as GenerationParams['arrangement'] }))}
+              />
+            </div>
+            <div>
+              <label className="block font-song text-sm text-deep-blue-light mb-2">对称</label>
+              <BambooToggle
+                options={SYMMETRY_OPTIONS}
+                value={fusionParams.symmetry}
+                onChange={(v) => setFusionParams((p) => ({ ...p, symmetry: v as GenerationParams['symmetry'] }))}
+              />
+            </div>
+          </div>
+        </div>
     </div>
 
     {/* 右侧：融合比例 + 预览（沿用 PatternFusionSlider） */}
@@ -1477,106 +1581,6 @@ export default function CreatePattern() {
         isGenerating={isFusing}
         resultImage={fusionResultImage}
       />
-
-      {/* 融合结果参数区：两槽共用一套参数，写入最终 prompt */}
-      <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-shufa text-base text-deep-blue">融合结果参数</h3>
-          <span className="font-song text-[11px] text-deep-blue-light">调节后重新点「融合生成」生效</span>
-        </div>
-
-        {/* 主题色 / 配色（必备项） */}
-        <div>
-          <label className="block font-song text-sm text-deep-blue-light mb-2">主题色 / 配色</label>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => setFusionParams(p => ({ ...p, colorScheme: { mode: 'pantone', pantone: 'monochrome-black' } }))}
-              title="水墨黑白"
-              className={`w-9 h-9 rounded-sm border overflow-hidden transition-all ${
-                fusionParams.colorScheme.mode === 'pantone' && fusionParams.colorScheme.pantone === 'monochrome-black'
-                  ? 'border-palace-red ring-2 ring-palace-red/40'
-                  : 'border-deep-blue-200 hover:border-deep-blue'
-              }`}
-            >
-              <span className="w-full h-full flex items-center justify-center bg-ink-black text-rice-paper font-song text-xs">墨</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFusionParams(p => ({ ...p, colorScheme: { mode: 'pantone', pantone: 'multicolor' } }))}
-              title="多彩"
-              className={`w-9 h-9 rounded-sm border overflow-hidden transition-all ${
-                fusionParams.colorScheme.mode === 'pantone' && fusionParams.colorScheme.pantone === 'multicolor'
-                  ? 'border-palace-red ring-2 ring-palace-red/40'
-                  : 'border-deep-blue-200 hover:border-deep-blue'
-              }`}
-            >
-              <span className="w-full h-full flex items-center justify-center bg-gradient-to-br from-palace-red via-ming-yellow to-deep-blue text-rice-paper font-song text-xs">彩</span>
-            </button>
-            {FUSION_HUE_SWATCHES.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setFusionParams(p => ({ ...p, colorScheme: { mode: 'hue', hue: c.hue, brightness: p.colorScheme.brightness ?? 50 } }))}
-                title={c.label}
-                className={`w-9 h-9 rounded-sm border transition-all ${
-                  fusionParams.colorScheme.mode === 'hue' && fusionParams.colorScheme.hue === c.hue
-                    ? 'border-palace-red ring-2 ring-palace-red/40 scale-105'
-                    : 'border-deep-blue-200 hover:border-deep-blue'
-                }`}
-                style={{ backgroundColor: c.css }}
-              />
-            ))}
-          </div>
-          <div className="mt-2">
-            <InkSlider
-              label="明度"
-              value={fusionParams.colorScheme.brightness ?? 50}
-              min={0}
-              max={100}
-              onChange={(v) => setFusionParams(p => ({ ...p, colorScheme: { ...p.colorScheme, brightness: v } }))}
-            />
-          </div>
-        </div>
-
-        <InkSlider
-          label="复杂度"
-          leftLabel="极简"
-          rightLabel="繁复"
-          value={fusionParams.complexity}
-          min={0}
-          max={100}
-          onChange={(v) => setFusionParams(p => ({ ...p, complexity: v }))}
-        />
-        <InkSlider
-          label="文化符号强度"
-          leftLabel="抽象"
-          rightLabel="还原"
-          value={fusionParams.culturalIntensity}
-          min={0}
-          max={100}
-          onChange={(v) => setFusionParams(p => ({ ...p, culturalIntensity: v }))}
-        />
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block font-song text-sm text-deep-blue-light mb-2">排布</label>
-            <BambooToggle
-              options={ARRANGEMENT_OPTIONS}
-              value={fusionParams.arrangement}
-              onChange={(v) => setFusionParams(p => ({ ...p, arrangement: v as GenerationParams['arrangement'] }))}
-            />
-          </div>
-          <div>
-            <label className="block font-song text-sm text-deep-blue-light mb-2">对称</label>
-            <BambooToggle
-              options={SYMMETRY_OPTIONS}
-              value={fusionParams.symmetry}
-              onChange={(v) => setFusionParams(p => ({ ...p, symmetry: v as GenerationParams['symmetry'] }))}
-            />
-          </div>
-        </div>
-      </div>
 
       {fusionResultImage && (
         <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-3">

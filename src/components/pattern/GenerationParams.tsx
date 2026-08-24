@@ -18,6 +18,8 @@ interface ColorPickerProps {
   onChange: (value: ColorSchemeParams) => void
   /** 当前选中的纹样子类 ID，用于高亮对应的默认潘通色号 */
   subcategoryId?: string
+  /** 多个子类（融合场景）：推荐色取各子类并集，交集优先排序 */
+  subcategoryIds?: string[]
 }
 
 const pantoneColors: Record<string, string> = {
@@ -236,11 +238,18 @@ const getPantoneColor = (pantone: string): string | undefined => {
   return undefined
 }
 
-function ColorPicker({ value, onChange, subcategoryId }: ColorPickerProps) {
+export function ColorPicker({ value, onChange, subcategoryId, subcategoryIds }: ColorPickerProps) {
   const [imagePreview, setImagePreview] = useState<string>('')
   const [sampledColors, setSampledColors] = useState<string[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
+
+  // 融合场景可传多个子类：推荐色取并集、交集优先；单子类时兼容原 subcategoryId
+  const subIds = subcategoryIds && subcategoryIds.length > 0
+    ? Array.from(new Set(subcategoryIds.filter((id): id is string => Boolean(id))))
+    : subcategoryId
+      ? [subcategoryId]
+      : []
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -405,55 +414,74 @@ function ColorPicker({ value, onChange, subcategoryId }: ColorPickerProps) {
             </div>
           )}
 
-          {/* 子类默认色号：高亮显示当前子类对应的潘通色 */}
-          {subcategoryId && (() => {
-            const defaultPantone = getPantoneForSubcategory(subcategoryId)
-            if (!defaultPantone) return null
-            const hex = getPantoneColor(defaultPantone.pantoneCode)
-            const isActive = value.pantone?.trim().toUpperCase() === defaultPantone.pantoneCode.toUpperCase()
+          {/* 子类默认色号：高亮显示当前（单/多）子类对应的潘通色；多子类取并集、交集优先 */}
+          {subIds.length > 0 && (() => {
+            const recs = subIds
+              .map((id) => getPantoneForSubcategory(id))
+              .filter((p): p is NonNullable<ReturnType<typeof getPantoneForSubcategory>> => Boolean(p))
+            if (recs.length === 0) return null
+            // 统计每个色号命中的子类数量，交集（命中 >1）排前面
+            const codeCount: Record<string, number> = {}
+            subIds.forEach((id) => {
+              const p = getPantoneForSubcategory(id)
+              if (p) codeCount[p.pantoneCode] = (codeCount[p.pantoneCode] || 0) + 1
+            })
+            const uniqueRecs = Array.from(new Map(recs.map((p) => [p.pantoneCode, p])).values())
+              .sort((a, b) => (codeCount[b.pantoneCode] || 0) - (codeCount[a.pantoneCode] || 0))
             return (
               <div className="mt-2 p-2 bg-ming-yellow/15 border border-ming-yellow/40 rounded-sm">
                 <div className="flex items-center gap-2 text-xs font-song text-deep-blue-light mb-1.5">
                   <span className="text-ming-yellow">✦</span>
-                  <span>当前子类推荐色</span>
+                  <span>{subIds.length > 1 ? '双纹样推荐色（交集优先）' : '当前子类推荐色'}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onChange({ ...value, pantone: defaultPantone.pantoneCode })}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-sm transition-all ${
-                    isActive
-                      ? 'bg-palace-red text-rice-paper border border-palace-red shadow-sm'
-                      : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red'
-                  }`}
-                >
-                  <div
-                    className="w-6 h-6 rounded-sm border border-deep-blue-200 flex-shrink-0"
-                    style={{ background: hex || '#ccc' }}
-                  />
-                  <div className="text-left flex-1 min-w-0">
-                    <div className={`text-sm font-song truncate ${isActive ? 'text-rice-paper' : 'text-deep-blue'}`}>
-                      {defaultPantone.label}
-                    </div>
-                    <div className={`text-xs font-song truncate ${isActive ? 'text-rice-paper/80' : 'text-deep-blue-light'}`}>
-                      {defaultPantone.pantoneCode}
-                    </div>
-                  </div>
-                  {isActive && (
-                    <svg className="w-4 h-4 text-rice-paper flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </button>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {uniqueRecs.map((defaultPantone) => {
+                    const hex = getPantoneColor(defaultPantone.pantoneCode)
+                    const isActive = value.pantone?.trim().toUpperCase() === defaultPantone.pantoneCode.toUpperCase()
+                    const shared = (codeCount[defaultPantone.pantoneCode] || 0) > 1
+                    return (
+                      <button
+                        key={defaultPantone.pantoneCode}
+                        type="button"
+                        onClick={() => onChange({ ...value, pantone: defaultPantone.pantoneCode })}
+                        title={shared ? `${defaultPantone.label}（两纹样通用）` : `${defaultPantone.label} · ${defaultPantone.pantoneCode}`}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-sm transition-all ${
+                          isActive
+                            ? 'bg-palace-red text-rice-paper border border-palace-red shadow-sm'
+                            : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red'
+                        }`}
+                      >
+                        <div
+                          className="w-6 h-6 rounded-sm border border-deep-blue-200 flex-shrink-0"
+                          style={{ background: hex || '#ccc' }}
+                        />
+                        <div className="text-left flex-1 min-w-0">
+                          <div className={`text-sm font-song truncate ${isActive ? 'text-rice-paper' : 'text-deep-blue'}`}>
+                            {defaultPantone.label}
+                          </div>
+                          <div className={`text-xs font-song truncate ${isActive ? 'text-rice-paper/80' : 'text-deep-blue-light'}`}>
+                            {defaultPantone.pantoneCode}{shared ? ' · 通用' : ''}
+                          </div>
+                        </div>
+                        {isActive && (
+                          <svg className="w-4 h-4 text-rice-paper flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )
           })()}
 
-          {/* 全部子类默认色号快捷选择：按主题显示瑞兽色或花卉色 */}
+          {/* 全部子类默认色号快捷选择：按主题显示瑞兽色或花卉色；双子类显示并集 */}
           <div className="mt-2">
             {(() => {
-              const entry = subcategoryId ? getLoraEntry(subcategoryId) : null
-              const isFloral = entry?.themeId === 'floral'
-              const isBeast = entry?.themeId === 'beast'
+              const entryList = subIds.map((id) => getLoraEntry(id)).filter(Boolean)
+              const isFloral = entryList.some((e) => e?.themeId === 'floral')
+              const isBeast = entryList.some((e) => e?.themeId === 'beast')
               // 瑞兽色号集合
               const beastCodes = new Set<string>(['19-4052 TCX', '16-1450 TCX', '16-4725 TCX', '18-1150 TCX', '18-1662 TCX', '12-0752 TCX', '17-1462 TCX'])
               // 花卉色号集合
@@ -461,13 +489,21 @@ function ColorPicker({ value, onChange, subcategoryId }: ColorPickerProps) {
 
               // 根据主题过滤：只显示当前主题的色号；无主题时全部显示
               const allCodes = Array.from(new Set(Object.values(SUBCATEGORY_PANTONE_MAP).map((p) => p.pantoneCode)))
-              const filteredCodes = isBeast
-                ? allCodes.filter((c) => beastCodes.has(c))
-                : isFloral
-                  ? allCodes.filter((c) => flowerCodes.has(c))
-                  : allCodes
+              const filteredCodes = subIds.length > 1
+                ? allCodes.filter((c) => beastCodes.has(c) || flowerCodes.has(c))
+                : isBeast
+                  ? allCodes.filter((c) => beastCodes.has(c))
+                  : isFloral
+                    ? allCodes.filter((c) => flowerCodes.has(c))
+                    : allCodes
 
-              const gridLabel = isFloral ? '花卉纹样常用色' : isBeast ? '瑞兽纹样常用色' : '纹样常用色'
+              const gridLabel = subIds.length > 1
+                ? '双纹样常用色'
+                : isFloral
+                  ? '花卉纹样常用色'
+                  : isBeast
+                    ? '瑞兽纹样常用色'
+                    : '纹样常用色'
 
               return (
                 <>

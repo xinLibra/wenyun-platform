@@ -4,14 +4,10 @@
     "productName": "手提包",
     "modelUrl": "tote_bag.glb",
     "meshConfig": {
-      "textureTargetMaterial": "tripo_part_new_0_0_material",
-      "textureTargetMaterials": {
-        "center": ["tripo_part_new_0_0_material"],
-        "full": [
-          "tripo_part_0_material",
-          "tripo_part_new_0_0_material"
-        ]
-      },
+      "textureTargetMaterial": [
+        "tripo_part_0_material",
+        "tripo_part_new_0_0_material"
+      ],
       "colorTargetMaterials": {
         "center": ["tripo_part_new_0_0_material"],
         "full": [

@@ -216,12 +216,17 @@ function Model({
       const mesh = child as THREE.Mesh
 
       if (!mesh.material) {
+        // GLB 网格没有材质（如 cushion.glb 的 glTF 未声明 materials）：
+        // 之前这里直接 return，导致永远贴不上纹样。现在创建默认材质后继续走下方贴图逻辑。
         mesh.material = new THREE.MeshStandardMaterial({
+          name: mesh.name || child.name || '',
           color: '#f5f5f5',
           roughness: 0.75,
           metalness: 0,
         })
-        return
+        console.warn(
+          `[3D Viewer] ${modelUrl} 网格 "${mesh.name || child.name}" 原本无材质，已创建默认材质，继续尝试贴图（node=${child.name}）`
+        )
       }
 
       const raw = mesh.material

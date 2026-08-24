@@ -14,15 +14,17 @@ export default function MyWorksPage() {
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let mounted = true
     let timeoutId: ReturnType<typeof setTimeout>
 
-    const fetchWorks = async () => {
+    const loadWorks = async () => {
       try {
         // 防御：Supabase 未初始化时直接报错
         if (!supabase || !supabase.auth) {
+          console.error('[MyWorks] supabase is not initialized')
           if (mounted) {
             setError('系统未正确配置，请联系管理员')
             setIsLoading(false)
@@ -30,50 +32,102 @@ export default function MyWorksPage() {
           return
         }
 
-        const { data: { session } } = await supabase.auth?.getSession()
-        
-        if (!session?.user) {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        if (sessionError) {
+          console.error('[MyWorks] getSession failed:', {
+            message: sessionError.message,
+            code: (sessionError as any).code,
+            status: (sessionError as any).status,
+          })
           if (mounted) {
-            navigate('/login')
+            setError(`登录状态校验失败：${sessionError.message || '请重新登录'}`)
             setIsLoading(false)
+          }
+          return
+        }
+
+        if (!session?.user) {
+          console.info('[MyWorks] no active session, redirect to login')
+          if (mounted) {
+            setError('请先登录后查看我的作品')
+            setIsLoading(false)
+            navigate('/login')
           }
           return
         }
 
         const { data: generationsData, error: fetchError } = await supabase
           .from('generations')
-          .select('*')
+          .select('id, title, image_url, params, is_public, created_at')
           .eq('user_id', session.user.id)
           .order('created_at', { ascending: false })
+          .limit(60)
 
         if (fetchError) {
-          console.error('Fetch works error:', fetchError)
-          if (mounted) setError('获取作品失败，请稍后重试')
-        } else if (generationsData) {
-          const generationIds = generationsData.map((gen: Generation) => gen.id)
-          
-          const favoriteCounts: Record<string, number> = {}
-          if (generationIds.length > 0) {
-            const { data: favoritesData } = await supabase
+          console.error('[MyWorks] query generations failed:', {
+            message: fetchError.message,
+            code: fetchError.code,
+            details: fetchError.details,
+            hint: fetchError.hint,
+          })
+          if (mounted) setError(`获取作品失败：${fetchError.message || '请稍后重试'}`)
+          return
+        }
+
+        // select 只取必要字段，行类型为字段子集，用轻量 Row 类型处理
+        const rows = generationsData ?? []
+        const generationIds = rows.map((gen) => gen.id)
+
+        let favoriteCounts: Record<string, number> = {}
+        if (generationIds.length > 0) {
+          try {
+            const { data: favoritesData, error: favError } = await supabase
               .from('favorites')
               .select('generation_id')
               .in('generation_id', generationIds)
 
-            if (favoritesData) {
-              favoritesData.forEach((fav: any) => {
+            if (favError) {
+              console.error('[MyWorks] query favorites failed:', {
+                message: favError.message,
+                code: (favError as any).code,
+                details: (favError as any).details,
+                hint: (favError as any).hint,
+              })
+            } else if (favoritesData) {
+              favoriteCounts = {}
+              favoritesData.forEach((fav: { generation_id: string }) => {
                 favoriteCounts[fav.generation_id] = (favoriteCounts[fav.generation_id] || 0) + 1
               })
             }
+          } catch (favErr) {
+            const anyFavErr = favErr as any
+            console.error('[MyWorks] favorites query threw:', {
+              message: anyFavErr?.message ?? 'unknown error',
+              code: anyFavErr?.code,
+              raw: favErr,
+            })
           }
+        }
 
-          const updatedGenerations = generationsData.map((gen: Generation) => ({
-            ...gen,
-            favorite_count: favoriteCounts[gen.id] || 0
-          }))
-          if (mounted) setGenerations(updatedGenerations)
+        const updatedGenerations = rows.map((gen) => ({
+          ...gen,
+          favorite_count: favoriteCounts[gen.id] || 0
+        })) as unknown as Generation[]
+        if (mounted) {
+          setGenerations(updatedGenerations)
+          setError('')
         }
       } catch (err) {
-        console.error('Fetch works error:', err)
+        const anyErr = err as any
+        // 禁止空 Error {}：显式拆出 message / code / hint，无则标记 unknown
+        console.error('[MyWorks] unexpected error:', {
+          message: anyErr?.message ?? 'unknown error',
+          code: anyErr?.code,
+          details: anyErr?.details,
+          hint: anyErr?.hint,
+          stack: anyErr?.stack,
+          raw: err,
+        })
         if (mounted) setError('获取作品失败，请稍后重试')
       } finally {
         clearTimeout(timeoutId)
@@ -81,21 +135,25 @@ export default function MyWorksPage() {
       }
     }
 
-    // 10 秒超时兜底：防止网络或 Supabase 无响应导致一直 loading
+    setIsLoading(true)
+    setError('')
+
+    // 30 秒超时兜底：防止网络或 Supabase 无响应导致一直 loading
     timeoutId = setTimeout(() => {
       if (mounted) {
+        console.warn('[MyWorks] load timed out after 30s')
         setIsLoading(false)
         setError('加载超时，请检查网络连接或稍后重试')
       }
-    }, 10000)
+    }, 30000)
 
-    fetchWorks()
+    loadWorks()
 
     return () => {
       mounted = false
       clearTimeout(timeoutId)
     }
-  }, [navigate])
+  }, [navigate, reloadKey])
 
   const handlePublicToggle = async (generationId: string, currentPublic: boolean) => {
     const newValue = !currentPublic
@@ -260,7 +318,13 @@ export default function MyWorksPage() {
               animate={{ opacity: 1 }}
               className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-sm font-song text-center mb-6"
             >
-              {error}
+              <p>{error}</p>
+              <button
+                onClick={() => setReloadKey((k) => k + 1)}
+                className="mt-2 px-4 py-1.5 bg-palace-red text-rice-paper rounded-sm font-song text-sm hover:bg-palace-red-dark transition-colors"
+              >
+                重试
+              </button>
             </motion.div>
           )}
 
@@ -275,13 +339,27 @@ export default function MyWorksPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <p className="font-song text-deep-blue-light mb-4">暂无作品，快去创作吧</p>
-              <button
-                onClick={() => navigate('/create')}
-                className="px-6 py-2 bg-palace-red text-rice-paper rounded-sm font-song hover:bg-palace-red-dark transition-colors"
-              >
-                去创作
-              </button>
+              {error ? (
+                <>
+                  <p className="font-song text-deep-blue-light mb-4">加载失败，请重试</p>
+                  <button
+                    onClick={() => setReloadKey((k) => k + 1)}
+                    className="px-6 py-2 bg-palace-red text-rice-paper rounded-sm font-song hover:bg-palace-red-dark transition-colors"
+                  >
+                    重试
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="font-song text-deep-blue-light mb-4">暂无作品，快去创作吧</p>
+                  <button
+                    onClick={() => navigate('/create')}
+                    className="px-6 py-2 bg-palace-red text-rice-paper rounded-sm font-song hover:bg-palace-red-dark transition-colors"
+                  >
+                    去创作
+                  </button>
+                </>
+              )}
             </motion.div>
           ) : (
             <motion.div

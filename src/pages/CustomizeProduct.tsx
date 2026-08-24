@@ -319,7 +319,8 @@ export default function CustomizeProduct() {
   })
     const [patternArea, setPatternArea] = useState<PatternAreaKey>(() => {
     const pid = safeGetItem('selected_product_id') || products[0]?.id || ''
-    return pid === 'tote' ? 'center' : 'chest'
+    // 手提包/托特：去掉「纹样范围」开关，贴图固定为整包全贴
+    return pid === 'tote' ? 'full' : 'chest'
   })
   const [activeColorPart, setActiveColorPart] = useState<string | null>(null)
   const [hue, setHue] = useState(210)
@@ -439,7 +440,8 @@ export default function CustomizeProduct() {
       }
     }
 
-    const defaultPatternArea: PatternAreaKey = productId === 'tote' ? 'center' : 'chest'
+    // 手提包/托特：贴图固定为整包全贴，不再有 center/full 切换
+    const defaultPatternArea: PatternAreaKey = productId === 'tote' ? 'full' : 'chest'
 
     const draftKey = `product_config_draft_${productId}`
     const savedDraft = safeGetItem(draftKey)
@@ -1347,9 +1349,7 @@ export default function CustomizeProduct() {
                         modelRotation={product3DConfig.modelRotation ?? [0, 0, 0]}
                         modelScale={product3DConfig.modelScale ?? 0.35}
                         cameraPosition={product3DConfig.cameraDefault?.position ?? [0, 0.12, 1.7]}
-                        patternArea={selectedProduct === 'tote'
-                          ? (patternArea === 'full' ? 'full' : 'center')
-                          : patternArea}
+                        patternArea={selectedProduct === 'tote' ? 'full' : patternArea}
                         excludeFromPatternAreaFull={
                           selectedProduct === 'tote'
                             ? (product3DConfig.meshConfig?.colorMaterials || [])
@@ -1574,8 +1574,8 @@ export default function CustomizeProduct() {
                       </div>
                     )}
 
-                    {/* ===== 区块：纹样范围（仅 3D 产品；T恤胸前/全身、手提包正中/全包） ===== */}
-                    {is3DProduct && (() => {
+                    {/* ===== 区块：纹样范围（仅 3D 产品；T恤胸前/全身；手提包已移除该开关，贴图固定全包） ===== */}
+                    {is3DProduct && selectedProduct !== 'tote' && (() => {
                       const tm = product3DConfig?.meshConfig?.textureTargetMaterials
                       if (!tm) return null
                       const hasChest = !!tm.chest?.length
@@ -1584,7 +1584,7 @@ export default function CustomizeProduct() {
                       const leftKey: PatternAreaKey = hasCenter ? 'center' : 'chest'
                       const leftLabel = hasCenter ? '正中贴花' : '仅胸前'
                       const rightKey: PatternAreaKey = 'full'
-                      const rightLabel = selectedProduct === 'tote' ? '全包贴花' : '全身'
+                      const rightLabel = '全身'
                       return (
                         <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
                           <div className="flex items-center justify-between px-3 py-2.5 bg-deep-blue/5">

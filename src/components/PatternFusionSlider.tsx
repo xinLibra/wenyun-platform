@@ -72,7 +72,7 @@ export function PatternFusionSlider({
             </p>
           ) : (
             <p className="font-song text-xs text-deep-blue-light px-4 text-center">
-              调整下方比例后点击「重新生成融合纹样」查看效果
+              调整下方比例后点击「生成融合纹样」查看效果
             </p>
           )}
         </div>
@@ -151,7 +151,7 @@ export function PatternFusionSlider({
         {isGenerating
           ? '融合生成中...'
           : canFuse
-            ? '重新生成融合纹样'
+            ? '生成融合纹样'
             : '请先选择两个纹样'}
       </button>
     </div>
