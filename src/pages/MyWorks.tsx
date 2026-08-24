@@ -7,11 +7,29 @@ import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { useFavorites } from '../context/FavoriteContext'
 import { withTimeout, classifyError, sleep, logSupabaseConfig } from '../lib/async'
 
-const SESSION_TIMEOUT_MS = 8000
-const DB_TIMEOUT_MS = 8000
+const SESSION_TIMEOUT_MS = 20000
+const DB_TIMEOUT_MS = 25000
 const MAX_ATTEMPTS = 3
 const RETRY_DELAY_MS = 1000
 const WORKS_CACHE_PREFIX = 'myworks_local_cache_'
+
+// 列表页不拉 image_url 大字段（历史数据多为 data: base64，合计可达数十 MB，是 statement timeout 元凶），
+// 缩略图先用轻量 SVG 占位；查看详情 / 下载时再按 id 单条取真实图片。
+const PLACEHOLDER_IMAGE =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">' +
+      '<rect width="400" height="400" fill="#f5efe0"/>' +
+      '<circle cx="200" cy="200" r="110" fill="none" stroke="#9e1f16" stroke-width="2" opacity="0.4"/>' +
+      '<path d="M200 90c20 40 70 50 80 95s-60 70-80 125c-20-55-90-80-80-125s60-55 80-95z" fill="none" stroke="#9e1f16" stroke-width="2" opacity="0.5"/>' +
+      '<text x="200" y="248" text-anchor="middle" font-family="serif" font-size="18" fill="#9e1f16" opacity="0.7">纹样加载中</text>' +
+      '</svg>'
+  )
+
+/** 缩略图是否用占位：无地址或 data:/blob: 大图一律占位，仅 http(s) 真图可直接展示 */
+function isPlaceholderImage(url: string | undefined | null): boolean {
+  return !url || !url.startsWith('http')
+}
 
 function readWorksCache(userId: string): Generation[] | null {
   try {
@@ -97,9 +115,9 @@ export default function MyWorksPage() {
             const { data, error } = await withTimeout(
               supabase
                 .from('generations')
-                // 只取列表必需列 + JSON 投影（名称 / 标签）；不拉整个 params，
-                // 避免一次传输 base64 预览图、完整 prompt / DNA 等大字段
-                .select('id, image_url, is_public, created_at, title:params->>title, tags:params->tags')
+                // 列表不拉 image_url（历史 data: base64 大字段合计可达数十 MB，是 statement timeout 元凶），
+                // 缩略图用占位，查看详情 / 下载时再按 id 单条取
+                .select('id, is_public, created_at, title:params->>title, tags:params->tags')
                 .eq('user_id', userId)
                 .order('created_at', { ascending: false })
                 .limit(50),
@@ -109,7 +127,7 @@ export default function MyWorksPage() {
             if (error) throw error
             rows = (data ?? []).map((row: any) => ({
               id: row.id,
-              image_url: row.image_url,
+              image_url: '',
               is_public: row.is_public,
               created_at: row.created_at,
               params: {
@@ -269,7 +287,29 @@ export default function MyWorksPage() {
     }
   }
 
-  const handleDownload = async (imageUrl: string) => {
+  /** 按 id 单条取 image_url（下载时用；列表页不拉大字段） */
+  const fetchImageUrl = async (generationId: string): Promise<string> => {
+    const { data, error } = await withTimeout(
+      supabase.from('generations').select('image_url').eq('id', generationId).single(),
+      DB_TIMEOUT_MS,
+      '获取图片'
+    )
+    if (error) throw error
+    if (!data?.image_url) throw new Error('该作品没有可下载的图片')
+    return data.image_url
+  }
+
+  const handleDownload = async (generation: Generation) => {
+    let imageUrl = generation.image_url
+    if (isPlaceholderImage(imageUrl)) {
+      try {
+        imageUrl = await fetchImageUrl(generation.id)
+      } catch (e: any) {
+        console.error('[MyWorks] fetch image for download failed:', e?.message ?? e, e)
+        alert('获取图片失败，请稍后重试')
+        return
+      }
+    }
     try {
       const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(imageUrl)}`
       
@@ -473,7 +513,7 @@ export default function MyWorksPage() {
                         onClick={() => handleViewDetail(generation.id)}
                       >
                         <img
-                          src={generation.image_url}
+                          src={isPlaceholderImage(generation.image_url) ? PLACEHOLDER_IMAGE : generation.image_url}
                           alt="纹样作品"
                           className="w-full h-full object-cover"
                         />
@@ -568,7 +608,7 @@ export default function MyWorksPage() {
                         </div>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => handleDownload(generation.image_url)}
+                            onClick={() => handleDownload(generation)}
                             className="flex-1 py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
                           >
                             下载

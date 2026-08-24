@@ -65,6 +65,51 @@ export default function Gallery() {
   const fetchWorks = async () => {
     setIsLoading(true)
     try {
+      // 详情模式：按 id 单条取，避免全量拉 image_url（历史 data: base64 大字段会拖垮列表查询 / 触发 statement timeout）
+      if (detailId) {
+        const { data: gen, error: genErr } = await supabase
+          .from('generations')
+          .select('id, image_url, is_public, created_at, user_id, style_id, author_nickname, params')
+          .eq('id', detailId)
+          .maybeSingle()
+
+        if (genErr) {
+          console.error('Failed to fetch work detail:', genErr)
+          setWorks([])
+          setSelectedWork(null)
+        } else if (gen) {
+          const g = gen as any
+          let favCount = 0
+          const { data: favRows } = await supabase
+            .from('favorites')
+            .select('generation_id')
+            .eq('generation_id', g.id)
+          if (favRows) favCount = favRows.length
+
+          const work: GalleryWork = {
+            id: g.id,
+            title: g.params?.title || `纹样作品 #${g.id.slice(0, 8)}`,
+            author: g.author_nickname || '用户',
+            category: g.style_id || 'custom',
+            likes: 0,
+            image: g.image_url,
+            created_at: g.created_at,
+            tags: g.params?.tags || [],
+            favoriteCount: favCount,
+            theme: g.params?.theme,
+            subcategory: g.params?.subcategory,
+            source: g.params?.source || (g.params?.fusion ? 'fusion' : undefined),
+          }
+          setWorks([work])
+          setSelectedWork(work)
+        } else {
+          setWorks([])
+          setSelectedWork(null)
+        }
+        setIsLoading(false)
+        return
+      }
+
       const { data: generationsData } = await supabase
         .from('generations')
         .select('*')
