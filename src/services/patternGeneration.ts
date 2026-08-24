@@ -9,7 +9,7 @@
  *   失败 → 调用 mockGeneratePattern 兜底（页面不白屏）
  */
 
-import { GenerationParams } from '../types/pattern'
+import { GenerationParams, ColorSchemeParams } from '../types/pattern'
 import { getLoraEntry, DEFAULT_LORA_WEIGHT } from '../config/loraMap'
 import { getPantoneForSubcategory } from '../config/generationPresets'
 import { mockGeneratePattern } from './mockGeneration'
@@ -434,12 +434,33 @@ function hueToSuppressedBackgrounds(hue: number): string[] {
   return ['green background', 'cyan background', 'blue background']
 }
 
+/** hex（#RRGGBB）→ 主色相 hue（0-360），供 inferDominantHue 复用 */
+function hexToHue(hex: string): number | null {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim())
+  if (!m) return null
+  const num = parseInt(m[1], 16)
+  const r = (num >> 16) & 0xff, g = (num >> 8) & 0xff, b = num & 0xff
+  const rn = r / 255, gn = g / 255, bn = b / 255
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn)
+  let h = 0
+  const d = max - min
+  if (d !== 0) {
+    if (max === rn) h = ((gn - bn) / d) % 6
+    else if (max === gn) h = (bn - rn) / d + 2
+    else h = (rn - gn) / d + 4
+    h *= 60
+    if (h < 0) h += 360
+  }
+  return h
+}
+
 /**
- * 从当前 colorScheme 推断主色 hue（用于偏色抑制）
+ * 从 colorScheme 推断主色 hue（用于偏色抑制）
  * 返回 null 表示无明确主色（如 multicolor），调用方应跳过抑制
+ * subcategoryIds：潘通色号反查 promptTag 用的子类列表（单纹样传 [子类]，融合传 [A, B]）
  */
-function inferDominantHue(params: GenerationParams): number | null {
-  const cs = params.colorScheme
+function inferDominantHue(colorScheme: ColorSchemeParams | undefined, subcategoryIds: string[]): number | null {
+  const cs = colorScheme
   if (!cs) return null
 
   if (cs.mode === 'hue') {
@@ -448,32 +469,16 @@ function inferDominantHue(params: GenerationParams): number | null {
 
   if (cs.mode === 'image' && cs.colors && cs.colors.length > 0) {
     // 用第一个吸色作为主色
-    const m = /^#?([0-9a-fA-F]{6})$/.exec(cs.colors[0].trim())
-    if (!m) return null
-    const num = parseInt(m[1], 16)
-    const r = (num >> 16) & 0xff, g = (num >> 8) & 0xff, b = num & 0xff
-    const rn = r / 255, gn = g / 255, bn = b / 255
-    const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn)
-    let h = 0
-    const d = max - min
-    if (d !== 0) {
-      if (max === rn) h = ((gn - bn) / d) % 6
-      else if (max === gn) h = (bn - rn) / d + 2
-      else h = (rn - gn) / d + 4
-      h *= 60
-      if (h < 0) h += 360
-    }
-    return h
+    return hexToHue(cs.colors[0])
   }
 
   if (cs.mode === 'pantone' && cs.pantone) {
     const p = cs.pantone.trim()
     // 语义关键词不参与偏色抑制（multicolor/mono-black 不应抑制任何色）
     if (p === 'multicolor' || p === 'monochrome-black') return null
-    // 真实色号：按子类反查 promptTag，multicolor 不抑制
-    const subId = params.dimension?.subcategory
-    if (subId) {
-      const pantoneInfo = getPantoneForSubcategory(subId)
+    // 真实色号：任一子类反查 promptTag 为 multicolor 则整体不抑制
+    for (const subId of subcategoryIds) {
+      const pantoneInfo = subId ? getPantoneForSubcategory(subId) : null
       if (pantoneInfo && normalizePantone(pantoneInfo.pantoneCode, { stripTcx: true }) === normalizePantone(p, { stripTcx: true })) {
         if (pantoneInfo.promptTag === 'multicolor') return null
       }
@@ -481,22 +486,7 @@ function inferDominantHue(params: GenerationParams): number | null {
     // 单色：查 HEX → hue
     const hex = getPantoneHex(p)
     if (!hex) return null
-    const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim())
-    if (!m) return null
-    const num = parseInt(m[1], 16)
-    const r = (num >> 16) & 0xff, g = (num >> 8) & 0xff, b = num & 0xff
-    const rn = r / 255, gn = g / 255, bn = b / 255
-    const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn)
-    let h = 0
-    const d = max - min
-    if (d !== 0) {
-      if (max === rn) h = ((gn - bn) / d) % 6
-      else if (max === gn) h = (bn - rn) / d + 2
-      else h = (rn - gn) / d + 4
-      h *= 60
-      if (h < 0) h += 360
-    }
-    return h
+    return hexToHue(hex)
   }
 
   return null
@@ -510,7 +500,15 @@ function inferDominantHue(params: GenerationParams): number | null {
  *   3. 选中单色主色时，按 hue 抑制"抢色背景"，避免 SD 默认补蓝/灰背景
  *      （仅抑制 background，不抑制 accent，保留纹样本身少量对比色）
  */
-export function buildNegativePrompt(params: GenerationParams): string {
+/**
+ * Negative prompt 核心实现（支持多个子类 ID，融合用）
+ * 注意：
+ *   1. 除非子类列表含 deer，否则把 "deer" 列入排除（瑞兽串味）
+ *   2. 除非子类列表含 lion，否则把 "lion" 列入排除
+ *   3. 选中单色主色时，按 hue 抑制"抢色背景"，避免 SD 默认补蓝/灰背景
+ *      （仅抑制 background，不抑制 accent，保留纹样本身少量对比色）
+ */
+function buildNegativePromptCore(subcategoryIds: string[], colorScheme: ColorSchemeParams | undefined): string {
   const base = [
     'realistic photo',
     '3d render',
@@ -527,23 +525,30 @@ export function buildNegativePrompt(params: GenerationParams): string {
     'elephant',
     'low quality',
   ]
-  const subId = params.dimension?.subcategory
-  if (subId !== 'deer') {
+  if (!subcategoryIds.includes('deer')) {
     base.push('deer')
   }
   // 狮纹场景下也不希望虎/鹿串味
-  if (subId !== 'lion') {
+  if (!subcategoryIds.includes('lion')) {
     base.push('lion')
   }
 
   // 偏色背景抑制：按主色 hue 抑制非选中色 background
-  const hue = inferDominantHue(params)
+  const hue = inferDominantHue(colorScheme, subcategoryIds)
   if (hue !== null) {
     const suppressed = hueToSuppressedBackgrounds(hue)
     base.push(...suppressed)
   }
 
   return base.join(', ')
+}
+
+/** 单纹样 negative prompt（对外签名保持不变） */
+export function buildNegativePrompt(params: GenerationParams): string {
+  return buildNegativePromptCore(
+    params.dimension?.subcategory ? [params.dimension.subcategory] : [],
+    params.colorScheme,
+  )
 }
 
 /**
@@ -681,5 +686,269 @@ export async function generatePatternWithFallback(
   }
 }
 
+// ===================== 融合生成 =====================
+
+export interface FusionGenerationOptions {
+  /** 子类 A 的 subcategory id（如 'crane' 鹤纹） */
+  subcategoryA: string
+  /** 子类 B 的 subcategory id（如 'peony' 牡丹） */
+  subcategoryB: string
+  /** 子类 A 的融合比例（0-100） */
+  ratioA: number
+  /** 子类 B 的融合比例（0-100），一般与 ratioA 之和为 100 */
+  ratioB: number
+  /** 融合结果共用的一套生成参数（主题色/复杂度/文化符号强度/排布/对称） */
+  params: GenerationParams
+}
+
+export interface FusionPromptInfo {
+  prompt: string
+  negativePrompt: string
+  loraA: { file: string; weight: number } | null
+  loraB: { file: string; weight: number } | null
+  triggersA: string
+  triggersB: string
+  subLabelEnA: string | null
+  subLabelEnB: string | null
+}
+
+/**
+ * 融合 prompt 拼接
+ *
+ * 权重映射公式（写入注释供排障对照）：
+ *   weight = clamp( loraMap 推荐权重 × 融合比例 / 100 )   // 保留 2 位小数，上限 1.5
+ *   例：鹤纹（推荐 0.7）+ 牡丹（推荐 0.8），比例 70/30
+ *     → 子类A: 0.7 × 0.70 = 0.49 → <lora:ICH_crane_pattern_lora_v1:0.49>
+ *     → 子类B: 0.8 × 0.30 = 0.24 → <lora:ICH_peony_pattern_lora_v7_clear:0.24>
+ * 说明：
+ *   - 推荐权重反映该 LoRA 训练效果（瑞兽 0.7 / 花卉 0.8），再乘比例分配主次，
+ *     避免两个 LoRA 同时满权导致叠色过冲。
+ *   - 权重 < 0.05 视为该子类无贡献：省略 <lora:...> 标签，但 trigger 仍写入 prompt。
+ *   - loraMap 中 loraFile 为 null 的子类（兰/芙蓉/石榴花等）：不加 lora 标签，只写 trigger，不崩溃。
+ */
+export function buildFusionPromptParts(options: FusionGenerationOptions): FusionPromptInfo {
+  const { subcategoryA, subcategoryB, ratioA, ratioB, params } = options
+  const subA = getLoraEntry(subcategoryA)
+  const subB = getLoraEntry(subcategoryB)
+
+  const triggersA: string[] = (subA?.trigger ?? '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean)
+  const triggersB: string[] = (subB?.trigger ?? '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean)
+  const subLabelEnA = subA?.subLabelEn ?? null
+  const subLabelEnB = subB?.subLabelEn ?? null
+
+  // 权重映射：推荐权重 × 比例（公式见函数上方注释）
+  const clampW = (w: number) => Math.max(0, Math.min(1.5, w))
+  const calcWeight = (recommended: number, ratio: number) =>
+    Math.round(clampW((recommended * ratio) / 100) * 100) / 100
+  const weightA = calcWeight(subA?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioA)
+  const weightB = calcWeight(subB?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioB)
+  const loraA = subA?.loraFile && weightA >= 0.05 ? { file: subA.loraFile, weight: weightA } : null
+  const loraB = subB?.loraFile && weightB >= 0.05 ? { file: subB.loraFile, weight: weightB } : null
+
+  // 复用单纹样的颜色/排布/对称等装饰段；伪 params 挂子类 A，用于潘通色号反查
+  const pseudoParams: GenerationParams = {
+    ...params,
+    dimension: { ...params.dimension, subcategory: subcategoryA },
+  }
+
+  const parts: string[] = []
+
+  // 1) 触发词：A、B 的 trigger 全部入列（多 trigger 逐项写入）
+  for (const t of [...triggersA, ...triggersB]) parts.push(t)
+
+  // 2) Chinese traditional {A} and {B} pattern
+  if (subLabelEnA && subLabelEnB) {
+    parts.push(`Chinese traditional ${subLabelEnA} and ${subLabelEnB} fusion pattern`)
+  } else if (subLabelEnA || subLabelEnB) {
+    parts.push(`Chinese traditional ${subLabelEnA ?? subLabelEnB} pattern`)
+  } else {
+    parts.push('Chinese traditional pattern')
+  }
+
+  // 3) 颜色加权前缀：在 prompt 前半部分重复颜色词，增强模型对颜色的响应
+  const colorWeighted = buildColorWeightedClause(pseudoParams)
+  if (colorWeighted) parts.push(colorWeighted)
+
+  // 4) decorative motif（固定）
+  parts.push('decorative motif')
+
+  // 5) 平面/肌理：textureDetail 0–100
+  const tex = params.textureDetail ?? 50
+  if (tex < 40) {
+    parts.push('flat pattern design, clean lines, no texture')
+  } else if (tex < 70) {
+    parts.push('flat pattern design, subtle surface hint')
+  } else {
+    parts.push('embroidery texture')
+  }
+
+  // 6) 疏密：complexity 0–100
+  const cmp = params.complexity ?? 50
+  if (cmp < 30) {
+    parts.push('minimal geometric, simple sparse detail')
+  } else if (cmp < 70) {
+    parts.push('medium detail, balanced density')
+  } else {
+    parts.push('dense elaborate full pattern, intricate detail')
+  }
+
+  // 7) 排布：arrangement
+  switch (params.arrangement) {
+    case 'single':
+      parts.push('single motif, centered medallion')
+      break
+    case 'seamless':
+      parts.push('seamless repeat, tileable continuous pattern')
+      break
+    case 'adapted':
+      parts.push('fitted panel motif, shaped to border')
+      break
+  }
+
+  // 8) 对称：symmetry
+  switch (params.symmetry) {
+    case 'mirror':
+      parts.push('bilateral mirror symmetry')
+      break
+    case 'rotation':
+      parts.push('radial rotational symmetry')
+      break
+    case 'none':
+      parts.push('asymmetric free composition')
+      break
+  }
+
+  // 9) 文化符号强度：culturalIntensity 0–100
+  const ci = params.culturalIntensity ?? 50
+  if (ci < 35) {
+    parts.push('simplified abstract interpretation of traditional symbol')
+  } else if (ci < 65) {
+    parts.push('recognizable traditional form with design refinement')
+  } else {
+    parts.push('classic authentic traditional form, clearly recognizable')
+  }
+
+  // 10) 配色（保留在末尾，双重保险）
+  parts.push(buildColorClause(pseudoParams))
+
+  // 末尾固定加 traditional ICH style
+  parts.push('traditional ICH style')
+
+  // 11) 两个 LoRA 标签：子类 A 在前、子类 B 在后
+  if (loraA) parts.push(`<lora:${loraA.file}:${loraA.weight}>`)
+  if (loraB) parts.push(`<lora:${loraB.file}:${loraB.weight}>`)
+
+  const prompt = parts.join(', ')
+  const negativePrompt = buildNegativePromptCore([subcategoryA, subcategoryB], params.colorScheme)
+
+  return {
+    prompt,
+    negativePrompt,
+    loraA,
+    loraB,
+    triggersA: triggersA.join(', '),
+    triggersB: triggersB.join(', '),
+    subLabelEnA,
+    subLabelEnB,
+  }
+}
+
+/**
+ * 融合生成入口（真实链路与单纹样一致：sd_proxy → A1111 txt2img）
+ * 失败降级 mock 保证页面不白屏；控制台打印完整 prompt，便于验收核对 lora 权重
+ */
+export async function generateFusionWithFallback(options: FusionGenerationOptions): Promise<PatternGenerationResult> {
+  const info = buildFusionPromptParts(options)
+
+  console.log('[patternGeneration] ===== 融合生成请求 =====')
+  console.log(
+    '[patternGeneration] 子类A:',
+    options.subcategoryA,
+    `(${info.subLabelEnA ?? 'n/a'})`,
+    '| 子类B:',
+    options.subcategoryB,
+    `(${info.subLabelEnB ?? 'n/a'})`,
+    '| 比例:',
+    `${options.ratioA}/${options.ratioB}`,
+  )
+  console.log(
+    '[patternGeneration] loraA:',
+    info.loraA ? `<lora:${info.loraA.file}:${info.loraA.weight}>` : 'none',
+    '| loraB:',
+    info.loraB ? `<lora:${info.loraB.file}:${info.loraB.weight}>` : 'none',
+  )
+  console.log('[patternGeneration] final prompt:', info.prompt)
+  console.log('[patternGeneration] negative prompt:', info.negativePrompt)
+  console.log(
+    '[patternGeneration] params: steps=', SD_DEFAULTS.steps,
+    'cfg=', SD_DEFAULTS.cfgScale,
+    'sampler=', SD_DEFAULTS.samplerName,
+    'size=', `${SD_DEFAULTS.width}x${SD_DEFAULTS.height}`,
+  )
+
+  try {
+    const result = await callSdProxy({
+      prompt: info.prompt,
+      negative_prompt: info.negativePrompt,
+      width: SD_DEFAULTS.width,
+      height: SD_DEFAULTS.height,
+      steps: SD_DEFAULTS.steps,
+      cfg_scale: SD_DEFAULTS.cfgScale,
+      sampler_name: SD_DEFAULTS.samplerName,
+      seed: SD_DEFAULTS.seed,
+    })
+
+    console.log(
+      '[patternGeneration] ===== 融合真实生成成功 =====',
+      '| seed:', result.seed,
+      '| elapsed:', result.elapsedMs ? `${result.elapsedMs}ms` : 'n/a',
+      '| file:', result.filePath || 'n/a',
+      '| fallback: false',
+    )
+
+    return {
+      imageUrl: result.imageUrl,
+      generationId: result.generationId,
+      prompt: info.prompt,
+      negativePrompt: info.negativePrompt,
+      fallback: false,
+      seed: result.seed,
+      elapsedMs: result.elapsedMs,
+      filePath: result.filePath,
+    }
+  } catch (err: any) {
+    const reason = err?.name === 'AbortError'
+      ? 'SD 生成超时（CPU 推理较慢，10 分钟仍未返回）'
+      : (err?.message || String(err))
+    console.warn(
+      '[patternGeneration] ===== 融合真实生成失败，降级 mock =====',
+      '| fallback: true',
+      '| reason:', reason,
+    )
+
+    // mock 兜底：以子类 A 的触发词构造单纹样 params（mock 只保证页面有图）
+    const mockParams: GenerationParams = {
+      ...options.params,
+      dimension: { ...options.params.dimension, subcategory: options.subcategoryA },
+    }
+    const mock = await mockGeneratePattern(mockParams)
+    return {
+      imageUrl: mock.imageUrl,
+      generationId: mock.generationId,
+      prompt: info.prompt,
+      negativePrompt: info.negativePrompt,
+      fallback: true,
+      fallbackReason: reason,
+      seed: -1,
+    }
+  }
+}
+
 /** 暴露给外部单测/调试使用 */
-export const __debug = { buildPromptParts, SD_DEFAULTS, PROXY_URL }
+export const __debug = { buildPromptParts, buildFusionPromptParts, SD_DEFAULTS, PROXY_URL }

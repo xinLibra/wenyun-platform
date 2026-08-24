@@ -8,7 +8,9 @@ import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { DimensionFilter } from '../components/pattern/DimensionFilter'
 import { GenerationParamsPanel } from '../components/pattern/GenerationParams'
 import { PromptInput } from '../components/pattern/PromptInput'
-import { generatePatternWithFallback } from '../services/patternGeneration'
+import { generatePatternWithFallback, generateFusionWithFallback } from '../services/patternGeneration'
+import { InkSlider } from '../components/ui/InkSlider'
+import { BambooToggle } from '../components/ui/Select'
 import { applyPreset } from '../config/generationPresets'
 import { PatternDimension, GenerationParams, PromptParseResult, CRAFT_OPTIONS, ETHNIC_OPTIONS, THEME_OPTIONS, APPLICATION_OPTIONS, ARRANGEMENT_OPTIONS, SYMMETRY_OPTIONS } from '../types/pattern'
 import { supabase } from '../lib/supabase'
@@ -59,6 +61,34 @@ const DEFAULT_GENERATION_PARAMS: GenerationParams = {
   symmetry: 'mirror',
   culturalIntensity: 50,
 }
+
+/** 融合结果共用的一套参数（默认中性预设：藏青 hue 240 / 中等复杂度 / 镜像对称） */
+const DEFAULT_FUSION_GENERATION_PARAMS: GenerationParams = {
+  dimension: DEFAULT_DIMENSION,
+  complexity: 50,
+  textureDetail: 50,
+  colorScheme: {
+    mode: 'hue',
+    hue: 240,
+    brightness: 50,
+  },
+  arrangement: 'single',
+  symmetry: 'mirror',
+  culturalIntensity: 50,
+}
+
+/** 融合结果参数区：主题色/配色快捷色板（hue 色相模式） */
+const FUSION_HUE_SWATCHES: { id: string; label: string; css: string; hue: number }[] = [
+  { id: 'palace-red', label: '宫墙红', css: '#C3423F', hue: 0 },
+  { id: 'orange-red', label: '橙红', css: '#FF6F00', hue: 24 },
+  { id: 'gold', label: '鎏金', css: '#D4AF37', hue: 46 },
+  { id: 'pine-green', label: '松绿', css: '#5F9E6E', hue: 128 },
+  { id: 'teal', label: '黛青', css: '#009688', hue: 174 },
+  { id: 'cobalt', label: '钴蓝', css: '#1565C0', hue: 212 },
+  { id: 'ink-blue', label: '藏青', css: '#26364B', hue: 220 },
+  { id: 'purple', label: '黛紫', css: '#6A5ACD', hue: 260 },
+  { id: 'lotus-pink', label: '藕粉', css: '#E8B4B8', hue: 336 },
+]
 
 /**
  * 将当前生成参数映射到 DNA 雷达图 7 维度
@@ -454,14 +484,77 @@ export default function CreatePattern() {
 
   
 
+  /** 拉取图片 → PNG Blob（data:/blob:/http 均兼容）；失败返回 null，不抛错 */
+  const fetchImageBlob = async (imageUrl: string): Promise<Blob | null> => {
+    try {
+      const res = await fetch(imageUrl)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return await res.blob()
+    } catch (err) {
+      console.error('[CreatePattern] 图片转 Blob 失败:', err)
+      return null
+    }
+  }
+
+  /** 尝试把 PNG Blob 写入系统剪贴板（Edge/Chrome 桌面端支持）；不支持或失败返回 false */
+  const copyImageToClipboard = async (blob: Blob): Promise<boolean> => {
+    try {
+      if (!navigator.clipboard?.write || typeof (window as any).ClipboardItem === 'undefined') {
+        throw new Error('当前浏览器不支持 ClipboardItem')
+      }
+      const CI = (window as any).ClipboardItem
+      await navigator.clipboard.write([new CI({ 'image/png': blob })])
+      return true
+    } catch (err) {
+      console.error('[CreatePattern] 复制图片到剪贴板失败:', err)
+      return false
+    }
+  }
+
+  /**
+   * 真正的复制/分享：优先复制图片 → 降级复制链接 → 再降级下载。
+   * 每个分支都有明确的成功/失败 toast，禁止「声称已复制但没有」的伪成功。
+   */
+  const performImageShare = async (
+    imageBlobPromise: Promise<Blob | null>,
+    imageUrl: string,
+    shareUrl: string,
+    fileName: string,
+  ) => {
+    const blob = await imageBlobPromise
+    if (blob && (await copyImageToClipboard(blob))) {
+      showToastMessage('已复制图片到剪贴板')
+      return
+    }
+
+    const shareText = `我在纹韵设计的非遗纹样，快来看看！${shareUrl}`
+    try {
+      await navigator.clipboard.writeText(shareText)
+      showToastMessage('已复制链接')
+      return
+    } catch (err) {
+      console.error('[CreatePattern] 复制链接失败:', err)
+    }
+
+    try {
+      await downloadImage(imageUrl, fileName)
+      showToastMessage('当前浏览器不支持复制图片，已为你下载')
+    } catch (err) {
+      console.error('[CreatePattern] 分享降级下载失败:', err)
+      showToastMessage('分享失败，请重试')
+    }
+  }
+
   const handleShare = async () => {
     if (!generatedImage) {
       showToastMessage('请先生成纹样后再分享')
       return
     }
+    // 提前拉取图片 Blob（无需用户激活），尽量贴近「点击回调」内调用 Clipboard API
+    const imageBlobPromise = fetchImageBlob(generatedImage)
 
     const { data: { session } } = await supabase.auth?.getSession()
-    
+
     let shareUrl = `${window.location.origin}/gallery`
 
     if (session?.user) {
@@ -497,48 +590,8 @@ export default function CreatePattern() {
       }
     }
 
-    // 执行分享：支持 Web Share 则调系统分享（可带图片），否则复制链接降级
-    if (navigator.share) {
-      try {
-        let shareData: ShareData = {
-          title: '我在纹韵设计的纹样',
-          text: '快来看看我设计的非遗纹样！',
-          url: shareUrl,
-        }
-        // 可分享图片文件时优先附带图片
-        if (navigator.canShare) {
-          try {
-            const res = await fetch(generatedImage)
-            const blob = await res.blob()
-            const file = new File([blob], `纹韵纹样_${Date.now()}.png`, { type: 'image/png' })
-            const filesData: ShareData = { ...shareData, files: [file] }
-            if (navigator.canShare(filesData)) {
-              shareData = filesData
-            }
-          } catch {
-            // 图片拉取失败时降级为纯链接分享
-          }
-        }
-        await navigator.share(shareData)
-      } catch (err) {
-        // 用户取消系统分享面板（AbortError）不算报错
-        if ((err as any)?.name === 'AbortError') return
-        console.error('Share error:', err)
-        await copyShareLink(shareUrl)
-      }
-    } else {
-      await copyShareLink(shareUrl)
-    }
-  }
-
-  const copyShareLink = async (shareUrl: string) => {
-    try {
-      await navigator.clipboard.writeText(shareUrl)
-      showToastMessage('作品链接已复制到剪贴板')
-    } catch (err) {
-      console.error('Copy share link error:', err)
-      window.prompt('复制作品链接：', shareUrl)
-    }
+    // 真正的复制/分享：优先复制图片到剪贴板，失败逐级降级
+    await performImageShare(imageBlobPromise, generatedImage, shareUrl, `纹韵纹样_${Date.now()}.png`)
   }
 
   /**
@@ -605,6 +658,8 @@ export default function CreatePattern() {
   const [fusionWorkTitle, setFusionWorkTitle] = useState<string>('')
   const [isFusionSaving, setIsFusionSaving] = useState(false)
   const [lastFusionRatio, setLastFusionRatio] = useState<{ a: number; b: number }>({ a: 50, b: 50 })
+  // 融合结果共用的一套生成参数（主题色/复杂度/文化符号强度/排布/对称），写入最终 prompt
+  const [fusionParams, setFusionParams] = useState<GenerationParams>(DEFAULT_FUSION_GENERATION_PARAMS)
 
   //const builtInFusionSamples = [
     //{ patternId: 'sample-a', patternName: '云纹', imageUrl: '/placeholder-pattern-a.png' },
@@ -687,20 +742,39 @@ export default function CreatePattern() {
   }, [createMode])
 
   const handleFusionGenerate = async (ratioA: number, ratioB: number) => {
-    if (!fusionSelectedA || !fusionSelectedB) return
+    if (!fusionSelectedA || !fusionSelectedB || !fusionASub || !fusionBSub) {
+      showToastMessage('请先选满两个纹样子类')
+      return
+    }
     setIsFusing(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      console.log('融合请求：', fusionSelectedA.patternId, fusionSelectedB.patternId, ratioA, ratioB)
+      // 真实融合链路：sd_proxy → A1111 txt2img，失败自动降级 mock（generateFusionWithFallback 内部处理）
+      // 两槽触发词 + 两个 LoRA 权重（比例映射，公式见 patternGeneration.buildFusionPromptParts 注释）
+      const result = await generateFusionWithFallback({
+        subcategoryA: fusionASub,
+        subcategoryB: fusionBSub,
+        ratioA,
+        ratioB,
+        params: fusionParams,
+      })
+      console.log('[CreatePattern] 融合生成完成:', { ratioA, ratioB, prompt: result.prompt, fallback: result.fallback })
       // 注意：只写 fusionResultImage，绝不写 generatedImage —— 后者是 AI 生成模式
       // 「实时预览」面板专用的 state，两个模式的预览必须互不影响。
-      // TODO(Wu): 这里目前仍是 mock（取权重较高一方的图作为占位结果），
-      // 等真实的融合接口/模型接好后，把这行换成接口返回的融合图 URL。
-      setFusionResultImage(ratioA >= ratioB ? fusionSelectedA.imageUrl : fusionSelectedB.imageUrl)
+      setFusionResultImage(result.imageUrl)
       // 新生成融合图后，之前的已保存 id 失效，避免分享错作品
       setFusionCurrentWorkId('')
       setLastFusionRatio({ a: ratioA, b: ratioB })
       setShowDnaAnalysis(true)
+      if (result.fallback) {
+        console.warn('[CreatePattern] 融合真实生成失败，降级 mock:', result.fallbackReason)
+        setFallbackInfo({ reason: result.fallbackReason || '未知原因' })
+      } else {
+        console.log('[CreatePattern] 融合真实生成成功, prompt=', result.prompt)
+        setFallbackInfo(null)
+      }
+    } catch (error) {
+      console.error('[CreatePattern] 融合生成彻底失败:', error)
+      setFallbackInfo({ reason: (error as Error)?.message || '融合生成失败' })
     } finally {
       setIsFusing(false)
     }
@@ -770,6 +844,7 @@ export default function CreatePattern() {
             patternBId: fusionSelectedB?.patternId,
             ratioA: lastFusionRatio.a,
             ratioB: lastFusionRatio.b,
+            generationParams: fusionParams,
           },
         },
         image_url: fusionResultImage,
@@ -800,9 +875,11 @@ export default function CreatePattern() {
 
   const handleFusionShare = async () => {
     if (!fusionResultImage) {
-      alert('请先生成融合纹样后再分享')
+      showToastMessage('请先生成融合纹样后再分享')
       return
     }
+    // 提前拉取图片 Blob，尽量贴近「点击回调」内调用 Clipboard API
+    const imageBlobPromise = fetchImageBlob(fusionResultImage)
 
     const { data: { session } } = await supabase.auth?.getSession()
 
@@ -837,36 +914,50 @@ export default function CreatePattern() {
       }
     }
 
-    if (navigator.share) {
-      try {
-        let shareData: ShareData = {
-          title: '我在纹韵设计的融合纹样',
-          text: '快来看看我融合设计的非遗纹样！',
-          url: shareUrl,
-        }
-        if (navigator.canShare) {
-          try {
-            const res = await fetch(fusionResultImage)
-            const blob = await res.blob()
-            const file = new File([blob], `融合纹样_${Date.now()}.png`, { type: 'image/png' })
-            const filesData: ShareData = { ...shareData, files: [file] }
-            if (navigator.canShare(filesData)) {
-              shareData = filesData
-            }
-          } catch {
-            // 图片拉取失败时降级为纯链接分享
-          }
-        }
-        await navigator.share(shareData)
-      } catch (err) {
-        // 用户取消系统分享面板（AbortError）不算报错
-        if ((err as any)?.name === 'AbortError') return
-        console.error('Share error:', err)
-        await copyShareLink(shareUrl)
-      }
-    } else {
-      await copyShareLink(shareUrl)
+    // 真正的复制/分享：优先复制图片到剪贴板，失败逐级降级
+    await performImageShare(imageBlobPromise, fusionResultImage, shareUrl, `融合纹样_${Date.now()}.png`)
+  }
+
+  /**
+   * 「下一步：定制产品」（融合模式）
+   * 与 AI 模式 handleProceedToCustomize 逻辑一致：自动保存 + 写入跨页数据 + 跳转 /customize
+   */
+  const handleFusionProceedToCustomize = async () => {
+    if (!fusionResultImage) {
+      showToastMessage('请先生成纹样')
+      return
     }
+
+    let workId: string | null = fusionCurrentWorkId
+    if (!workId) {
+      workId = await handleFusionSave({ silent: true })
+      if (!workId) {
+        showToastMessage('保存失败，无法进入定制，请重试')
+        return
+      }
+    }
+
+    const name = fusionWorkTitle || `融合纹样 #${Date.now().toString(36).toUpperCase()}`
+
+    writePendingPattern({
+      workId,
+      imageUrl: fusionResultImage,
+      name,
+      from: 'fusion',
+      ts: Date.now(),
+    })
+    writeGlobalSelectedPattern({
+      id: workId,
+      image_url: fusionResultImage,
+      title: name,
+    })
+    try {
+      localStorage.setItem(LAST_GENERATED_PATTERN_KEY, fusionResultImage)
+    } catch (err) {
+      console.warn('CreatePattern - save last_generated_pattern failed:', err)
+    }
+
+    navigate('/customize')
   }
 
   return (
@@ -886,7 +977,7 @@ export default function CreatePattern() {
 
         <div className="flex justify-center gap-3 mb-8">
           <button
-            onClick={() => setCreateMode('ai')}
+            onClick={() => { setCreateMode('ai'); setFallbackInfo(null) }}
             className={`px-6 py-2 rounded-sm font-song transition-colors ${
               createMode === 'ai'
                 ? 'bg-palace-red text-rice-paper'
@@ -896,7 +987,7 @@ export default function CreatePattern() {
             AI生成
           </button>
           <button
-            onClick={() => setCreateMode('fusion')}
+            onClick={() => { setCreateMode('fusion'); setFallbackInfo(null) }}
             className={`px-6 py-2 rounded-sm font-song transition-colors ${
               createMode === 'fusion'
                 ? 'bg-palace-red text-rice-paper'
@@ -1372,6 +1463,13 @@ export default function CreatePattern() {
 
     {/* 右侧：融合比例 + 预览（沿用 PatternFusionSlider） */}
     <div className="space-y-4">
+      {fallbackInfo && (
+        <div className="p-3 bg-warning-50 border border-warning-200 rounded-sm">
+          <div className="font-song text-sm text-warning-dark font-semibold">融合真实生成失败，已降级为占位 mock</div>
+          <div className="font-song text-xs text-deep-blue-light mt-1 break-words">原因：{fallbackInfo.reason}</div>
+        </div>
+      )}
+
       <PatternFusionSlider
         patternA={fusionSelectedA}
         patternB={fusionSelectedB}
@@ -1379,6 +1477,106 @@ export default function CreatePattern() {
         isGenerating={isFusing}
         resultImage={fusionResultImage}
       />
+
+      {/* 融合结果参数区：两槽共用一套参数，写入最终 prompt */}
+      <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-shufa text-base text-deep-blue">融合结果参数</h3>
+          <span className="font-song text-[11px] text-deep-blue-light">调节后重新点「融合生成」生效</span>
+        </div>
+
+        {/* 主题色 / 配色（必备项） */}
+        <div>
+          <label className="block font-song text-sm text-deep-blue-light mb-2">主题色 / 配色</label>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFusionParams(p => ({ ...p, colorScheme: { mode: 'pantone', pantone: 'monochrome-black' } }))}
+              title="水墨黑白"
+              className={`w-9 h-9 rounded-sm border overflow-hidden transition-all ${
+                fusionParams.colorScheme.mode === 'pantone' && fusionParams.colorScheme.pantone === 'monochrome-black'
+                  ? 'border-palace-red ring-2 ring-palace-red/40'
+                  : 'border-deep-blue-200 hover:border-deep-blue'
+              }`}
+            >
+              <span className="w-full h-full flex items-center justify-center bg-ink-black text-rice-paper font-song text-xs">墨</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFusionParams(p => ({ ...p, colorScheme: { mode: 'pantone', pantone: 'multicolor' } }))}
+              title="多彩"
+              className={`w-9 h-9 rounded-sm border overflow-hidden transition-all ${
+                fusionParams.colorScheme.mode === 'pantone' && fusionParams.colorScheme.pantone === 'multicolor'
+                  ? 'border-palace-red ring-2 ring-palace-red/40'
+                  : 'border-deep-blue-200 hover:border-deep-blue'
+              }`}
+            >
+              <span className="w-full h-full flex items-center justify-center bg-gradient-to-br from-palace-red via-ming-yellow to-deep-blue text-rice-paper font-song text-xs">彩</span>
+            </button>
+            {FUSION_HUE_SWATCHES.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setFusionParams(p => ({ ...p, colorScheme: { mode: 'hue', hue: c.hue, brightness: p.colorScheme.brightness ?? 50 } }))}
+                title={c.label}
+                className={`w-9 h-9 rounded-sm border transition-all ${
+                  fusionParams.colorScheme.mode === 'hue' && fusionParams.colorScheme.hue === c.hue
+                    ? 'border-palace-red ring-2 ring-palace-red/40 scale-105'
+                    : 'border-deep-blue-200 hover:border-deep-blue'
+                }`}
+                style={{ backgroundColor: c.css }}
+              />
+            ))}
+          </div>
+          <div className="mt-2">
+            <InkSlider
+              label="明度"
+              value={fusionParams.colorScheme.brightness ?? 50}
+              min={0}
+              max={100}
+              onChange={(v) => setFusionParams(p => ({ ...p, colorScheme: { ...p.colorScheme, brightness: v } }))}
+            />
+          </div>
+        </div>
+
+        <InkSlider
+          label="复杂度"
+          leftLabel="极简"
+          rightLabel="繁复"
+          value={fusionParams.complexity}
+          min={0}
+          max={100}
+          onChange={(v) => setFusionParams(p => ({ ...p, complexity: v }))}
+        />
+        <InkSlider
+          label="文化符号强度"
+          leftLabel="抽象"
+          rightLabel="还原"
+          value={fusionParams.culturalIntensity}
+          min={0}
+          max={100}
+          onChange={(v) => setFusionParams(p => ({ ...p, culturalIntensity: v }))}
+        />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block font-song text-sm text-deep-blue-light mb-2">排布</label>
+            <BambooToggle
+              options={ARRANGEMENT_OPTIONS}
+              value={fusionParams.arrangement}
+              onChange={(v) => setFusionParams(p => ({ ...p, arrangement: v as GenerationParams['arrangement'] }))}
+            />
+          </div>
+          <div>
+            <label className="block font-song text-sm text-deep-blue-light mb-2">对称</label>
+            <BambooToggle
+              options={SYMMETRY_OPTIONS}
+              value={fusionParams.symmetry}
+              onChange={(v) => setFusionParams(p => ({ ...p, symmetry: v as GenerationParams['symmetry'] }))}
+            />
+          </div>
+        </div>
+      </div>
 
       {fusionResultImage && (
         <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-3">
@@ -1430,6 +1628,14 @@ export default function CreatePattern() {
               分享
             </Button>
           </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full"
+            onClick={() => void handleFusionProceedToCustomize()}
+          >
+            下一步：定制产品
+          </Button>
         </div>
       )}
     </div>
@@ -1513,7 +1719,7 @@ export default function CreatePattern() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-              <PatternDnaRadar dna={computeDnaFromParams(generationParams)} patternName={(createMode === 'fusion' ? fusionWorkTitle : workTitle) || '本次生成纹样'} />
+              <PatternDnaRadar dna={computeDnaFromParams(createMode === 'fusion' ? fusionParams : generationParams)} patternName={(createMode === 'fusion' ? fusionWorkTitle : workTitle) || '本次生成纹样'} />
             </FrameDecorations>
           </motion.div>
         </motion.div>
