@@ -1341,6 +1341,27 @@ export default function CreatePattern() {
                   <div className="flex flex-wrap gap-1">
                     {(() => {
                       const displayTags: string[] = []
+
+                      // 主标签：子类中文名（如 #牡丹纹 #鹿纹）
+                      const mainThemeId = generationParams.dimension.mainTheme as PatternThemeId | ''
+                      const subId = generationParams.dimension.subcategory
+                      let subLabel = ''
+                      if (mainThemeId && subId) {
+                        const found = findSubcategory(mainThemeId, subId)
+                        if (found && found.id !== 'plant' && found.id !== 'animal') subLabel = found.label
+                      }
+                      if (!subLabel && subId) {
+                        const foundById = findSubcategoryById(subId)
+                        if (foundById && foundById.id !== 'plant' && foundById.id !== 'animal') subLabel = foundById.label
+                      }
+                      if (subLabel) displayTags.push(subLabel)
+
+                      // 次标签：主题中文名（花卉 / 瑞兽）
+                      const themeLabel = mainThemeId
+                        ? (PATTERN_THEMES.find((t) => t.id === mainThemeId)?.label ?? '')
+                        : ''
+                      if (themeLabel) displayTags.push(themeLabel)
+
                       dimension.craft.forEach(id => {
                         const option = CRAFT_OPTIONS.find(o => o.id === id)
                         if (option) displayTags.push(option.label)
@@ -1350,6 +1371,8 @@ export default function CreatePattern() {
                         if (option) displayTags.push(option.label)
                       })
                       dimension.theme.forEach(id => {
+                        // 禁止笼统「植物纹 / 动物纹」
+                        if (id === 'plant' || id === 'animal') return
                         const option = THEME_OPTIONS.find(o => o.id === id)
                         if (option) displayTags.push(option.label)
                       })
