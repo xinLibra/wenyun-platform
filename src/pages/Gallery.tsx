@@ -29,6 +29,24 @@ interface GalleryWork {
   source?: string
 }
 
+/**
+ * 旧数据兼容：无 theme/subcategory 字段时，从 tags 反查子类中文名（与 PATTERN_THEMES label 一致），
+ * 映射回主题 + 子类 id，使旧作品也能被花卉/瑞兽子类筛选命中；匹配不到则归入「全部」。
+ */
+function resolveWorkMeta(work: GalleryWork): { theme?: string; subcategory?: string } {
+  if (work.theme) {
+    return { theme: work.theme, subcategory: work.subcategory }
+  }
+  for (const theme of PATTERN_THEMES) {
+    for (const sub of theme.subcategories) {
+      if ((work.tags || []).includes(sub.label)) {
+        return { theme: theme.id, subcategory: sub.id }
+      }
+    }
+  }
+  return { theme: work.theme, subcategory: work.subcategory }
+}
+
 export default function Gallery() {
   const { id: detailId } = useParams<{ id?: string }>()
   const location = useLocation()
@@ -36,8 +54,6 @@ export default function Gallery() {
   /** 筛选：all | floral | beast | fusion；activeSubcategory 为空 = 该主题下全部子类 */
   const [activeFilter, setActiveFilter] = useState<'all' | PatternThemeId | 'fusion'>('all')
   const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null)
-  /** UI 展开的主题子类面板 */
-  const [expandedTheme, setExpandedTheme] = useState<PatternThemeId | null>(null)
   const [selectedWork, setSelectedWork] = useState<GalleryWork | null>(null)
   const [showDnaAnalysis, setShowDnaAnalysis] = useState(false)
   const [sortBy, setSortBy] = useState('latest')
@@ -141,8 +157,9 @@ export default function Gallery() {
     }
     if (activeFilter === 'floral' || activeFilter === 'beast') {
       return works.filter(w => {
-        if (w.theme !== activeFilter) return false
-        if (activeSubcategory) return w.subcategory === activeSubcategory
+        const meta = resolveWorkMeta(w)
+        if (meta.theme !== activeFilter) return false
+        if (activeSubcategory) return meta.subcategory === activeSubcategory
         return true
       })
     }
@@ -157,6 +174,12 @@ export default function Gallery() {
 
   const paginatedWorks = sortedWorks.slice(0, page * itemsPerPage)
   const hasMore = paginatedWorks.length < sortedWorks.length
+
+  /** 当前选中的主题（决定子类横排 chip 行是否显示及其内容） */
+  const activeTheme =
+    activeFilter === 'floral' || activeFilter === 'beast'
+      ? PATTERN_THEMES.find(t => t.id === activeFilter)
+      : null
 
   const handleLoadMore = () => {
     setPage(prev => prev + 1)
@@ -237,7 +260,6 @@ export default function Gallery() {
               onClick={() => {
                 setActiveFilter('all')
                 setActiveSubcategory(null)
-                setExpandedTheme(null)
                 setPage(1)
               }}
               className={`px-5 py-2 rounded-sm font-song transition-all duration-300 ${
@@ -249,84 +271,25 @@ export default function Gallery() {
               全部
             </button>
 
-            {/* 主题：花卉 / 瑞兽（点主题名按主题筛 + 展开子类芯片） */}
+            {/* 主题：花卉 / 瑞兽（点主题名按主题筛，子类走下方横排 chip） */}
             {PATTERN_THEMES.map((theme) => {
               const isActive = activeFilter === theme.id
               return (
-                <div key={theme.id} className="relative">
-                  <button
-                    onClick={() => {
-                      if (activeFilter !== theme.id) {
-                        // 未选中该主题：选中并按主题筛（该主题下全部子类）
-                        setActiveFilter(theme.id)
-                        setActiveSubcategory(null)
-                      }
-                      // 再点主题名：只切换子类面板展开/收起（筛选保持按主题）
-                      setExpandedTheme(expandedTheme === theme.id ? null : theme.id)
-                      setPage(1)
-                    }}
-                    className={`px-5 py-2 rounded-sm font-song transition-all duration-300 flex items-center gap-1.5 ${
-                      isActive
-                        ? 'bg-palace-red text-rice-paper shadow-md'
-                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                    }`}
-                  >
-                    {theme.label}
-                    <svg
-                      className={`w-3.5 h-3.5 transition-transform ${expandedTheme === theme.id ? 'rotate-180' : ''}`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                    </svg>
-                  </button>
-
-                  <AnimatePresence>
-                    {expandedTheme === theme.id && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -6 }}
-                        className="absolute left-0 top-full mt-2 z-30 w-72 max-w-[80vw] bg-rice-paper-light border border-deep-blue-100 rounded-sm shadow-lg p-3"
-                      >
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => {
-                              setActiveFilter(theme.id)
-                              setActiveSubcategory(null)
-                              setPage(1)
-                            }}
-                            className={`px-3 py-1.5 rounded-sm font-song text-sm transition-all duration-300 ${
-                              isActive && !activeSubcategory
-                                ? 'bg-palace-red text-rice-paper'
-                                : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                            }`}
-                          >
-                            全部{theme.label}
-                          </button>
-                          {theme.subcategories.map((sub) => (
-                            <button
-                              key={sub.id}
-                              onClick={() => {
-                                setActiveFilter(theme.id)
-                                setActiveSubcategory(sub.id)
-                                setPage(1)
-                              }}
-                              className={`px-3 py-1.5 rounded-sm font-song text-sm transition-all duration-300 ${
-                                activeSubcategory === sub.id
-                                  ? 'bg-palace-red text-rice-paper shadow-md'
-                                  : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                              }`}
-                            >
-                              {sub.label}
-                            </button>
-                          ))}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                <button
+                  key={theme.id}
+                  onClick={() => {
+                    setActiveFilter(theme.id)
+                    setActiveSubcategory(null)
+                    setPage(1)
+                  }}
+                  className={`px-5 py-2 rounded-sm font-song transition-all duration-300 ${
+                    isActive
+                      ? 'bg-palace-red text-rice-paper shadow-md'
+                      : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                  }`}
+                >
+                  {theme.label}
+                </button>
               )
             })}
 
@@ -335,7 +298,6 @@ export default function Gallery() {
               onClick={() => {
                 setActiveFilter('fusion')
                 setActiveSubcategory(null)
-                setExpandedTheme(null)
                 setPage(1)
               }}
               className={`px-5 py-2 rounded-sm font-song transition-all duration-300 ${
@@ -347,6 +309,45 @@ export default function Gallery() {
               纹样融合
             </button>
           </div>
+
+          {/* 主题子类横排 chip 行（可左右滑动）：选中花卉/瑞兽后出现在按钮下方 */}
+          {activeTheme && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 overflow-x-auto pb-1 mt-2 mb-1 max-w-4xl mx-auto"
+            >
+              <button
+                onClick={() => {
+                  setActiveSubcategory(null)
+                  setPage(1)
+                }}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-sm font-song text-sm transition-all duration-300 whitespace-nowrap ${
+                  activeSubcategory === null
+                    ? 'bg-palace-red text-rice-paper shadow-md'
+                    : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                }`}
+              >
+                全部{activeTheme.label}
+              </button>
+              {activeTheme.subcategories.map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => {
+                    setActiveSubcategory(sub.id)
+                    setPage(1)
+                  }}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-sm font-song text-sm transition-all duration-300 whitespace-nowrap ${
+                    activeSubcategory === sub.id
+                      ? 'bg-palace-red text-rice-paper shadow-md'
+                      : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </motion.div>
+          )}
         </motion.div>
 
         <div className="flex justify-end mb-6">
@@ -440,7 +441,13 @@ export default function Gallery() {
                   </svg>
                 </div>
                 <p className="font-song text-deep-blue-light">
-                  {activeFilter === 'all' ? '暂无公开作品' : '暂无该分类公开作品'}
+                  {activeFilter === 'all'
+                    ? '暂无公开作品'
+                    : activeFilter === 'fusion'
+                      ? '暂无融合作品公开'
+                      : activeSubcategory
+                        ? '暂无该子类公开作品'
+                        : '暂无该主题公开作品'}
                 </p>
               </div>
             )}

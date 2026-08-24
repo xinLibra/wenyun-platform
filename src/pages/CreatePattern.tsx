@@ -137,6 +137,14 @@ function computeDnaFromParams(p: GenerationParams): PatternDnaData {
   }
 }
 
+/** 融合来源的标签名：内置子类返回 taxonomy 中文名（如 #菊花纹）；「植物纹/动物纹」笼统词跳过；保存作品回退用作品名 */
+function resolveFusionTagLabel(s: { patternId: string; patternName: string } | null | undefined): string {
+  if (!s) return ''
+  const sub = findSubcategoryById(s.patternId)
+  if (sub && (sub.id === 'plant' || sub.id === 'animal')) return ''
+  return sub?.label ?? s.patternName
+}
+
 export default function CreatePattern() {
   const navigate = useNavigate()
   const [dimension, setDimension] = useState<PatternDimension>(DEFAULT_DIMENSION)
@@ -397,6 +405,27 @@ export default function CreatePattern() {
 
       const autoTags: string[] = []
 
+      // 主标签：当前选中子类的中文名（与 PATTERN_THEMES 子类 label 一致），如 #牡丹纹 #鹿纹 #菊花纹
+      const mainThemeId = generationParams.dimension.mainTheme as PatternThemeId | ''
+      const subId = generationParams.dimension.subcategory
+      let subLabel = ''
+      if (mainThemeId && subId) {
+        const found = findSubcategory(mainThemeId, subId)
+        // 「植物纹 / 动物纹」属笼统主题词，禁止作为子类主标签
+        if (found && found.id !== 'plant' && found.id !== 'animal') subLabel = found.label
+      }
+      if (!subLabel && subId) {
+        const foundById = findSubcategoryById(subId)
+        if (foundById && foundById.id !== 'plant' && foundById.id !== 'animal') subLabel = foundById.label
+      }
+      if (subLabel) autoTags.push(subLabel)
+
+      // 次标签：主题中文名（花卉 / 瑞兽），仅作次要补充，主分类标签必须是子类
+      const themeLabel = mainThemeId
+        ? (PATTERN_THEMES.find((t) => t.id === mainThemeId)?.label ?? '')
+        : ''
+      if (themeLabel) autoTags.push(themeLabel)
+
       dimension.craft.forEach(id => {
         const option = CRAFT_OPTIONS.find(o => o.id === id)
         if (option) autoTags.push(option.label)
@@ -408,6 +437,8 @@ export default function CreatePattern() {
       })
 
       dimension.theme.forEach(id => {
+        // 禁止「植物纹 / 动物纹」这类笼统主题标签，主分类由子类中文名承担
+        if (id === 'plant' || id === 'animal') return
         const option = THEME_OPTIONS.find(o => o.id === id)
         if (option) autoTags.push(option.label)
       })
@@ -886,7 +917,8 @@ export default function CreatePattern() {
         }
       }
 
-      const autoTags = ['纹样融合', fusionSelectedA?.patternName, fusionSelectedB?.patternName].filter(Boolean) as string[]
+      // 纹样融合标签：固定 #纹样融合 + 两个来源子类中文名（与 PATTERN_THEMES 子类 label 一致），如 #菊花纹 #兰花纹
+      const autoTags = ['纹样融合', resolveFusionTagLabel(fusionSelectedA), resolveFusionTagLabel(fusionSelectedB)].filter(Boolean) as string[]
       const uniqueTags = [...new Set(autoTags)]
       const title = fusionWorkTitle || `融合纹样 #${Date.now().toString(36).toUpperCase()}`
 
@@ -1713,7 +1745,7 @@ export default function CreatePattern() {
         <div>
           <label className="block font-song text-sm text-deep-blue-light mb-1">标签</label>
           <div className="flex flex-wrap gap-1">
-            {[fusionSelectedA?.patternName, fusionSelectedB?.patternName, '纹样融合']
+            {['纹样融合', resolveFusionTagLabel(fusionSelectedA), resolveFusionTagLabel(fusionSelectedB)]
               .filter(Boolean)
               .map((tag, index) => (
                 <span
