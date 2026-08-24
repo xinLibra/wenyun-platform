@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/async'
 import { products } from '../lib/products'
 
 export default function OrderConfirmPage() {
@@ -12,6 +13,8 @@ export default function OrderConfirmPage() {
   const navigate = useNavigate()
   const [order, setOrder] = useState<Record<string, any> | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -19,29 +22,45 @@ export default function OrderConfirmPage() {
         navigate('/')
         return
       }
-
       try {
-        const { data: orderData } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('id', orderId)
-          .single()
+        // 只取本页必需字段，避免拉全量；超时即结束 loading 并展示失败+重试
+        const { data: orderData, error: queryError } = await withTimeout(
+          supabase
+            .from('orders')
+            .select('id, product_id, generation_id, image_url, product_image, customization, status, created_at, quantity, shipping_info')
+            .eq('id', orderId)
+            .single(),
+          10000,
+          '加载订单详情'
+        )
 
+        if (queryError) {
+          console.error('Fetch order error:', queryError)
+          setError(`订单加载失败：${queryError.message || queryError.code || '数据库查询错误'}`)
+          return
+        }
         if (orderData) {
           setOrder(orderData)
+          setError(null)
         } else {
           navigate('/')
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Fetch order error:', err)
-        navigate('/')
+        setError(err?.message || '加载订单详情失败，请检查网络后重试')
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchOrder()
-  }, [orderId, navigate])
+  }, [orderId, navigate, reloadKey])
+
+  const retry = useCallback(() => {
+    setError(null)
+    setIsLoading(true)
+    setReloadKey(k => k + 1)
+  }, [])
 
   if (isLoading) {
     return (
@@ -58,6 +77,25 @@ export default function OrderConfirmPage() {
           />
           <p className="font-song text-deep-blue">加载中...</p>
         </motion.div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-rice-paper flex items-center justify-center">
+        <div className="text-center px-4">
+          <div className="w-12 h-12 mx-auto bg-palace-red/10 rounded-full flex items-center justify-center mb-4">
+            <svg className="w-6 h-6 text-palace-red" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v4m0 4h.01M10.29 3.86l-8.29 14.14a2 2 0 001.79 3h16.42a2 2 0 001.79-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          </div>
+          <p className="font-song text-deep-blue mb-2">{error}</p>
+          <div className="flex gap-3 justify-center">
+            <Button variant="outline" onClick={retry}>重试</Button>
+            <Button variant="outline" onClick={() => navigate('/orders')}>返回订单列表</Button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -106,6 +144,9 @@ export default function OrderConfirmPage() {
                     <img
                       src={product.image}
                       alt={product.name}
+                      loading="lazy"
+                      decoding="async"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/placeholder-pattern-a.png' }}
                       className="w-full h-full object-cover"
                     />
                   ) : (

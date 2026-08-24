@@ -6,12 +6,32 @@ import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { useCart } from '../hooks/useCart'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/async'
 import { products } from '../lib/products'
 import PatternPreview from '../components/PatternPreview'
 
+/** 兜底占位图（与 useCart 保持一致） */
+const FALLBACK_IMAGE = '/placeholder-pattern-a.png'
+
+/** 缩略图独立加载：失败时显示占位图，绝不阻塞整页渲染 */
+function SafeImg({ src, alt, className }: { src: string; alt?: string; className?: string }) {
+  const [failed, setFailed] = useState(false)
+  const effectiveSrc = failed || !src ? FALLBACK_IMAGE : src
+  return (
+    <img
+      src={effectiveSrc}
+      alt={alt || '商品图片'}
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+      className={className}
+    />
+  )
+}
+
 export default function Cart() {
   const navigate = useNavigate()
-  const { items, removeFromCart, updateQuantity, clearCart, hydrated } = useCart()
+  const { items, removeFromCart, updateQuantity, clearCart, hydrated, error, retry } = useCart()
   const [showCheckout, setShowCheckout] = useState(false)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
   const [formData, setFormData] = useState({
@@ -54,7 +74,17 @@ export default function Cart() {
       return
     }
 
-    const { data: { session } } = await supabase.auth?.getSession()
+    // 安全获取登录状态：未配置 / 超时 / 异常都给出明确提示，不空转
+    let session: { user: { id: string } | null } | null = null
+    try {
+      if (!supabase.auth) throw new Error('登录服务未配置')
+      const res = await withTimeout(supabase.auth.getSession(), 8000, '获取登录状态')
+      session = res?.data?.session ?? null
+    } catch (e: any) {
+      console.error('[Cart] getSession failed:', e)
+      alert(`获取登录状态失败：${e?.message || '网络错误'}，请重试`)
+      return
+    }
     if (!session?.user) {
       alert('请先登录后再结算')
       navigate('/login')
@@ -106,7 +136,9 @@ export default function Cart() {
           .delete()
           .eq('user_id', session.user.id)
           .in('id', [...selectedItems])
-        console.log('[Cart] checkout delete result:', deleteResult)
+        if (deleteResult.error) {
+          console.error('[Cart] checkout delete failed:', deleteResult.error)
+        }
       }
       
       for (const itemId of selectedItems) {
@@ -154,6 +186,42 @@ export default function Cart() {
     )
   }
 
+  // 首次同步失败且本地也没有数据：整页展示失败原因 + 重试，禁止无限转圈
+  if (error && items.length === 0) {
+    return (
+      <div className="min-h-screen py-8 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <motion.h1
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="font-shufa text-4xl md:text-5xl text-deep-blue mb-4"
+            >
+              购物车
+            </motion.h1>
+            <BranchDivider />
+          </div>
+
+          <FrameDecorations className="bg-rice-paper-light p-12">
+            <div className="text-center">
+              <div className="w-16 h-16 mx-auto bg-palace-red/10 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-8 h-8 text-palace-red" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v4m0 4h.01M10.29 3.86l-8.29 14.14a2 2 0 001.79 3h16.42a2 2 0 001.79-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <h2 className="font-shufa text-xl text-deep-blue mb-2">购物车加载失败</h2>
+              <p className="font-song text-deep-blue-light mb-6">{error}</p>
+              <div className="flex gap-3 justify-center">
+                <Button variant="outline" onClick={retry}>重试</Button>
+                <Button variant="outline" onClick={() => window.location.href = '/customize'}>去定制产品</Button>
+              </div>
+            </div>
+          </FrameDecorations>
+        </div>
+      </div>
+    )
+  }
+
   if (items.length === 0) {
     return (
       <div className="min-h-screen py-8 px-4">
@@ -178,6 +246,9 @@ export default function Cart() {
               </div>
               <h2 className="font-shufa text-xl text-deep-blue mb-2">购物车空空如也</h2>
               <p className="font-song text-deep-blue-light mb-6">快去挑选心仪的产品吧！</p>
+              {error && (
+                <p className="font-song text-sm text-palace-red mb-4">同步失败：{error}</p>
+              )}
               <Button variant="outline" onClick={() => window.location.href = '/customize'}>去定制产品</Button>
             </div>
           </FrameDecorations>
@@ -200,6 +271,13 @@ export default function Cart() {
           <BranchDivider />
           <p className="font-song text-deep-blue-light mt-4">共 {items.length} 件商品</p>
         </div>
+
+        {error && (
+          <div className="mb-4 p-4 bg-palace-red/10 border border-palace-red/30 rounded-sm flex items-center justify-between gap-4">
+            <p className="font-song text-sm text-deep-blue">购物车同步失败：{error}，当前展示本地数据。</p>
+            <Button variant="outline" size="sm" onClick={retry} className="flex-shrink-0">重试</Button>
+          </div>
+        )}
 
         <FrameDecorations className="bg-rice-paper-light p-6 mb-6">
           <div className="flex items-center gap-4 mb-4 pb-4 border-b border-deep-blue-100">
@@ -242,7 +320,7 @@ export default function Cart() {
                   <div className="flex-shrink-0">
                       {item.customization?.previewImage ? (
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                          <img
+                          <SafeImg
                             src={item.customization.previewImage}
                             alt={displayName}
                             className="w-full h-full object-cover"
@@ -268,7 +346,7 @@ export default function Cart() {
                         />
                       ) : fallbackImage ? (
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                          <img
+                          <SafeImg
                             src={fallbackImage}
                             alt={displayName}
                             className="w-full h-full object-cover"

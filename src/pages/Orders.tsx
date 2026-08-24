@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '../components/ui/Button'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/async'
 import { useNavigate } from 'react-router-dom'
 import { products } from '../lib/products'
 import PatternPreview from '../components/PatternPreview'
@@ -34,10 +35,34 @@ const statusLabels: Record<string, string> = {
   completed: '已完成',
 }
 
+/** 超时上限：单次请求不超过 8~10s，超时即结束 loading 并展示失败/重试 */
+const SESSION_TIMEOUT_MS = 8000
+const DB_TIMEOUT_MS = 10000
+/** 兜底占位图：产品表查不到时也绝不显示空白格 */
+const FALLBACK_IMAGE = '/placeholder-pattern-a.png'
+
+/** 缩略图独立加载：失败时显示占位图，绝不阻塞整页渲染 */
+function SafeImg({ src, alt, className }: { src: string; alt?: string; className?: string }) {
+  const [failed, setFailed] = useState(false)
+  const effectiveSrc = failed || !src ? FALLBACK_IMAGE : src
+  return (
+    <img
+      src={effectiveSrc}
+      alt={alt || '商品图片'}
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+      className={className}
+    />
+  )
+}
+
 export default function Orders() {
   const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  /** 失败/未登录原因：有订单时做顶部提示，无订单时整页展示失败+重试 */
+  const [error, setError] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showReorderModal, setShowReorderModal] = useState(false)
   const [showReorderQuantityModal, setShowReorderQuantityModal] = useState(false)
@@ -67,7 +92,17 @@ export default function Orders() {
 
     if (!selectedOrder) return
 
-    const { data: { session } } = await supabase.auth?.getSession()
+    // 安全获取登录状态：未配置 / 超时 / 异常都给出明确提示，不空转
+    let session: { user: { id: string } | null } | null = null
+    try {
+      if (!supabase.auth) throw new Error('登录服务未配置')
+      const res = await withTimeout(supabase.auth.getSession(), SESSION_TIMEOUT_MS, '获取登录状态')
+      session = res?.data?.session ?? null
+    } catch (e: any) {
+      console.error('[Orders] getSession failed:', e)
+      alert(`获取登录状态失败：${e?.message || '网络错误'}，请重试`)
+      return
+    }
     if (!session?.user) {
       alert('请先登录后再购买')
       navigate('/login')
@@ -104,39 +139,73 @@ export default function Orders() {
     }
   }
 
-  useEffect(() => {
-    const fetchOrders = async () => {
-      const { data: { session } } = await supabase.auth?.getSession()
-      
+  // 递增序号：只采纳最新一次请求结果，避免 StrictMode 双挂载 / 重复导航产生竞态
+  const fetchSeq = useRef(0)
+
+  const fetchOrders = useCallback(async () => {
+    const seq = ++fetchSeq.current
+    try {
+      // 安全获取登录状态：未配置 / 超时 / 异常都不会卡死 loading
+      let session: { user: { id: string } | null } | null = null
+      try {
+        if (!supabase.auth) throw new Error('登录服务未配置')
+        const res = await withTimeout(supabase.auth.getSession(), SESSION_TIMEOUT_MS, '获取登录状态')
+        session = res?.data?.session ?? null
+      } catch (e: any) {
+        console.error('[Orders] getSession failed:', e)
+        throw new Error(e?.message || '获取登录状态失败，请检查网络后重试')
+      }
+
       if (!session?.user) {
-        navigate('/login')
+        // 未登录：明确提示「请先登录」，绝不空转 loading
+        setError('请先登录后再查看订单')
         return
       }
 
-      try {
-        const { data: ordersData } = await supabase
+      // 只取列表必需字段 + 分页，避免拉全量大字段（customization 里可能含 base64 大图）
+      const { data: ordersData, error: queryError } = await withTimeout(
+        supabase
           .from('orders')
-          .select('*')
+          .select('id, user_id, product_id, generation_id, image_url, product_image, customization, status, created_at, quantity, shipping_info')
           .eq('user_id', session.user.id)
           .order('created_at', { ascending: false })
+          .limit(20),
+        DB_TIMEOUT_MS,
+        '加载订单'
+      )
+      if (seq !== fetchSeq.current) return // 过期请求丢弃
 
-        console.log('[DEBUG] 查询返回条数:', ordersData?.length)
-        if (ordersData) {
-          ordersData.forEach(order => {
-            console.log('[DEBUG] 订单:', order.id.slice(0, 8), 'layoutMode:', order.customization?.layoutMode, 'customization:', JSON.stringify(order.customization))
-          })
-        }
-        setOrders(ordersData || [])
-      } catch (error) {
-        console.error('[DEBUG] Fetch orders error:', error)
-        setOrders([])
-      } finally {
+      if (queryError) {
+        console.error('[Orders] Query error:', queryError)
+        throw new Error(`订单加载失败：${queryError.message || queryError.code || '数据库查询错误'}`)
+      }
+
+      setOrders(ordersData || [])
+      setError(null)
+    } catch (e: any) {
+      console.error('[Orders] Fetch orders failed:', e)
+      setOrders([])
+      setError(e?.message || '加载订单失败，请检查网络后重试')
+    } finally {
+      // 关键修复：无论成功 / 失败 / 超时，都必须结束 loading
+      if (seq === fetchSeq.current) {
         setIsLoading(false)
       }
     }
+  }, [])
 
-    fetchOrders()
-  }, [navigate])
+  useEffect(() => {
+    void fetchOrders()
+    return () => {
+      fetchSeq.current++ // 卸载时使进行中的请求作废，避免卸载后 setState
+    }
+  }, [fetchOrders])
+
+  const retry = useCallback(() => {
+    setError(null)
+    setIsLoading(true)
+    void fetchOrders()
+  }, [fetchOrders])
 
   if (isLoading) {
     return (
@@ -144,6 +213,72 @@ export default function Orders() {
         <div className="max-w-4xl mx-auto text-center py-16">
           <div className="w-12 h-12 mx-auto border-4 border-deep-blue-200 border-t-palace-red rounded-full animate-spin"></div>
           <p className="font-song text-deep-blue-light mt-4">加载中...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // 未登录：明确提示「请先登录」，不空转 loading
+  if (error === '请先登录后再查看订单') {
+    return (
+      <div className="min-h-screen py-8 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <motion.h1
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="font-shufa text-4xl md:text-5xl text-deep-blue mb-4"
+            >
+              我的订单
+            </motion.h1>
+            <BranchDivider />
+          </div>
+
+          <FrameDecorations className="bg-rice-paper-light p-12">
+            <div className="text-center">
+              <div className="w-20 h-20 mx-auto bg-deep-blue/10 rounded-sm flex items-center justify-center mb-6">
+                <svg className="w-10 h-10 text-deep-blue-light" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <h2 className="font-shufa text-xl text-deep-blue mb-2">请先登录</h2>
+              <p className="font-song text-deep-blue-light mb-6">登录后即可查看你的订单</p>
+              <Button onClick={() => navigate('/login')}>去登录</Button>
+            </div>
+          </FrameDecorations>
+        </div>
+      </div>
+    )
+  }
+
+  // 加载失败且没有数据：整页展示失败原因 + 重试，禁止无限转圈
+  if (error && orders.length === 0) {
+    return (
+      <div className="min-h-screen py-8 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <motion.h1
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="font-shufa text-4xl md:text-5xl text-deep-blue mb-4"
+            >
+              我的订单
+            </motion.h1>
+            <BranchDivider />
+          </div>
+
+          <FrameDecorations className="bg-rice-paper-light p-12">
+            <div className="text-center">
+              <div className="w-20 h-20 mx-auto bg-palace-red/10 rounded-sm flex items-center justify-center mb-6">
+                <svg className="w-10 h-10 text-palace-red" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v4m0 4h.01M10.29 3.86l-8.29 14.14a2 2 0 001.79 3h16.42a2 2 0 001.79-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <h2 className="font-shufa text-xl text-deep-blue mb-2">订单加载失败</h2>
+              <p className="font-song text-deep-blue-light mb-6">{error}</p>
+              <Button variant="outline" onClick={retry}>重试</Button>
+            </div>
+          </FrameDecorations>
         </div>
       </div>
     )
@@ -173,6 +308,9 @@ export default function Orders() {
               </div>
               <h2 className="font-shufa text-xl text-deep-blue mb-2">暂无订单</h2>
               <p className="font-song text-deep-blue-light mb-6">快去定制心仪的产品吧！</p>
+              {error && (
+                <p className="font-song text-sm text-palace-red mb-4">同步失败：{error}</p>
+              )}
               <Button variant="outline" onClick={() => window.location.href = '/customize'}>去定制产品</Button>
             </div>
           </FrameDecorations>
@@ -195,6 +333,13 @@ export default function Orders() {
           <BranchDivider />
           <p className="font-song text-deep-blue-light mt-4">共 {orders.length} 笔订单</p>
         </div>
+
+        {error && (
+          <div className="mb-4 p-4 bg-palace-red/10 border border-palace-red/30 rounded-sm flex items-center justify-between gap-4">
+            <p className="font-song text-sm text-deep-blue">订单同步失败：{error}</p>
+            <Button variant="outline" size="sm" onClick={retry} className="flex-shrink-0">重试</Button>
+          </div>
+        )}
 
         <div className="space-y-6">
           {orders.map((order, index) => {
@@ -221,7 +366,7 @@ export default function Orders() {
                     <div className="flex-shrink-0">
                       {order.customization?.previewImage ? (
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                          <img
+                          <SafeImg
                             src={order.customization.previewImage}
                             alt={product?.name}
                             className="w-full h-full object-cover"
@@ -247,7 +392,7 @@ export default function Orders() {
                         />
                       ) : (
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                          <img
+                          <SafeImg
                             src={product?.image}
                             alt={product?.name}
                             className="w-full h-full object-cover"
@@ -270,7 +415,6 @@ export default function Orders() {
                             const utcDateStr = raw.endsWith('Z') ? raw : raw + 'Z';
                             const date = new Date(utcDateStr);
                             const formatted = date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-                            console.log('[DEBUG] 时间格式化:', raw, '-> 加Z后:', utcDateStr, '-> 格式化后:', formatted);
                             return formatted;
                           })()}
                         </span>
@@ -331,7 +475,7 @@ export default function Orders() {
                       <div className="flex-shrink-0">
                         {selectedOrder.customization?.previewImage ? (
                           <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                            <img
+                            <SafeImg
                               src={selectedOrder.customization.previewImage}
                               alt={products[selectedOrder.product_id]?.name}
                               className="w-full h-full object-cover"
@@ -357,7 +501,7 @@ export default function Orders() {
                           />
                         ) : (
                           <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                            <img
+                            <SafeImg
                               src={products[selectedOrder.product_id]?.image}
                               alt={products[selectedOrder.product_id]?.name}
                               className="w-full h-full object-cover"
@@ -411,7 +555,6 @@ export default function Orders() {
                             const utcDateStr = raw.endsWith('Z') ? raw : raw + 'Z';
                             const date = new Date(utcDateStr);
                             const formatted = date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-                            console.log('[DEBUG] 详情时间格式化:', raw, '-> 加Z后:', utcDateStr, '-> 格式化后:', formatted);
                             return formatted;
                           })()}
                         </span>
@@ -579,7 +722,7 @@ export default function Orders() {
                           />
                         ) : (
                           <div className="w-16 h-16 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                            <img
+                            <SafeImg
                               src={products[selectedOrder.product_id]?.image}
                               alt={products[selectedOrder.product_id]?.name}
                               className="w-full h-full object-cover"

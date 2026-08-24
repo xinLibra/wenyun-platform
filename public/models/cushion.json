@@ -13,7 +13,7 @@
         }
       ]
     },
-    "modelRotation": [0, 1.5, 0],
+    "modelRotation": [0, -1.5, 0],
     "modelScale": 0.32,
     "cameraDefault": {
       "position": [0, 0.1, 1.5],
