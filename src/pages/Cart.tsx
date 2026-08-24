@@ -31,7 +31,7 @@ function SafeImg({ src, alt, className }: { src: string; alt?: string; className
 
 export default function Cart() {
   const navigate = useNavigate()
-  const { items, removeFromCart, updateQuantity, clearCart, hydrated, error, retry } = useCart()
+  const { items, removeFromCart, updateQuantity, clearCart, hydrated, error, retry, notice, dismissNotice } = useCart()
   const [showCheckout, setShowCheckout] = useState(false)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
   const [formData, setFormData] = useState({
@@ -246,9 +246,6 @@ export default function Cart() {
               </div>
               <h2 className="font-shufa text-xl text-deep-blue mb-2">购物车空空如也</h2>
               <p className="font-song text-deep-blue-light mb-6">快去挑选心仪的产品吧！</p>
-              {error && (
-                <p className="font-song text-sm text-palace-red mb-4">同步失败：{error}</p>
-              )}
               <Button variant="outline" onClick={() => window.location.href = '/customize'}>去定制产品</Button>
             </div>
           </FrameDecorations>
@@ -271,13 +268,6 @@ export default function Cart() {
           <BranchDivider />
           <p className="font-song text-deep-blue-light mt-4">共 {items.length} 件商品</p>
         </div>
-
-        {error && (
-          <div className="mb-4 p-4 bg-palace-red/10 border border-palace-red/30 rounded-sm flex items-center justify-between gap-4">
-            <p className="font-song text-sm text-deep-blue">购物车同步失败：{error}，当前展示本地数据。</p>
-            <Button variant="outline" size="sm" onClick={retry} className="flex-shrink-0">重试</Button>
-          </div>
-        )}
 
         <FrameDecorations className="bg-rice-paper-light p-6 mb-6">
           <div className="flex items-center gap-4 mb-4 pb-4 border-b border-deep-blue-100">
@@ -527,6 +517,29 @@ export default function Cart() {
               </FrameDecorations>
             </motion.div>
           </motion.div>
+        )}
+
+        {notice && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[min(92vw,480px)]">
+            <div className="bg-ink-black/90 text-rice-paper rounded-sm px-4 py-3 shadow-xl border border-rice-paper/10 flex items-center justify-between gap-3">
+              <p className="font-song text-sm flex-1">{notice.message}</p>
+              <button
+                onClick={retry}
+                className="font-song text-sm text-ming-yellow hover:text-rice-paper transition-colors flex-shrink-0"
+              >
+                重试
+              </button>
+              <button
+                onClick={dismissNotice}
+                aria-label="关闭提示"
+                className="flex-shrink-0 text-rice-paper/60 hover:text-rice-paper transition-colors leading-none"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

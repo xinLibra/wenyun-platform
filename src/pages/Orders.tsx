@@ -4,7 +4,7 @@ import { Button } from '../components/ui/Button'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { supabase } from '../lib/supabase'
-import { withTimeout } from '../lib/async'
+import { classifyError, logSupabaseConfig, sleep, withTimeout } from '../lib/async'
 import { useNavigate } from 'react-router-dom'
 import { products } from '../lib/products'
 import PatternPreview from '../components/PatternPreview'
@@ -35,11 +35,36 @@ const statusLabels: Record<string, string> = {
   completed: '已完成',
 }
 
-/** 超时上限：单次请求不超过 8~10s，超时即结束 loading 并展示失败/重试 */
+/** 超时上限：单次请求不超过 8s；网络失败会立即 reject，超时仅作兜底 */
 const SESSION_TIMEOUT_MS = 8000
-const DB_TIMEOUT_MS = 10000
+const DB_TIMEOUT_MS = 8000
 /** 兜底占位图：产品表查不到时也绝不显示空白格 */
 const FALLBACK_IMAGE = '/placeholder-pattern-a.png'
+/** 网络不稳时自动重试：最多 3 次（1 次初始 + 2 次重试），间隔 1s */
+const MAX_ATTEMPTS = 3
+const RETRY_DELAY_MS = 1000
+/** 订单本地缓存（按用户隔离）：失败时先展示上次成功结果并标「可能不是最新」 */
+const ORDERS_CACHE_PREFIX = 'orders_local_cache_'
+
+function readOrdersCache(userId: string): { data: Order[]; ts: number } | null {
+  try {
+    const raw = localStorage.getItem(ORDERS_CACHE_PREFIX + userId)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || !Array.isArray(parsed.data)) return null
+    return { data: parsed.data as Order[], ts: parsed.ts || 0 }
+  } catch {
+    return null
+  }
+}
+
+function writeOrdersCache(userId: string, data: Order[]) {
+  try {
+    localStorage.setItem(ORDERS_CACHE_PREFIX + userId, JSON.stringify({ data, ts: Date.now() }))
+  } catch (e: any) {
+    console.error('[Orders] cache write failed:', e?.message ?? e, e)
+  }
+}
 
 /** 缩略图独立加载：失败时显示占位图，绝不阻塞整页渲染 */
 function SafeImg({ src, alt, className }: { src: string; alt?: string; className?: string }) {
@@ -61,8 +86,10 @@ export default function Orders() {
   const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  /** 失败/未登录原因：有订单时做顶部提示，无订单时整页展示失败+重试 */
+  /** 失败/未登录原因：无订单时整页展示失败+重试 */
   const [error, setError] = useState<string | null>(null)
+  /** 有缓存降级：展示上次成功结果并弱提示「可能不是最新」 */
+  const [staleNotice, setStaleNotice] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showReorderModal, setShowReorderModal] = useState(false)
   const [showReorderQuantityModal, setShowReorderQuantityModal] = useState(false)
@@ -99,7 +126,7 @@ export default function Orders() {
       const res = await withTimeout(supabase.auth.getSession(), SESSION_TIMEOUT_MS, '获取登录状态')
       session = res?.data?.session ?? null
     } catch (e: any) {
-      console.error('[Orders] getSession failed:', e)
+      console.error('[Orders] getSession failed:', e?.message ?? e, e)
       alert(`获取登录状态失败：${e?.message || '网络错误'}，请重试`)
       return
     }
@@ -131,8 +158,8 @@ export default function Orders() {
       setShowReorderModal(false)
       setReorderFormData({ name: '', phone: '', address: '' })
       alert('下单成功')
-    } catch (err) {
-      console.error('Order error:', err)
+    } catch (err: any) {
+      console.error('[Orders]', err?.message ?? err, err)
       alert('提交失败，请重试')
     } finally {
       setIsSubmitting(false)
@@ -144,6 +171,7 @@ export default function Orders() {
 
   const fetchOrders = useCallback(async () => {
     const seq = ++fetchSeq.current
+    let lastError: any = null
     try {
       // 安全获取登录状态：未配置 / 超时 / 异常都不会卡死 loading
       let session: { user: { id: string } | null } | null = null
@@ -152,8 +180,8 @@ export default function Orders() {
         const res = await withTimeout(supabase.auth.getSession(), SESSION_TIMEOUT_MS, '获取登录状态')
         session = res?.data?.session ?? null
       } catch (e: any) {
-        console.error('[Orders] getSession failed:', e)
-        throw new Error(e?.message || '获取登录状态失败，请检查网络后重试')
+        console.error('[Orders]', e?.message ?? e, e)
+        throw e
       }
 
       if (!session?.user) {
@@ -161,31 +189,64 @@ export default function Orders() {
         setError('请先登录后再查看订单')
         return
       }
+      const userId = session.user.id
 
-      // 只取列表必需字段 + 分页，避免拉全量大字段（customization 里可能含 base64 大图）
-      const { data: ordersData, error: queryError } = await withTimeout(
-        supabase
-          .from('orders')
-          .select('id, user_id, product_id, generation_id, image_url, product_image, customization, status, created_at, quantity, shipping_info')
-          .eq('user_id', session.user.id)
-          .order('created_at', { ascending: false })
-          .limit(20),
-        DB_TIMEOUT_MS,
-        '加载订单'
-      )
-      if (seq !== fetchSeq.current) return // 过期请求丢弃
+      // 拉取订单：只取列表必需字段 + 分页，避免拉全量大字段（customization 里可能含 base64 大图）；
+      // 网络不稳时自动重试（最多 3 次，间隔 1s），仍失败再降级本地缓存 / 失败页
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        if (seq !== fetchSeq.current) return
+        try {
+          logSupabaseConfig('Orders')
+          const { data: ordersData, error: queryError } = await withTimeout(
+            supabase
+              .from('orders')
+              .select('id, user_id, product_id, generation_id, image_url, product_image, customization, status, created_at, quantity, shipping_info')
+              .eq('user_id', userId)
+              .order('created_at', { ascending: false })
+              .limit(20),
+            DB_TIMEOUT_MS,
+            '加载订单'
+          )
+          if (seq !== fetchSeq.current) return // 过期请求丢弃
 
-      if (queryError) {
-        console.error('[Orders] Query error:', queryError)
-        throw new Error(`订单加载失败：${queryError.message || queryError.code || '数据库查询错误'}`)
+          if (queryError) {
+            console.error('[Orders] Query error:', queryError?.message ?? queryError, queryError)
+            throw queryError
+          }
+
+          setOrders(ordersData || [])
+          setError(null)
+          setStaleNotice(false)
+          writeOrdersCache(userId, ordersData || [])
+          return
+        } catch (e: any) {
+          lastError = e
+          console.error(`[Orders] Fetch orders failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, e?.message ?? e, e)
+          if (attempt < MAX_ATTEMPTS) {
+            await sleep(RETRY_DELAY_MS)
+          }
+        }
       }
 
-      setOrders(ordersData || [])
-      setError(null)
+      // 全部重试仍失败：有上次成功缓存先展示缓存并弱提示「可能不是最新」，无缓存展示失败页
+      if (seq !== fetchSeq.current) return
+      const cached = readOrdersCache(userId)
+      if (cached && cached.data.length > 0) {
+        setOrders(cached.data)
+        setStaleNotice(true)
+        setError(null)
+      } else {
+        setOrders([])
+        setStaleNotice(false)
+        setError(classifyError(lastError).message)
+      }
     } catch (e: any) {
-      console.error('[Orders] Fetch orders failed:', e)
+      // getSession 阶段失败（断网 / Supabase 暂停）：可读文案 + 手动重试
+      console.error('[Orders]', e?.message ?? e, e)
+      if (seq !== fetchSeq.current) return
       setOrders([])
-      setError(e?.message || '加载订单失败，请检查网络后重试')
+      setStaleNotice(false)
+      setError(classifyError(e, '加载订单失败，请检查网络后重试').message)
     } finally {
       // 关键修复：无论成功 / 失败 / 超时，都必须结束 loading
       if (seq === fetchSeq.current) {
@@ -203,6 +264,7 @@ export default function Orders() {
 
   const retry = useCallback(() => {
     setError(null)
+    setStaleNotice(false)
     setIsLoading(true)
     void fetchOrders()
   }, [fetchOrders])
@@ -308,9 +370,6 @@ export default function Orders() {
               </div>
               <h2 className="font-shufa text-xl text-deep-blue mb-2">暂无订单</h2>
               <p className="font-song text-deep-blue-light mb-6">快去定制心仪的产品吧！</p>
-              {error && (
-                <p className="font-song text-sm text-palace-red mb-4">同步失败：{error}</p>
-              )}
               <Button variant="outline" onClick={() => window.location.href = '/customize'}>去定制产品</Button>
             </div>
           </FrameDecorations>
@@ -338,6 +397,13 @@ export default function Orders() {
           <div className="mb-4 p-4 bg-palace-red/10 border border-palace-red/30 rounded-sm flex items-center justify-between gap-4">
             <p className="font-song text-sm text-deep-blue">订单同步失败：{error}</p>
             <Button variant="outline" size="sm" onClick={retry} className="flex-shrink-0">重试</Button>
+          </div>
+        )}
+
+        {staleNotice && (
+          <div className="mb-4 p-4 bg-ming-yellow/20 border border-ming-yellow/40 rounded-sm flex items-center justify-between gap-4">
+            <p className="font-song text-sm text-deep-blue">当前展示上次成功加载的订单，可能不是最新。请检查网络后刷新。</p>
+            <Button variant="outline" size="sm" onClick={retry} className="flex-shrink-0">刷新</Button>
           </div>
         )}
 

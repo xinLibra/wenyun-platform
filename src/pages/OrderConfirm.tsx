@@ -5,7 +5,7 @@ import { Button } from '../components/ui/Button'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { supabase } from '../lib/supabase'
-import { withTimeout } from '../lib/async'
+import { classifyError, logSupabaseConfig, withTimeout } from '../lib/async'
 import { products } from '../lib/products'
 
 export default function OrderConfirmPage() {
@@ -24,19 +24,20 @@ export default function OrderConfirmPage() {
       }
       try {
         // 只取本页必需字段，避免拉全量；超时即结束 loading 并展示失败+重试
+        logSupabaseConfig('OrderConfirm')
         const { data: orderData, error: queryError } = await withTimeout(
           supabase
             .from('orders')
             .select('id, product_id, generation_id, image_url, product_image, customization, status, created_at, quantity, shipping_info')
             .eq('id', orderId)
             .single(),
-          10000,
+          8000,
           '加载订单详情'
         )
 
         if (queryError) {
-          console.error('Fetch order error:', queryError)
-          setError(`订单加载失败：${queryError.message || queryError.code || '数据库查询错误'}`)
+          console.error('[OrderConfirm] Query error:', queryError?.message ?? queryError, queryError)
+          setError(`订单加载失败：${classifyError(queryError, '数据库查询错误').message}`)
           return
         }
         if (orderData) {
@@ -46,8 +47,8 @@ export default function OrderConfirmPage() {
           navigate('/')
         }
       } catch (err: any) {
-        console.error('Fetch order error:', err)
-        setError(err?.message || '加载订单详情失败，请检查网络后重试')
+        console.error('[OrderConfirm]', err?.message ?? err, err)
+        setError(classifyError(err, '加载订单详情失败，请检查网络后重试').message)
       } finally {
         setIsLoading(false)
       }
