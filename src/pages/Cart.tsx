@@ -8,6 +8,7 @@ import { useCart } from '../hooks/useCart'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/async'
 import { products } from '../lib/products'
+import { ensurePublicImageUrl } from '../lib/storage'
 import PatternPreview from '../components/PatternPreview'
 
 /** 兜底占位图（与 useCart 保持一致） */
@@ -112,14 +113,43 @@ export default function Cart() {
       const newOrders = []
       for (const item of selectedItemsList) {
         const product = products[item.productId]
+        // 旧购物车项可能带 data: base64 预览/纹样图：统一转 Storage 短链，订单只存短 URL 不存大 base64
+        const customization = { ...(item.customization || {}) }
+        const previewRaw = customization.previewImageUrl || customization.previewImage
+        if (previewRaw && /^data:/i.test(previewRaw)) {
+          try {
+            const short = await ensurePublicImageUrl(session.user.id, previewRaw, 384)
+            customization.previewImage = short || undefined
+            customization.previewImageUrl = short || undefined
+          } catch (e) {
+            console.warn('[Cart] preview upload failed, skip preview:', e)
+            customization.previewImage = undefined
+            customization.previewImageUrl = undefined
+          }
+        } else if (previewRaw && /^https?:\/\//i.test(previewRaw)) {
+          customization.previewImage = previewRaw
+          customization.previewImageUrl = previewRaw
+        } else {
+          customization.previewImage = undefined
+          customization.previewImageUrl = undefined
+        }
+        let pattern = customization.patternImage
+        if (pattern && /^data:/i.test(pattern)) {
+          try {
+            pattern = (await ensurePublicImageUrl(session.user.id, pattern, 512)) || pattern
+          } catch (e) {
+            console.warn('[Cart] pattern upload failed, keep original:', e)
+          }
+          customization.patternImage = pattern
+        }
         const order = {
           id: crypto.randomUUID(),
           user_id: session.user.id,
           product_id: item.productId,
           generation_id: item.generationId,
-          image_url: item.customization?.patternImage,
+          image_url: pattern,
           product_image: product?.image || item.image,
-          customization: item.customization,
+          customization,
           quantity: item.quantity,
           status: 'demo',
           created_at: new Date().toISOString(),
@@ -308,10 +338,10 @@ export default function Cart() {
                     />
                   </label>
                   <div className="flex-shrink-0">
-                      {item.customization?.previewImage ? (
+                      {(item.customization?.previewImageUrl || item.customization?.previewImage) ? (
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
                           <SafeImg
-                            src={item.customization.previewImage}
+                            src={item.customization.previewImageUrl || item.customization.previewImage}
                             alt={displayName}
                             className="w-full h-full object-cover"
                           />

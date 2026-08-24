@@ -1,4 +1,5 @@
 import { generatePreviewDataUrl } from '../utils/exportImage'
+import { ensurePublicImageUrl } from '../lib/storage'
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
@@ -932,6 +933,17 @@ export default function CustomizeProduct() {
       if (is3DProduct && viewerCaptureRef.current) {
         previewImage = viewerCaptureRef.current() || undefined
       }
+      // 截图是 data: base64：已登录则先转 Storage 短链再入库；未登录保持原样，结算时再转
+      if (previewImage && /^data:/i.test(previewImage)) {
+        try {
+          const { data: s } = await supabase.auth?.getSession()
+          if (s?.session?.user) {
+            previewImage = (await ensurePublicImageUrl(s.session.user.id, previewImage, 384)) || previewImage
+          }
+        } catch (e) {
+          console.warn('[Cart] preview upload failed, keep base64:', e)
+        }
+      }
       const cartProduct = products.find(p => p.id === selectedProduct)
       addToCart({
         productId: selectedProduct,
@@ -940,7 +952,7 @@ export default function CustomizeProduct() {
         name: cartProduct?.name,
         price: cartProduct?.price,
         image: cartProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, patternImage: selectedPatternImage, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, previewImage },
+        customization: { scale, rotation, positionX, positionY, blendMode, patternImage: selectedPatternImage, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, previewImage, previewImageUrl: previewImage },
         quantity: quantity
       })
       alert('已加入购物车')
@@ -1022,14 +1034,37 @@ export default function CustomizeProduct() {
     setIsBuying(true)
 
     try {
+      // 定制预览图（3D 截图 / 2D 合成图）：data: 一律转 Storage 短链再入库，禁止订单写大 base64
+      let previewShort: string | undefined
+      const previewRaw = orderPreviewImg || ''
+      if (/^data:/i.test(previewRaw)) {
+        try {
+          previewShort = await ensurePublicImageUrl(session.user.id, previewRaw, 384)
+        } catch (e) {
+          console.warn('[Order] preview upload failed, skip preview:', e)
+        }
+      } else if (/^https?:\/\//i.test(previewRaw)) {
+        previewShort = previewRaw
+      }
+
+      // 纹样图同样只存短链（历史 data: 图上传失败则保底保留原值，列表查询已过滤 data:）
+      let patternShort = selectedPatternImage
+      if (selectedPatternImage && /^data:/i.test(selectedPatternImage)) {
+        try {
+          patternShort = (await ensurePublicImageUrl(session.user.id, selectedPatternImage, 512)) || selectedPatternImage
+        } catch (e) {
+          console.warn('[Order] pattern upload failed, keep original:', e)
+        }
+      }
+
       const order = {
         id: crypto.randomUUID(),
         user_id: session.user.id,
         product_id: selectedProduct,
         generation_id: null,
-        image_url: selectedPatternImage,
+        image_url: patternShort,
         product_image: currentProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, previewImage: orderPreviewImg || undefined },
+        customization: { scale, rotation, positionX, positionY, blendMode, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, previewImage: previewShort || undefined, previewImageUrl: previewShort || undefined },
         quantity: quantity,
         status: 'demo',
         created_at: new Date().toISOString(),

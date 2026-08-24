@@ -82,6 +82,20 @@ function SafeImg({ src, alt, className }: { src: string; alt?: string; className
   )
 }
 
+/**
+ * 订单定制预览图（3D 截图 / 2D 合成图）：
+ * 优先 previewImageUrl（新订单写入的 Storage 短链，列表可安全投影），
+ * 其次 previewImage（仅接受 http(s) 短链，data: base64 一律不用），
+ * 都没有时返回 ''，上层回退 2D 合成 / 产品默认图。
+ */
+function getOrderPreviewUrl(order: Order): string {
+  const c = order.customization
+  if (!c) return ''
+  if (typeof c.previewImageUrl === 'string' && /^https?:\/\//i.test(c.previewImageUrl)) return c.previewImageUrl
+  if (typeof c.previewImage === 'string' && /^https?:\/\//i.test(c.previewImage)) return c.previewImage
+  return ''
+}
+
 export default function Orders() {
   const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
@@ -201,14 +215,16 @@ export default function Orders() {
             supabase
               .from('orders')
               // 列表只取必要列；customization / shipping_info 用 JSON 投影只取渲染所需小字段，
-              // 不拉 previewImage（可能是 base64 大图）与整段 customization / shipping_info
-              .select(`id, user_id, product_id, generation_id, image_url, product_image, status, created_at, quantity,
+              // 不拉 previewImage（历史可能是 base64 大图）与整段 customization / shipping_info；
+              // previewImageUrl 是新订单写入的 Storage 短链（小文本），可安全投影
+              .select(`id, user_id, product_id, generation_id, product_image, status, created_at, quantity,
                 c_scale:customization->scale, c_rotation:customization->rotation,
                 c_positionX:customization->positionX, c_positionY:customization->positionY,
                 c_blendMode:customization->blendMode, c_layoutMode:customization->layoutMode,
                 c_textOverlay:customization->textOverlay, c_textFont:customization->textFont,
                 c_textSize:customization->textSize, c_textPositionX:customization->textPositionX,
                 c_textPositionY:customization->textPositionY,
+                c_previewImageUrl:customization->>'previewImageUrl',
                 s_name:shipping_info->name, s_phone:shipping_info->phone, s_address:shipping_info->address`)
               .eq('user_id', userId)
               .order('created_at', { ascending: false })
@@ -223,13 +239,35 @@ export default function Orders() {
             throw queryError
           }
 
-          // 把投影出的平铺字段重组为 Order 结构（previewImage 被刻意排除）
+          // image_url 单独小查询：排除 data: 大 base64（历史订单可能存过），避免列表一次拉全量大字段超时
+          const imageUrlById: Record<string, string> = {}
+          const orderIds = (ordersData ?? []).map((r: any) => r.id).filter(Boolean)
+          if (orderIds.length > 0) {
+            try {
+              const { data: imgRows } = await withTimeout(
+                supabase
+                  .from('orders')
+                  .select('id, image_url')
+                  .in('id', orderIds)
+                  .not('image_url', 'like', 'data:%'),
+                DB_TIMEOUT_MS,
+                '加载订单图片'
+              )
+              for (const row of (imgRows ?? []) as any[]) {
+                if (row?.image_url) imageUrlById[row.id] = row.image_url
+              }
+            } catch (e: any) {
+              console.warn('[Orders] image_url fetch failed, fallback to default image:', e?.message ?? e)
+            }
+          }
+
+          // 把投影出的平铺字段重组为 Order 结构（previewImage 被刻意排除，避免历史 base64 大图）
           const orders = (ordersData ?? []).map((r: any) => ({
             id: r.id,
             user_id: r.user_id,
             product_id: r.product_id,
             generation_id: r.generation_id,
-            image_url: r.image_url,
+            image_url: imageUrlById[r.id],
             product_image: r.product_image,
             status: r.status,
             created_at: r.created_at,
@@ -246,6 +284,7 @@ export default function Orders() {
               textSize: r.c_textSize,
               textPositionX: r.c_textPositionX,
               textPositionY: r.c_textPositionY,
+              previewImageUrl: r.c_previewImageUrl,
             },
             shipping_info: {
               name: r.s_name,
@@ -473,10 +512,10 @@ export default function Orders() {
                     onClick={() => setSelectedOrder(order)}
                   >
                     <div className="flex-shrink-0">
-                      {order.customization?.previewImage ? (
+                      {getOrderPreviewUrl(order) ? (
                         <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
                           <SafeImg
-                            src={order.customization.previewImage}
+                            src={getOrderPreviewUrl(order)}
                             alt={product?.name}
                             className="w-full h-full object-cover"
                           />
@@ -582,10 +621,10 @@ export default function Orders() {
                   <>
                     <div className="flex gap-4 mb-4">
                       <div className="flex-shrink-0">
-                        {selectedOrder.customization?.previewImage ? (
+                        {getOrderPreviewUrl(selectedOrder) ? (
                           <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
                             <SafeImg
-                              src={selectedOrder.customization.previewImage}
+                              src={getOrderPreviewUrl(selectedOrder)}
                               alt={products[selectedOrder.product_id]?.name}
                               className="w-full h-full object-cover"
                             />
@@ -803,10 +842,10 @@ export default function Orders() {
                 <div className="border-t border-deep-blue-100 pt-4 mb-4">
                   <div className="flex items-center gap-4 mb-3">
                     <div className="flex-shrink-0">
-                      {selectedOrder.customization?.previewImage ? (
+                      {getOrderPreviewUrl(selectedOrder) ? (
                         <div className="w-16 h-16 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
                           <img
-                            src={selectedOrder.customization.previewImage}
+                            src={getOrderPreviewUrl(selectedOrder)}
                             alt={products[selectedOrder.product_id]?.name}
                             className="w-full h-full object-cover"
                           />
