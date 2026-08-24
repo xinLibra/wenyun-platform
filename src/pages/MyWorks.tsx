@@ -6,6 +6,8 @@ import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { useFavorites } from '../context/FavoriteContext'
 import { withTimeout, classifyError, sleep, logSupabaseConfig } from '../lib/async'
+import { loadImagesConcurrently, PATTERN_PLACEHOLDER, isPlaceholderUrl } from '../lib/imageLoader'
+import WorkDetailModal from '../components/WorkDetailModal'
 
 const SESSION_TIMEOUT_MS = 20000
 const DB_TIMEOUT_MS = 25000
@@ -13,24 +15,6 @@ const FAV_TIMEOUT_MS = 5000
 const MAX_ATTEMPTS = 3
 const RETRY_DELAY_MS = 1000
 const WORKS_CACHE_PREFIX = 'myworks_local_cache_'
-
-// 列表页不拉 image_url 大字段（历史数据多为 data: base64，合计可达数十 MB，是 statement timeout 元凶），
-// 缩略图先用轻量 SVG 占位；查看详情 / 下载时再按 id 单条取真实图片。
-const PLACEHOLDER_IMAGE =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">' +
-      '<rect width="400" height="400" fill="#f5efe0"/>' +
-      '<circle cx="200" cy="200" r="110" fill="none" stroke="#9e1f16" stroke-width="2" opacity="0.4"/>' +
-      '<path d="M200 90c20 40 70 50 80 95s-60 70-80 125c-20-55-90-80-80-125s60-55 80-95z" fill="none" stroke="#9e1f16" stroke-width="2" opacity="0.5"/>' +
-      '<text x="200" y="248" text-anchor="middle" font-family="serif" font-size="18" fill="#9e1f16" opacity="0.7">纹样加载中</text>' +
-      '</svg>'
-  )
-
-/** 缩略图是否用占位：无地址或 data:/blob: 大图一律占位，仅 http(s) 真图可直接展示 */
-function isPlaceholderImage(url: string | undefined | null): boolean {
-  return !url || !url.startsWith('http')
-}
 
 function readWorksCache(userId: string): Generation[] | null {
   try {
@@ -60,6 +44,7 @@ export default function MyWorksPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const [detailWork, setDetailWork] = useState<Generation | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -238,6 +223,15 @@ export default function MyWorksPage() {
     }
   }, [navigate, reloadKey])
 
+  // 列表渲染后按 id 批量补图（并发 3）：把取到的 image_url 填回对应卡片，单条失败只影响该卡
+  useEffect(() => {
+    const pendingIds = generations.filter((g) => !g.image_url).map((g) => g.id)
+    if (pendingIds.length === 0) return
+    loadImagesConcurrently(pendingIds, (id, url) => {
+      setGenerations((prev) => prev.map((g) => (g.id === id ? { ...g, image_url: url } : g)))
+    })
+  }, [generations])
+
   const handlePublicToggle = async (generationId: string, currentPublic: boolean) => {
     const newValue = !currentPublic
     setGenerations((prev) =>
@@ -309,7 +303,7 @@ export default function MyWorksPage() {
 
   const handleDownload = async (generation: Generation) => {
     let imageUrl = generation.image_url
-    if (isPlaceholderImage(imageUrl)) {
+    if (isPlaceholderUrl(imageUrl)) {
       try {
         imageUrl = await fetchImageUrl(generation.id)
       } catch (e: any) {
@@ -339,8 +333,8 @@ export default function MyWorksPage() {
     }
   }
 
-  const handleViewDetail = (generationId: string) => {
-    navigate(`/gallery/${generationId}`)
+  const handleViewDetail = (generation: Generation) => {
+    setDetailWork(generation)
   }
 
   const startEdit = (generation: Generation) => {
@@ -518,10 +512,10 @@ export default function MyWorksPage() {
                     >
                       <div
                         className="aspect-square bg-rice-paper-dark overflow-hidden cursor-pointer"
-                        onClick={() => handleViewDetail(generation.id)}
+                        onClick={() => handleViewDetail(generation)}
                       >
                         <img
-                          src={isPlaceholderImage(generation.image_url) ? PLACEHOLDER_IMAGE : generation.image_url}
+                          src={isPlaceholderUrl(generation.image_url) ? PATTERN_PLACEHOLDER : generation.image_url}
                           alt="纹样作品"
                           className="w-full h-full object-cover"
                         />
@@ -622,7 +616,7 @@ export default function MyWorksPage() {
                             下载
                           </button>
                           <button
-                            onClick={() => handleViewDetail(generation.id)}
+                            onClick={() => handleViewDetail(generation)}
                             className="flex-1 py-1.5 bg-deep-blue-50 border border-deep-blue-200 rounded-sm font-song text-xs text-deep-blue hover:bg-deep-blue-100 transition-colors"
                           >
                             查看
@@ -637,6 +631,22 @@ export default function MyWorksPage() {
           )}
         </motion.div>
       </div>
+
+      <WorkDetailModal
+        work={
+          detailWork
+            ? {
+                id: detailWork.id,
+                title: detailWork.params?.title || `纹样作品 #${detailWork.id.slice(0, 8)}`,
+                tags: detailWork.params?.tags || [],
+                author: '我的作品',
+                image: detailWork.image_url,
+                createdAt: detailWork.created_at,
+              }
+            : null
+        }
+        onClose={() => setDetailWork(null)}
+      />
     </div>
   )
 }

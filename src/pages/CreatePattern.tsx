@@ -14,6 +14,7 @@ import { BambooToggle } from '../components/ui/Select'
 import { applyPreset } from '../config/generationPresets'
 import { PatternDimension, GenerationParams, PromptParseResult, CRAFT_OPTIONS, ETHNIC_OPTIONS, THEME_OPTIONS, APPLICATION_OPTIONS, ARRANGEMENT_OPTIONS, SYMMETRY_OPTIONS } from '../types/pattern'
 import { supabase } from '../lib/supabase'
+import { uploadPatternImage } from '../lib/storage'
 import { mockSemanticSearch } from '../mock/semanticSearch'
 import { PatternDnaRadar, type PatternDnaData } from '../components/PatternDnaRadar'
 import { PatternFusionSlider } from '../components/PatternFusionSlider'
@@ -479,6 +480,18 @@ export default function CreatePattern() {
       const mainTheme = generationParams.dimension.mainTheme || ''
       const subcategory = generationParams.dimension.subcategory || ''
 
+      // 上传到 Public 桶 pattern-images，image_url 只存短链；禁止再写 data: base64 大字段
+      let savedImageUrl = generatedImage
+      if (savedImageUrl.startsWith('data:')) {
+        try {
+          savedImageUrl = await uploadPatternImage(session.user.id, generatedImage)
+        } catch (uploadErr: any) {
+          console.error('Upload image error:', uploadErr)
+          alert(`图片上传失败，未保存: ${uploadErr?.message || '请稍后重试'}`)
+          return null
+        }
+      }
+
       const { data: savedData, error } = await supabase.from('generations').insert({
         user_id: session.user.id,
         style_id: dimension.craft[0] || null,
@@ -490,7 +503,7 @@ export default function CreatePattern() {
           theme: mainTheme || undefined,
           subcategory: subcategory || undefined,
         },
-        image_url: generatedImage,
+        image_url: savedImageUrl,
         author_nickname: nickname,
         is_public: options?.isPublic ?? false,
       }).select('id').single()
@@ -925,6 +938,18 @@ export default function CreatePattern() {
       // 作品展示页筛选元数据：来源标记 fusion + 融合来源 id 对（供展示/溯源）
       const fusionPair = [fusionSelectedA?.patternId, fusionSelectedB?.patternId].filter(Boolean) as string[]
 
+      // 上传到 Public 桶 pattern-images，image_url 只存短链；禁止再写 data: base64 大字段
+      let savedImageUrl = fusionResultImage
+      if (savedImageUrl.startsWith('data:')) {
+        try {
+          savedImageUrl = await uploadPatternImage(session.user.id, fusionResultImage)
+        } catch (uploadErr: any) {
+          console.error('Upload image error:', uploadErr)
+          alert(`图片上传失败，未保存: ${uploadErr?.message || '请稍后重试'}`)
+          return null
+        }
+      }
+
       const { data: savedData, error } = await supabase.from('generations').insert({
         user_id: session.user.id,
         style_id: null,
@@ -942,7 +967,7 @@ export default function CreatePattern() {
             generationParams: fusionParams,
           },
         },
-        image_url: fusionResultImage,
+        image_url: savedImageUrl,
         author_nickname: nickname,
         is_public: options?.isPublic ?? false,
       }).select('id').single()

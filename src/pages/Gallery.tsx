@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useParams, useLocation } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
-import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { supabase } from '../lib/supabase'
 import { useFavorites } from '../context/FavoriteContext'
-import { PatternDnaRadar } from '../components/PatternDnaRadar'
-import { mockPatternDna } from '../mock/patternDna'
+import { loadImagesConcurrently, PATTERN_PLACEHOLDER, isPlaceholderUrl } from '../lib/imageLoader'
+import WorkDetailModal from '../components/WorkDetailModal'
 import { PATTERN_THEMES, type PatternThemeId } from '../data/patternTaxonomy'
 
 interface GalleryWork {
@@ -50,12 +49,12 @@ function resolveWorkMeta(work: GalleryWork): { theme?: string; subcategory?: str
 export default function Gallery() {
   const { id: detailId } = useParams<{ id?: string }>()
   const location = useLocation()
+  const navigate = useNavigate()
   const { favoriteIds, toggleFavorite } = useFavorites()
   /** 筛选：all | floral | beast | fusion；activeSubcategory 为空 = 该主题下全部子类 */
   const [activeFilter, setActiveFilter] = useState<'all' | PatternThemeId | 'fusion'>('all')
   const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null)
   const [selectedWork, setSelectedWork] = useState<GalleryWork | null>(null)
-  const [showDnaAnalysis, setShowDnaAnalysis] = useState(false)
   const [sortBy, setSortBy] = useState('latest')
   const [page, setPage] = useState(1)
   const [works, setWorks] = useState<GalleryWork[]>([])
@@ -65,54 +64,11 @@ export default function Gallery() {
   const fetchWorks = async () => {
     setIsLoading(true)
     try {
-      // 详情模式：按 id 单条取，避免全量拉 image_url（历史 data: base64 大字段会拖垮列表查询 / 触发 statement timeout）
-      if (detailId) {
-        const { data: gen, error: genErr } = await supabase
-          .from('generations')
-          .select('id, image_url, is_public, created_at, user_id, style_id, author_nickname, params')
-          .eq('id', detailId)
-          .maybeSingle()
-
-        if (genErr) {
-          console.error('Failed to fetch work detail:', genErr)
-          setWorks([])
-          setSelectedWork(null)
-        } else if (gen) {
-          const g = gen as any
-          let favCount = 0
-          const { data: favRows } = await supabase
-            .from('favorites')
-            .select('generation_id')
-            .eq('generation_id', g.id)
-          if (favRows) favCount = favRows.length
-
-          const work: GalleryWork = {
-            id: g.id,
-            title: g.params?.title || `纹样作品 #${g.id.slice(0, 8)}`,
-            author: g.author_nickname || '用户',
-            category: g.style_id || 'custom',
-            likes: 0,
-            image: g.image_url,
-            created_at: g.created_at,
-            tags: g.params?.tags || [],
-            favoriteCount: favCount,
-            theme: g.params?.theme,
-            subcategory: g.params?.subcategory,
-            source: g.params?.source || (g.params?.fusion ? 'fusion' : undefined),
-          }
-          setWorks([work])
-          setSelectedWork(work)
-        } else {
-          setWorks([])
-          setSelectedWork(null)
-        }
-        setIsLoading(false)
-        return
-      }
-
+      // 列表不投影 image_url（历史 data: base64 大字段是 statement timeout 元凶），
+      // 缩略图先占位，渲染后由 loadImagesConcurrently 按 id 批量补图
       const { data: generationsData } = await supabase
         .from('generations')
-        .select('*')
+        .select('id, user_id, style_id, author_nickname, is_public, created_at, title:params->>title, tags:params->tags, theme:params->>theme, subcategory:params->>subcategory, source:params->>source, fusion:params->fusion')
         .eq('is_public', true)
         .order('created_at', { ascending: false })
 
@@ -160,29 +116,22 @@ export default function Gallery() {
           
           return {
             id: gen.id,
-            title: gen.params?.title || `纹样作品 #${gen.id.slice(0, 8)}`,
+            title: gen.title || `纹样作品 #${gen.id.slice(0, 8)}`,
             author: authorName,
             category: gen.style_id || 'custom',
             likes: Math.floor(Math.random() * 300) + 50,
-            image: gen.image_url,
+            image: '', // 列表不拉 image_url，渲染后按 id 补图
             created_at: gen.created_at,
-            tags: gen.params?.tags || [],
+            tags: gen.tags || [],
             favoriteCount: favoriteCounts[gen.id] || 0,
-            // 主题/子类/来源从保存时的 params 元数据读取（无对应列，统一走 JSONB）
-            theme: gen.params?.theme,
-            subcategory: gen.params?.subcategory,
+            // 主题/子类/来源从保存时的 params 元数据投影读取
+            theme: gen.theme || undefined,
+            subcategory: gen.subcategory || undefined,
             // 兼容：新数据写 source:'fusion'；旧数据通过 params.fusion 是否存在识别
-            source: gen.params?.source || (gen.params?.fusion ? 'fusion' : undefined),
+            source: gen.source || (gen.fusion ? 'fusion' : undefined),
           }
         })
         setWorks(transformed)
-
-        if (detailId) {
-          const foundWork = transformed.find(w => w.id === detailId)
-          if (foundWork) {
-            setSelectedWork(foundWork)
-          }
-        }
       }
     } catch (err) {
       console.error('Failed to fetch works:', err)
@@ -193,7 +142,39 @@ export default function Gallery() {
 
   useEffect(() => {
     fetchWorks()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detailId, location.pathname])
+
+  // 列表渲染后按 id 批量补图（并发 3）：把取到的 image_url 填回对应卡片，单条失败只影响该卡
+  useEffect(() => {
+    const pendingIds = works.filter((w) => !w.image).map((w) => w.id)
+    if (pendingIds.length === 0) return
+    loadImagesConcurrently(pendingIds, (id, url) => {
+      setWorks((prev) => prev.map((w) => (w.id === id ? { ...w, image: url } : w)))
+    })
+  }, [works])
+
+  // 带 /gallery/:id 或 ?work=id 进入：列表加载后自动弹出对应作品（仍是列表+弹窗，非单卡页）
+  useEffect(() => {
+    if (works.length === 0) return
+    const queryWorkId = new URLSearchParams(location.search).get('work')
+    const targetId = detailId || queryWorkId
+    if (!targetId) return
+    const found = works.find((w) => w.id === targetId)
+    if (found) setSelectedWork(found)
+  }, [works, detailId, location.search])
+
+  /** 打开作品：弹窗 + URL 记录 ?work=id，刷新后可恢复 */
+  const openWork = (work: GalleryWork) => {
+    setSelectedWork(work)
+    navigate(`/gallery?work=${work.id}`, { replace: true })
+  }
+
+  /** 关闭弹窗：回到列表页 URL（不再保留 /gallery/:id 单卡路由） */
+  const closeWork = () => {
+    setSelectedWork(null)
+    navigate('/gallery', { replace: true })
+  }
 
   /** 主题 + 子类 + 融合筛选（本地过滤：数据已全量拉取，切换筛选不重新请求、不整页转圈） */
   const filteredWorks = () => {
@@ -240,42 +221,6 @@ export default function Gallery() {
         ? { ...prev, favoriteCount: result.count }
         : prev
       )
-    }
-  }
-
-  const handleDownload = async (imageUrl: string) => {
-    try {
-      const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(imageUrl)}`
-      
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      
-      if (isMobile) {
-        window.open(proxyUrl, '_blank')
-      } else {
-        const link = document.createElement('a')
-        link.href = proxyUrl
-        link.download = `wenyun_pattern_${Date.now()}.png`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-      }
-    } catch (error) {
-      console.error('下载失败:', error)
-      alert('下载失败，请尝试右键图片另存为')
-    }
-  }
-
-  const handleShare = (work: GalleryWork) => {
-    const shareUrl = `${window.location.origin}/gallery/${work.id}`
-    if (navigator.share) {
-      try {
-        navigator.share({ title: work.title, url: shareUrl })
-      } catch {
-        // 用户取消分享，忽略
-      }
-    } else {
-      navigator.clipboard.writeText(shareUrl)
-      alert('链接已复制到剪贴板')
     }
   }
 
@@ -435,10 +380,10 @@ export default function Gallery() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
                 >
-                  <Card hover bordered onClick={() => { setSelectedWork(work); setShowDnaAnalysis(false) }}>
+                  <Card hover bordered onClick={() => openWork(work)}>
                     <div className="aspect-square bg-rice-paper-dark mb-3 overflow-hidden">
                       <img
-                        src={work.image}
+                        src={isPlaceholderUrl(work.image) ? PATTERN_PLACEHOLDER : work.image}
                         alt={work.title}
                         className="w-full h-full object-cover"
                       />
@@ -506,101 +451,14 @@ export default function Gallery() {
         )}
       </div>
 
-      <AnimatePresence>
-        {selectedWork && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-ink-black/60 z-50 flex items-center justify-center p-4"
-            onClick={() => setSelectedWork(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-            >
-              <FrameDecorations className="bg-rice-paper-light p-6 relative">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h2 className="font-shufa text-2xl text-deep-blue">{selectedWork.title}</h2>
-                    {selectedWork.tags && selectedWork.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {selectedWork.tags.map((tag, index) => (
-                          <span
-                            key={index}
-                            className="px-2 py-0.5 bg-deep-blue-50 text-deep-blue-light text-xs font-song rounded-sm"
-                          >
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <p className="font-song text-deep-blue-light mt-2">作者: {selectedWork.author}</p>
-                  </div>
-                  <button
-                    onClick={() => setSelectedWork(null)}
-                    className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center hover:bg-deep-blue-100 rounded-full transition-colors z-10"
-                  >
-                    <svg className="w-6 h-6 text-deep-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                
-                <div className="aspect-square max-h-[45vh] w-auto mx-auto bg-rice-paper-dark rounded-sm overflow-hidden mb-4">
-                  <img
-                    src={selectedWork.image}
-                    alt={selectedWork.title}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                
-                <div className="flex items-center justify-end py-4 border-t border-deep-blue-100">
-                  <div className="flex gap-3">
-                    <Button variant="outline" size="sm" onClick={() => handleDownload(selectedWork.image)}>下载</Button>
-                    <Button variant="outline" size="sm" onClick={() => handleShare(selectedWork)}>分享</Button>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <button
-                    onClick={() => setShowDnaAnalysis(!showDnaAnalysis)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-palace-red/10 to-ming-yellow/10 border border-palace-red/30 rounded-sm hover:border-palace-red transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">✦</span>
-                      <div className="text-left">
-                        <span className="font-shufa text-base text-deep-blue block">AI纹样DNA分析</span>
-                        <span className="font-song text-xs text-deep-blue-light">查看这张纹样的智能特征解读</span>
-                      </div>
-                    </div>
-                    <motion.div
-                      animate={{ rotate: showDnaAnalysis ? 180 : 0 }}
-                      className="w-5 h-5 text-palace-red flex-shrink-0"
-                    >
-                      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </motion.div>
-                  </button>
-                  <motion.div
-                    initial={false}
-                    animate={{ height: showDnaAnalysis ? 'auto' : 0, opacity: showDnaAnalysis ? 1 : 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="pt-4">
-                      <PatternDnaRadar dna={mockPatternDna} patternName={selectedWork.title} />
-                    </div>
-                  </motion.div>
-                </div>
-              </FrameDecorations>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <WorkDetailModal
+        work={selectedWork}
+        onClose={closeWork}
+        shareUrl={selectedWork ? `${window.location.origin}/gallery/${selectedWork.id}` : undefined}
+        isFavorite={selectedWork ? favoriteIds.has(selectedWork.id) : false}
+        favoriteCount={selectedWork?.favoriteCount}
+        onToggleFavorite={selectedWork ? () => handleFavorite(selectedWork.id) : undefined}
+      />
     </div>
   )
 }
