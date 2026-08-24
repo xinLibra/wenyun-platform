@@ -221,14 +221,17 @@ export default function Orders() {
           return
         } catch (e: any) {
           lastError = e
-          console.error(`[Orders] Fetch orders failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, e?.message ?? e, e)
           if (attempt < MAX_ATTEMPTS) {
+            // 中间重试静默，避免刷屏
             await sleep(RETRY_DELAY_MS)
           }
         }
       }
 
       // 全部重试仍失败：有上次成功缓存先展示缓存并弱提示「可能不是最新」，无缓存展示失败页
+      if (lastError) {
+        console.error(`[Orders] All ${MAX_ATTEMPTS} attempts failed:`, lastError?.message ?? lastError, lastError)
+      }
       if (seq !== fetchSeq.current) return
       const cached = readOrdersCache(userId)
       if (cached && cached.data.length > 0) {

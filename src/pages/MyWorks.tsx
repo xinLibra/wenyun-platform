@@ -109,13 +109,16 @@ export default function MyWorksPage() {
             lastError = null
             break
           } catch (e: any) {
-            console.error(`[MyWorks] Fetch works failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, e?.message ?? e, e)
             lastError = e
-            if (attempt < MAX_ATTEMPTS) await sleep(RETRY_DELAY_MS)
+            if (attempt < MAX_ATTEMPTS) {
+              // 中间重试静默，不打印 console.error，避免刷屏
+              await sleep(RETRY_DELAY_MS)
+            }
           }
         }
 
         if (lastError) {
+          console.error(`[MyWorks] All ${MAX_ATTEMPTS} attempts failed:`, lastError?.message ?? lastError, lastError)
           const cached = readWorksCache(userId)
           if (cached && cached.length > 0) {
             if (mounted) {
