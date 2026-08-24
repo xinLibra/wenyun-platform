@@ -444,10 +444,21 @@ export default function CreatePattern() {
       const uniqueTags = [...new Set(autoTags)]
       const title = workTitle || `纹样作品 #${Date.now().toString(36).toUpperCase()}`
 
+      // 作品展示页筛选元数据：主题 + 子类（与 PATTERN_THEMES 的 subcategories.id 一致）+ 来源
+      const mainTheme = generationParams.dimension.mainTheme || ''
+      const subcategory = generationParams.dimension.subcategory || ''
+
       const { data: savedData, error } = await supabase.from('generations').insert({
         user_id: session.user.id,
         style_id: dimension.craft[0] || null,
-        params: { ...generationParams, tags: uniqueTags, title },
+        params: {
+          ...generationParams,
+          tags: uniqueTags,
+          title,
+          source: 'ai',
+          theme: mainTheme || undefined,
+          subcategory: subcategory || undefined,
+        },
         image_url: generatedImage,
         author_nickname: nickname,
         is_public: options?.isPublic ?? false,
@@ -879,12 +890,18 @@ export default function CreatePattern() {
       const uniqueTags = [...new Set(autoTags)]
       const title = fusionWorkTitle || `融合纹样 #${Date.now().toString(36).toUpperCase()}`
 
+      // 作品展示页筛选元数据：来源标记 fusion + 融合来源 id 对（供展示/溯源）
+      const fusionPair = [fusionSelectedA?.patternId, fusionSelectedB?.patternId].filter(Boolean) as string[]
+
       const { data: savedData, error } = await supabase.from('generations').insert({
         user_id: session.user.id,
         style_id: null,
         params: {
           tags: uniqueTags,
           title,
+          source: 'fusion',
+          theme: 'fusion',
+          fusion_pair: fusionPair,
           fusion: {
             patternAId: fusionSelectedA?.patternId,
             patternBId: fusionSelectedB?.patternId,

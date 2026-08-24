@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 import { useFavorites } from '../context/FavoriteContext'
 import { PatternDnaRadar } from '../components/PatternDnaRadar'
 import { mockPatternDna } from '../mock/patternDna'
+import { PATTERN_THEMES, type PatternThemeId } from '../data/patternTaxonomy'
 
 interface GalleryWork {
   id: string
@@ -20,129 +21,23 @@ interface GalleryWork {
   created_at: string
   tags: string[]
   favoriteCount: number
+  /** 主题：floral | beast；旧数据无此字段（只出现在「全部」） */
+  theme?: string
+  /** 子类 id，与 patternTaxonomy 的 subcategories.id 一致 */
+  subcategory?: string
+  /** 'fusion' = 纹样融合；普通单类生成为 'ai' */
+  source?: string
 }
-
-const categoryGroups = [
-  {
-    name: '工艺技法',
-    categories: [
-      { id: 'dye', name: '染织' },
-      { id: 'embroidery', name: '刺绣' },
-      { id: 'brocade', name: '织锦' },
-      { id: 'carving', name: '雕刻' },
-      { id: 'ceramic', name: '陶瓷' },
-      { id: 'metal', name: '金属工艺' },
-    ]
-  },
-  {
-    name: '文化族群',
-    categories: [
-      { id: 'han', name: '汉族' },
-      { id: 'miao', name: '苗族' },
-      { id: 'shui', name: '水族' },
-      { id: 'zang', name: '藏族' },
-      { id: 'menggu', name: '蒙古族' },
-      { id: 'yi', name: '彝族' },
-      { id: 'dai', name: '傣族' },
-    ]
-  },
-  {
-    name: '主题纹样',
-    categories: [
-      { id: 'animal', name: '动物纹' },
-      { id: 'figure', name: '人物纹' },
-      { id: 'plant', name: '植物纹' },
-      { id: 'geometry', name: '几何纹' },
-      { id: 'combination', name: '组合纹' },
-    ]
-  },
-  {
-    name: '应用场景',
-    categories: [
-      { id: 'clothing', name: '服饰' },
-      { id: 'packaging', name: '包装' },
-      { id: 'home', name: '家居' },
-      { id: 'cultural', name: '文创周边' },
-    ]
-  },
-  {
-    name: '排布方式',
-    categories: [
-      { id: 'single', name: '单独纹样' },
-      { id: 'continuous', name: '四方连续' },
-      { id: 'suitable', name: '适合纹样' },
-    ]
-  },
-  {
-    name: '对称方式',
-    categories: [
-      { id: 'mirror', name: '镜像对称' },
-      { id: 'rotation', name: '旋转对称' },
-      { id: 'irregular', name: '无规则' },
-    ]
-  },
-  {
-    name: '风格倾向',
-    categories: [
-      { id: 'abstract', name: '抽象' },
-      { id: 'figurative', name: '具象' },
-      { id: 'modern', name: '现代' },
-      { id: 'complex', name: '繁复' },
-      { id: 'simple', name: '简约' },
-      { id: 'digital', name: '数字科技感' },
-      { id: 'handmade', name: '手作感' },
-    ]
-  },
-]
-
-const categoryTagMap: Record<string, string[]> = {
-  dye: ['染织'],
-  embroidery: ['刺绣'],
-  brocade: ['织锦'],
-  carving: ['雕刻'],
-  ceramic: ['陶瓷'],
-  metal: ['金属工艺'],
-  han: ['汉族'],
-  miao: ['苗族'],
-  shui: ['水族'],
-  zang: ['藏族'],
-  menggu: ['蒙古族'],
-  yi: ['彝族'],
-  dai: ['傣族'],
-  animal: ['动物纹'],
-  figure: ['人物纹'],
-  plant: ['植物纹'],
-  geometry: ['几何纹'],
-  combination: ['组合纹'],
-  clothing: ['服饰'],
-  packaging: ['包装'],
-  home: ['家居'],
-  cultural: ['文创周边'],
-  single: ['单独纹样'],
-  continuous: ['四方连续'],
-  suitable: ['适合纹样'],
-  mirror: ['镜像对称'],
-  rotation: ['旋转对称'],
-  irregular: ['无规则'],
-  abstract: ['抽象风格'],
-  figurative: ['具象风格'],
-  modern: ['现代风格'],
-  complex: ['繁复风格'],
-  simple: ['简约风格'],
-  digital: ['数字科技感'],
-  handmade: ['手作感'],
-}
-
-
 
 export default function Gallery() {
   const { id: detailId } = useParams<{ id?: string }>()
   const location = useLocation()
   const { favoriteIds, toggleFavorite } = useFavorites()
-  const [selectedCategories, setSelectedCategories] = useState<Record<string, string>>({})
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    Object.fromEntries(categoryGroups.map(g => [g.name, false]))
-  )
+  /** 筛选：all | floral | beast | fusion；activeSubcategory 为空 = 该主题下全部子类 */
+  const [activeFilter, setActiveFilter] = useState<'all' | PatternThemeId | 'fusion'>('all')
+  const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null)
+  /** UI 展开的主题子类面板 */
+  const [expandedTheme, setExpandedTheme] = useState<PatternThemeId | null>(null)
   const [selectedWork, setSelectedWork] = useState<GalleryWork | null>(null)
   const [showDnaAnalysis, setShowDnaAnalysis] = useState(false)
   const [sortBy, setSortBy] = useState('latest')
@@ -212,6 +107,11 @@ export default function Gallery() {
             created_at: gen.created_at,
             tags: gen.params?.tags || [],
             favoriteCount: favoriteCounts[gen.id] || 0,
+            // 主题/子类/来源从保存时的 params 元数据读取（无对应列，统一走 JSONB）
+            theme: gen.params?.theme,
+            subcategory: gen.params?.subcategory,
+            // 兼容：新数据写 source:'fusion'；旧数据通过 params.fusion 是否存在识别
+            source: gen.params?.source || (gen.params?.fusion ? 'fusion' : undefined),
           }
         })
         setWorks(transformed)
@@ -234,16 +134,19 @@ export default function Gallery() {
     fetchWorks()
   }, [detailId, location.pathname])
 
+  /** 主题 + 子类 + 融合筛选（本地过滤：数据已全量拉取，切换筛选不重新请求、不整页转圈） */
   const filteredWorks = () => {
-    const selectedCategoryIds = Object.values(selectedCategories)
-    if (selectedCategoryIds.length === 0) return works
-    
-    return works.filter(w => {
-      return selectedCategoryIds.every(categoryId => {
-        const matchingTags = categoryTagMap[categoryId] || []
-        return matchingTags.some(tag => w.tags.includes(tag))
+    if (activeFilter === 'fusion') {
+      return works.filter(w => w.source === 'fusion')
+    }
+    if (activeFilter === 'floral' || activeFilter === 'beast') {
+      return works.filter(w => {
+        if (w.theme !== activeFilter) return false
+        if (activeSubcategory) return w.subcategory === activeSubcategory
+        return true
       })
-    })
+    }
+    return works
   }
 
   const sortedWorks = [...filteredWorks()].sort((a, b) => {
@@ -329,72 +232,120 @@ export default function Gallery() {
           className="mb-8"
         >
           <div className="flex flex-wrap justify-center gap-3 mb-4">
+            {/* 全部：清空主题 / 子类 / 融合筛选 */}
             <button
-              onClick={() => setSelectedCategories({})}
+              onClick={() => {
+                setActiveFilter('all')
+                setActiveSubcategory(null)
+                setExpandedTheme(null)
+                setPage(1)
+              }}
               className={`px-5 py-2 rounded-sm font-song transition-all duration-300 ${
-                Object.keys(selectedCategories).length === 0
+                activeFilter === 'all'
                   ? 'bg-palace-red text-rice-paper shadow-md'
                   : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
               }`}
             >
               全部
             </button>
-            {Object.keys(selectedCategories).length > 0 && (
-              <button
-                onClick={() => setSelectedCategories({})}
-                className="px-4 py-2 bg-deep-blue-100 text-deep-blue font-song text-sm rounded-sm hover:bg-deep-blue-200 transition-colors"
-              >
-                清除筛选
-              </button>
-            )}
-          </div>
-          <div className="space-y-3">
-            {categoryGroups.map((group) => (
-              <div key={group.name} className="border border-deep-blue-100 rounded-sm overflow-hidden">
-                <button
-                  onClick={() => setExpandedGroups(prev => ({ ...prev, [group.name]: !prev[group.name] }))}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-rice-paper hover:bg-deep-blue-50 transition-colors"
-                >
-                  <span className="font-song text-sm text-deep-blue">{group.name}</span>
-                  <svg
-                    className={`w-4 h-4 text-deep-blue-light transition-transform ${expandedGroups[group.name] ? 'rotate-180' : ''}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+
+            {/* 主题：花卉 / 瑞兽（点主题名按主题筛 + 展开子类芯片） */}
+            {PATTERN_THEMES.map((theme) => {
+              const isActive = activeFilter === theme.id
+              return (
+                <div key={theme.id} className="relative">
+                  <button
+                    onClick={() => {
+                      if (activeFilter !== theme.id) {
+                        // 未选中该主题：选中并按主题筛（该主题下全部子类）
+                        setActiveFilter(theme.id)
+                        setActiveSubcategory(null)
+                      }
+                      // 再点主题名：只切换子类面板展开/收起（筛选保持按主题）
+                      setExpandedTheme(expandedTheme === theme.id ? null : theme.id)
+                      setPage(1)
+                    }}
+                    className={`px-5 py-2 rounded-sm font-song transition-all duration-300 flex items-center gap-1.5 ${
+                      isActive
+                        ? 'bg-palace-red text-rice-paper shadow-md'
+                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                    }`}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                  </svg>
-                </button>
-                {expandedGroups[group.name] && (
-                  <div className="px-4 py-3 bg-rice-paper-light flex flex-wrap gap-2">
-                    {group.categories.map((category) => (
-                      <button
-                        key={category.id}
-                        onClick={() => {
-                          setSelectedCategories(prev => {
-                            const newState = { ...prev }
-                            if (newState[group.name] === category.id) {
-                              delete newState[group.name]
-                            } else {
-                              newState[group.name] = category.id
-                            }
-                            return newState
-                          })
-                          setPage(1)
-                        }}
-                        className={`px-3 py-1.5 rounded-sm font-song text-sm transition-all duration-300 ${
-                          selectedCategories[group.name] === category.id
-                            ? 'bg-palace-red text-rice-paper shadow-md'
-                            : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                        }`}
+                    {theme.label}
+                    <svg
+                      className={`w-3.5 h-3.5 transition-transform ${expandedTheme === theme.id ? 'rotate-180' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                    </svg>
+                  </button>
+
+                  <AnimatePresence>
+                    {expandedTheme === theme.id && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        className="absolute left-0 top-full mt-2 z-30 w-72 max-w-[80vw] bg-rice-paper-light border border-deep-blue-100 rounded-sm shadow-lg p-3"
                       >
-                        {category.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => {
+                              setActiveFilter(theme.id)
+                              setActiveSubcategory(null)
+                              setPage(1)
+                            }}
+                            className={`px-3 py-1.5 rounded-sm font-song text-sm transition-all duration-300 ${
+                              isActive && !activeSubcategory
+                                ? 'bg-palace-red text-rice-paper'
+                                : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                            }`}
+                          >
+                            全部{theme.label}
+                          </button>
+                          {theme.subcategories.map((sub) => (
+                            <button
+                              key={sub.id}
+                              onClick={() => {
+                                setActiveFilter(theme.id)
+                                setActiveSubcategory(sub.id)
+                                setPage(1)
+                              }}
+                              className={`px-3 py-1.5 rounded-sm font-song text-sm transition-all duration-300 ${
+                                activeSubcategory === sub.id
+                                  ? 'bg-palace-red text-rice-paper shadow-md'
+                                  : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+                              }`}
+                            >
+                              {sub.label}
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )
+            })}
+
+            {/* 纹样融合：无子类，直接筛融合作品 */}
+            <button
+              onClick={() => {
+                setActiveFilter('fusion')
+                setActiveSubcategory(null)
+                setExpandedTheme(null)
+                setPage(1)
+              }}
+              className={`px-5 py-2 rounded-sm font-song transition-all duration-300 ${
+                activeFilter === 'fusion'
+                  ? 'bg-palace-red text-rice-paper shadow-md'
+                  : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
+              }`}
+            >
+              纹样融合
+            </button>
           </div>
         </motion.div>
 
@@ -488,7 +439,9 @@ export default function Gallery() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                   </svg>
                 </div>
-                <p className="font-song text-deep-blue-light">暂无公开作品</p>
+                <p className="font-song text-deep-blue-light">
+                  {activeFilter === 'all' ? '暂无公开作品' : '暂无该分类公开作品'}
+                </p>
               </div>
             )}
 
