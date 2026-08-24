@@ -52,7 +52,7 @@ export function PatternFusionSlider({
 
       {/* 上方较大预览 */}
       <div className="mb-5">
-        <div className="w-56 h-56 sm:w-64 sm:h-64 mx-auto rounded-sm overflow-hidden border border-deep-blue-100 bg-rice-paper-dark/40 flex items-center justify-center">
+        <div className="w-64 h-64 sm:w-72 sm:h-72 md:w-80 md:h-80 mx-auto rounded-sm overflow-hidden border border-deep-blue-100 bg-rice-paper-dark/40 flex items-center justify-center">
           {isGenerating ? (
             <div className="w-full h-full flex flex-col items-center justify-center relative">
               <GeneratingPulse size={90} />

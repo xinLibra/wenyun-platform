@@ -26,6 +26,7 @@ import {
   type PatternThemeId,
 } from '../data/patternTaxonomy'
 import { getFusionRecommendations } from '../config/fusionRecommendations'
+import { getFusionPairPreset } from '../config/fusionPairPresets'
 import { downloadImage } from '../utils/downloadImage'
 import {
   writePendingPattern,
@@ -660,6 +661,56 @@ export default function CreatePattern() {
   const [fusionASub, setFusionASub] = useState('')
   const [fusionBTheme, setFusionBTheme] = useState<PatternThemeId | ''>('')
   const [fusionBSub, setFusionBSub] = useState('')
+
+  // ===== 融合页折叠 + 选满自动跳转（任务）=====
+  const [fusionSelectOpen, setFusionSelectOpen] = useState(true) // 选纹样区默认展开
+  const [fusionParamsOpen, setFusionParamsOpen] = useState(false) // 参数区可收起；选满后自动展开
+  const fusionColorAreaRef = useRef<HTMLDivElement | null>(null) // 滚动目标：参数区潘通/推荐色区域
+  const wasFusionCompleteRef = useRef(false) // 是否处于「两槽选满」状态（用于从不足→刚好过渡检测）
+  const lastFusionPairKeyRef = useRef('') // 最近一次套用预设的组合 key（排序后，与顺序无关）
+
+  // 选满两个「不同」子类：套用该组合的默认融合预设；且仅在从不足→刚好时自动展开参数区并滚动到推荐色
+  useEffect(() => {
+    const a = fusionASub
+    const b = fusionBSub
+    const complete = Boolean(a && b && a !== b)
+    const pairKey = complete ? [a, b].sort().join('__') : ''
+
+    // 更换任一子类（或首次选满）→ 重新套该对的默认预设；仅调融合比例不触发
+    if (complete && pairKey !== lastFusionPairKeyRef.current) {
+      lastFusionPairKeyRef.current = pairKey
+      const preset = getFusionPairPreset(a as string, b as string)
+      console.log(`[fusion] apply preset for ${pairKey}`, preset)
+      setFusionParams((p) => ({
+        ...p,
+        complexity: preset.complexity,
+        textureDetail: preset.textureDetail,
+        culturalIntensity: preset.culturalIntensity,
+        arrangement: preset.arrangement,
+        symmetry: preset.symmetry,
+        colorScheme: {
+          mode: 'pantone',
+          pantone: preset.pantoneCode,
+          brightness: preset.lightness,
+        },
+      }))
+    }
+
+    // 从「不足两个」→「刚好两个」：先展开参数区，再平滑滚动到潘通/推荐色区域
+    if (complete && !wasFusionCompleteRef.current) {
+      setFusionParamsOpen(true)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          fusionColorAreaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        })
+      })
+    }
+
+    if (!complete) {
+      lastFusionPairKeyRef.current = ''
+    }
+    wasFusionCompleteRef.current = complete
+  }, [fusionASub, fusionBSub])
 
   useEffect(() => {
     if (createMode !== 'fusion') return
@@ -1330,12 +1381,33 @@ export default function CreatePattern() {
   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
     {/* 左侧：两个纹样分类 */}
     <div className="space-y-6">
-      <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5">
-        <h3 className="font-shufa text-lg text-deep-blue mb-1">选择两个纹样分类进行融合</h3>
-        <p className="font-song text-xs text-deep-blue-light mb-4">
-          每个位置先选主题，再选一个子类（对应 LoRA）
-        </p>
+      <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100">
+        <button
+          type="button"
+          onClick={() => setFusionSelectOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-ming-yellow/5 transition-colors"
+        >
+          <div>
+            <h3 className="font-shufa text-lg text-deep-blue">选择两个纹样分类进行融合</h3>
+            <p className="font-song text-xs text-deep-blue-light mt-0.5">
+              每个位置先选主题，再选一个子类（对应 LoRA）
+            </p>
+          </div>
+          <span className="flex-shrink-0 font-song text-xs text-deep-blue-light flex items-center gap-1">
+            {fusionSelectOpen ? '收起' : '展开'}
+            <svg
+              className={`w-4 h-4 transition-transform ${fusionSelectOpen ? '' : 'rotate-180'}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </span>
+        </button>
 
+        {fusionSelectOpen && (
+          <div className="px-5 pb-5">
         {/* 第一个分类 */}
         <div className="mb-6 pb-6 border-b border-deep-blue-100">
           <p className="font-shufa text-deep-blue mb-3 flex items-center gap-2">
@@ -1507,23 +1579,46 @@ export default function CreatePattern() {
               <p className="font-song text-xs text-deep-blue-light">请先选择主题</p>
             )}
           </div>
-        </div>
+          </div>
+          </div>
+        )}
       </div>
 
       {/* 融合结果参数区（已移至左侧）：两槽共用一套参数，写入最终 prompt */}
-      <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-4">
-          <div className="flex items-center justify-between">
+      <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100">
+        <button
+          type="button"
+          onClick={() => setFusionParamsOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-ming-yellow/5 transition-colors"
+        >
+          <div>
             <h3 className="font-shufa text-base text-deep-blue">融合结果参数</h3>
-            <span className="font-song text-[11px] text-deep-blue-light">调节后点「生成融合纹样」生效</span>
+            <span className="font-song text-[11px] text-deep-blue-light mt-0.5 inline-block">调节后点「生成融合纹样」生效</span>
           </div>
+          <span className="flex-shrink-0 font-song text-xs text-deep-blue-light flex items-center gap-1">
+            {fusionParamsOpen ? '收起' : '展开'}
+            <svg
+              className={`w-4 h-4 transition-transform ${fusionParamsOpen ? '' : 'rotate-180'}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </span>
+        </button>
 
-          {/* 主题色 / 配色：复用 AI 生成页同一套 ColorPicker（色相/明度/潘通/吸色），双子类推荐色交集优先 */}
+        {fusionParamsOpen && (
+          <div className="px-5 pb-5 space-y-4">
+          {/* 主题色 / 配色：复用 AI 生成页同一套 ColorPicker（色相/明度/潘通/吸色），双子类推荐色交集优先；包裹 ref 供「选满后滚动到推荐色」使用 */}
+          <div ref={fusionColorAreaRef}>
           <ColorPicker
             value={fusionParams.colorScheme}
             onChange={(cs) => setFusionParams((p) => ({ ...p, colorScheme: cs }))}
             subcategoryId={fusionASub || undefined}
             subcategoryIds={[fusionASub, fusionBSub].filter(Boolean)}
           />
+          </div>
 
           <InkSlider
             label="复杂度"
@@ -1562,11 +1657,14 @@ export default function CreatePattern() {
               />
             </div>
           </div>
-        </div>
+          </div>
+        )}
+      </div>
     </div>
 
-    {/* 右侧：融合比例 + 预览（沿用 PatternFusionSlider） */}
+    {/* 右侧：融合比例 + 预览（桌面端 sticky：预览 + 比例条 + 生成按钮滚动时常驻视口） */}
     <div className="space-y-4">
+      <div className="lg:sticky lg:top-20 space-y-4">
       {fallbackInfo && (
         <div className="p-3 bg-warning-50 border border-warning-200 rounded-sm">
           <div className="font-song text-sm text-warning-dark font-semibold">融合真实生成失败，已降级为占位 mock</div>
@@ -1581,6 +1679,7 @@ export default function CreatePattern() {
         isGenerating={isFusing}
         resultImage={fusionResultImage}
       />
+      </div>
 
       {fusionResultImage && (
         <div className="bg-rice-paper-light rounded-sm border border-deep-blue-100 p-5 space-y-3">

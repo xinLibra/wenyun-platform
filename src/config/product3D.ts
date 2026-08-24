@@ -17,7 +17,8 @@ export interface Product3DConfig {
   productName: string
   modelUrl: string
   meshConfig: {
-    textureTargetMaterial: string
+    /** 目标材质：可为单个材质名或数组（tote_bag.json 即数组） */
+    textureTargetMaterial: string | string[]
     textureTargetMaterials?: Partial<Record<PatternAreaKey, string[]>>
     colorTargetMaterials?: Partial<Record<PatternAreaKey, string[]>>
     colorMaterials: ColorMaterialConfig[]

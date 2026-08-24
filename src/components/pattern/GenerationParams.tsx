@@ -5,6 +5,7 @@ import { BambooToggle } from '../ui/Select'
 import { ColorPalette } from '../ui/ColorPalette'
 import { GenerationParams as GenerationParamsType, ARRANGEMENT_OPTIONS, SYMMETRY_OPTIONS, ColorSchemeParams } from '../../types/pattern'
 import { SUBCATEGORY_PANTONE_MAP, getPantoneForSubcategory } from '../../config/generationPresets'
+import { findPantoneEntry, normalizePantoneCode } from '../../config/pantoneMap'
 import { getLoraEntry } from '../../config/loraMap'
 
 interface GenerationParamsProps {
@@ -226,6 +227,11 @@ const getPantoneColor = (pantone: string): string | undefined => {
   if (normalized === 'MONOCHROME-BLACK') return '#1a1a1a'
   if (normalized === 'MULTICOLOR') return 'linear-gradient(135deg, #d32f2f 0%, #fbc02d 25%, #388e3c 50%, #1976d2 75%, #7b1fa2 100%)'
 
+  // 统一潘通表（src/config/pantoneMap.ts）优先：覆盖 '14-3904 TCX'、'16-1720 TCX' 等
+  // 推荐色号，且 '14-3904' 与 '14-3904 TCX' 等价（表内自动生成短号别名）
+  const entry = findPantoneEntry(pantone)
+  if (entry) return entry.hex
+
   if (pantoneColors[normalized]) {
     return pantoneColors[normalized]
   }
@@ -397,7 +403,7 @@ export function ColorPicker({ value, onChange, subcategoryId, subcategoryIds }: 
                         ? '多色预设'
                         : (() => {
                             const entry = Object.values(SUBCATEGORY_PANTONE_MAP).find(
-                              (p) => p.pantoneCode.toUpperCase() === (value.pantone || '').trim().toUpperCase()
+                              (p) => normalizePantoneCode(p.pantoneCode) === normalizePantoneCode(value.pantone || '')
                             )
                             return entry ? `${entry.label} · ${value.pantone}` : value.pantone
                           })()}
@@ -437,13 +443,17 @@ export function ColorPicker({ value, onChange, subcategoryId, subcategoryIds }: 
                 <div className="grid grid-cols-2 gap-1.5">
                   {uniqueRecs.map((defaultPantone) => {
                     const hex = getPantoneColor(defaultPantone.pantoneCode)
-                    const isActive = value.pantone?.trim().toUpperCase() === defaultPantone.pantoneCode.toUpperCase()
+                    const isActive = normalizePantoneCode(value.pantone || '') === normalizePantoneCode(defaultPantone.pantoneCode)
                     const shared = (codeCount[defaultPantone.pantoneCode] || 0) > 1
                     return (
                       <button
                         key={defaultPantone.pantoneCode}
                         type="button"
-                        onClick={() => onChange({ ...value, pantone: defaultPantone.pantoneCode })}
+                        onClick={() => {
+                          // 切到潘通色号 Tab，写入规范色号（'14-3904' → '14-3904 TCX'），保证可查
+                          const entry = findPantoneEntry(defaultPantone.pantoneCode)
+                          onChange({ ...value, mode: 'pantone', pantone: entry?.code ?? defaultPantone.pantoneCode })
+                        }}
                         title={shared ? `${defaultPantone.label}（两纹样通用）` : `${defaultPantone.label} · ${defaultPantone.pantoneCode}`}
                         className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-sm transition-all ${
                           isActive
@@ -512,12 +522,16 @@ export function ColorPicker({ value, onChange, subcategoryId, subcategoryIds }: 
                     {filteredCodes.map((code) => {
                       const info = Object.values(SUBCATEGORY_PANTONE_MAP).find((p) => p.pantoneCode === code)
                       const hex = getPantoneColor(code) || '#ccc'
-                      const isActive = value.pantone?.trim().toUpperCase() === code.toUpperCase()
+                      const isActive = normalizePantoneCode(value.pantone || '') === normalizePantoneCode(code)
                       return (
                         <button
                           key={code}
                           type="button"
-                          onClick={() => onChange({ ...value, pantone: code })}
+                          onClick={() => {
+                            // 切到潘通色号 Tab，写入规范色号，保证可查
+                            const entry = findPantoneEntry(code)
+                            onChange({ ...value, mode: 'pantone', pantone: entry?.code ?? code })
+                          }}
                           className={`flex flex-col items-center gap-0.5 py-1 px-0.5 rounded-sm border transition-all ${
                             isActive
                               ? 'border-palace-red bg-palace-red/10 shadow-sm'

@@ -12,6 +12,7 @@
 import { GenerationParams, ColorSchemeParams } from '../types/pattern'
 import { getLoraEntry, DEFAULT_LORA_WEIGHT } from '../config/loraMap'
 import { getPantoneForSubcategory } from '../config/generationPresets'
+import { getPantoneHex as getPantoneHexFromMap } from '../config/pantoneMap'
 import { mockGeneratePattern } from './mockGeneration'
 
 export interface PatternGenerationResult {
@@ -49,35 +50,13 @@ function normalizePantone(code: string, opts: { stripTcx?: boolean } = {}): stri
 }
 
 /**
- * 潘通色号 → HEX 映射（与 GenerationParams.tsx pantoneColors 保持一致）
- *
- * 这里只录入 SUBCATEGORY_PANTONE_MAP 用到的 12 条瑞兽子类色号，
- * 不照搬完整 200+ 条表，避免数据冗余维护负担。
- * 如有缺失，buildColorWeightedClause 会优雅降级（不写 HEX，只写色名）。
+ * 潘通色号 → HEX：统一走 src/config/pantoneMap.ts（全应用唯一权威来源），
+ * 与推荐色表、GenerationParams 的 ColorPicker 查询保持一致，
+ * 保证「推荐色一点即中」且 prompt 能拿到对应 HEX。
+ * 支持 '14-3904' 与 '14-3904 TCX' 等价匹配（表内自动生成短号别名）。
  */
-const PANTONE_HEX_MAP: Record<string, string> = {
-  // 瑞兽
-  '18-1662 TCX': '#C3423F', // 宫墙红 dragon/phoenix_bird/dragon_phoenix
-  '19-4052 TCX': '#26364B', // 深藏青 crane
-  '16-1450 TCX': '#E8B4B8', // 藕粉 butterfly
-  '16-4725 TCX': '#1565C0', // 钴蓝 peacock
-  '18-1150 TCX': '#CD853F', // 栗棕 deer
-  '12-0752 TCX': '#D4AF37', // 金色 lion
-  '17-1462 TCX': '#FF6F00', // 橙红 tiger
-  // 花卉
-  '18-1555 TCX': '#E63946', // 朱红 flower_bird
-  '15-1260 TCX': '#7CB342', // 嫩绿 gourd/plant
-  '16-0541 TCX': '#5F9E6E', // 松石绿 interlocking_floral
-}
-
-/** 根据潘通色号查 HEX；支持 '18-1662' 与 '18-1662 TCX' 两种写法匹配到同一色 */
 function getPantoneHex(pantone: string): string | null {
-  const norm = normalizePantone(pantone)
-  if (PANTONE_HEX_MAP[norm]) return PANTONE_HEX_MAP[norm]
-  // 去 TCX 后缀再补回 TCX 后查（如 '18-1662' → '18-1662 TCX'）
-  const stripped = normalizePantone(pantone, { stripTcx: true })
-  if (PANTONE_HEX_MAP[stripped + ' TCX']) return PANTONE_HEX_MAP[stripped + ' TCX']
-  return null
+  return getPantoneHexFromMap(pantone)
 }
 
 /** WebUI 推理默认参数（与 spec 一致） */

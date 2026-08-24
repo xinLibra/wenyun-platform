@@ -14,7 +14,8 @@ type TextureTargetMaterials = Partial<Record<PatternAreaKey, string[]>>
 
 interface Product3DViewerProps {
   modelUrl: string
-  textureTargetMaterial: string
+  /** 目标材质：可为单个材质名或数组（如 tote_bag.json 的 textureTargetMaterial 数组） */
+  textureTargetMaterial: string | string[]
   textureTargetMaterials?: TextureTargetMaterials
   colorMaterials?: ColorMaterial[]
   patternImage?: string | null
@@ -40,12 +41,16 @@ function hexToColor(hex: string): THREE.Color {
 }
 
 function getTextureTargets(
-  textureTargetMaterial: string,
+  textureTargetMaterial: string | string[],
   textureTargetMaterials: TextureTargetMaterials | undefined,
   patternArea: PatternAreaKey
 ): string[] {
   if (textureTargetMaterials?.[patternArea]?.length) {
     return textureTargetMaterials[patternArea] as string[]
+  }
+  if (Array.isArray(textureTargetMaterial)) {
+    // 数组目标：展开为 string[]，避免整段数组当 string 导致 toLowerCase 崩溃
+    return textureTargetMaterial.filter((t): t is string => typeof t === 'string')
   }
   if (textureTargetMaterial) {
     return [textureTargetMaterial]
@@ -69,7 +74,7 @@ function Model({
   patternOpacity = 1,
 }: {
   modelUrl: string
-  textureTargetMaterial: string
+  textureTargetMaterial: string | string[]
   textureTargetMaterials?: TextureTargetMaterials
   colorMaterials?: ColorMaterial[]
   patternImage?: string | null
@@ -129,11 +134,11 @@ function Model({
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
         const mat = mesh.material as THREE.MeshStandardMaterial
-        const names = [mat?.name || '', mesh.name || '', child.name || '']
-          .map((s) => s.toLowerCase().trim())
+        const names = [String(mat?.name ?? ''), String(mesh.name ?? ''), String(child.name ?? '')]
+          .map((s) => String(s ?? '').toLowerCase().trim())
           .filter((s) => s && s !== '-')
         const hitTarget = targets.some((t) => {
-          const tt = (t || '').toLowerCase().trim()
+          const tt = String(t ?? '').toLowerCase().trim()
           if (!tt) return false
           return names.some((n) => {
             if (!n) return false
@@ -170,8 +175,8 @@ function Model({
         const list = Array.isArray(raw) ? raw : [raw]
         ;(list as THREE.MeshStandardMaterial[]).forEach((m, i) => {
           if (!m) return
-          const matName = (m.name || '').toLowerCase().trim()
-          const meshName = (mesh.name || '').toLowerCase().trim()
+          const matName = String(m.name ?? '').toLowerCase().trim()
+          const meshName = String(mesh.name ?? '').toLowerCase().trim()
           const keys = new Set<string>()
           if (matName) keys.add(matName)
           if (meshName) keys.add(meshName)
@@ -197,7 +202,7 @@ function Model({
 
     // 取初始色：按名称匹配，找不到就退回安全色
     const getInitialColor = (names: string[], meshName: string, matIdx: number): THREE.Color => {
-      const byIndex = initialColorsRef.current.get(`${meshName.toLowerCase()}|${matIdx}`)
+      const byIndex = initialColorsRef.current.get(`${String(meshName ?? '').toLowerCase()}|${matIdx}`)
       if (byIndex) return byIndex
       for (const n of names) {
         const c = initialColorsRef.current.get(n)
@@ -247,12 +252,12 @@ function Model({
           mesh.material = mat
         }
 
-        const names = [mat.name || '', mesh.name || '', child.name || '']
-          .map((s) => s.toLowerCase().trim())
+        const names = [String(mat.name ?? ''), String(mesh.name ?? ''), String(child.name ?? '')]
+          .map((s) => String(s ?? '').toLowerCase().trim())
           .filter((s) => s && s !== '-')
 
         const matchTarget = (target: string): boolean => {
-          const t = (target || '').toLowerCase().trim()
+          const t = String(target ?? '').toLowerCase().trim()
           if (!t) return false
           return names.some((n) => {
             if (!n) return false
@@ -281,7 +286,7 @@ function Model({
         // 同时保证"本身就是精确贴图目标的换色部件"仍能贴纹样（抱枕整枕 / T恤胸前）。
         const hitColorMaterial = colorMaterials.some((cm) => matchTarget(cm.materialName))
         const exactTextureTargetHit = targets.some((t) => {
-          const tt = (t || '').toLowerCase().trim()
+          const tt = String(t ?? '').toLowerCase().trim()
           return tt && names.includes(tt)
         })
 
