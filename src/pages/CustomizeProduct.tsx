@@ -19,6 +19,7 @@ import {
   clearPendingPattern,
   SELECTED_PATTERN_GLOBAL_KEY,
 } from '../utils/customizeTransfer'
+import { PosterModal } from '../components/PosterModal'
 
 /** 结构化错误序列化：保留 Supabase PostgrestError 的 message/code/details/hint/status，避免 Console 只显示 Error {} */
 function serializeError(error: any) {
@@ -905,6 +906,57 @@ export default function CustomizeProduct() {
 
   const is3DProduct = !!product3DConfig?.modelUrl
 
+  const [showPosterModal, setShowPosterModal] = useState(false)
+  const [posterMainVisual, setPosterMainVisual] = useState<string | null>(null)
+  const [posterWorkId, setPosterWorkId] = useState<string | null>(null)
+
+  /** 打开海报表单：先捕获主视觉（优先 3D 截图，否则 2D 合成预览图） */
+  const handleOpenPoster = async () => {
+    setShowPosterModal(true)
+    setPosterMainVisual(null)
+    let main: string | null = null
+    if (product3DConfig?.modelUrl && viewerCaptureRef.current) {
+      main = viewerCaptureRef.current()
+    }
+    if (!main) {
+      try {
+        main = await generatePreviewDataUrl(
+          {
+            productImage: currentProduct?.image || '',
+            patternImage: selectedPatternImage,
+            layoutMode,
+            scale,
+            rotation,
+            positionX,
+            positionY,
+            blendMode,
+            textOverlay,
+            textFont,
+            textSize,
+            textPositionX,
+            textPositionY,
+            textRotation,
+            canvasWidth: 900,
+            canvasHeight: 900,
+          },
+          900
+        )
+      } catch (e) {
+        console.warn('[Poster] 合成预览失败，退回产品图:', e)
+        main = currentProduct?.image || null
+      }
+    }
+    setPosterMainVisual(main)
+    // 尝试读取作品 id，供二维码「作品公开页」选项
+    try {
+      const raw = safeSessionGet(SELECTED_PATTERN_GLOBAL_KEY)
+      const parsed = raw ? JSON.parse(raw) : null
+      setPosterWorkId(parsed?.id || null)
+    } catch {
+      setPosterWorkId(null)
+    }
+  }
+
   const handleAddToCart = () => {
     setQuantityAction('cart')
     setQuantity(1)
@@ -1348,6 +1400,7 @@ export default function CustomizeProduct() {
                     {isBuying ? '处理中...' : '立即购买'}
                   </StampButton>
                 </div>
+                <Button variant="outline" onClick={handleOpenPoster} className="w-full">生成海报</Button>
               </div>
             </FrameDecorations>
 
@@ -2260,6 +2313,14 @@ export default function CustomizeProduct() {
         </AnimatePresence>
       </div>
       
+      <PosterModal
+        open={showPosterModal}
+        onClose={() => setShowPosterModal(false)}
+        productName={currentProduct?.name || ''}
+        mainVisual={posterMainVisual}
+        workId={posterWorkId}
+      />
+
       <AnimatePresence>
         {showToast && (
           <motion.div
