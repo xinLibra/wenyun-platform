@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
@@ -145,10 +145,16 @@ export default function Gallery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detailId, location.pathname])
 
-  // 列表渲染后按 id 批量补图（并发 3）：把取到的 image_url 填回对应卡片，单条失败只影响该卡
+  // 列表渲染后按 id 批量补图（严格串行 1、单条 45s）：把取到的 image_url 填回对应卡片。
+  // requestedIdsRef 记住已请求过的 id：effect 依赖 works 每次变化时不会对同一批 id 重复补拉；
+  // 失败也不自动重试（与「我的作品」策略一致），避免同一 id 反复 FAIL 的重试风暴。
+  const requestedIdsRef = useRef(new Set<string>())
   useEffect(() => {
-    const pendingIds = works.filter((w) => !w.image).map((w) => w.id)
+    const pendingIds = works
+      .filter((w) => !w.image && !requestedIdsRef.current.has(w.id))
+      .map((w) => w.id)
     if (pendingIds.length === 0) return
+    pendingIds.forEach((id) => requestedIdsRef.current.add(id))
     loadImagesConcurrently(pendingIds, (id, url) => {
       setWorks((prev) => prev.map((w) => (w.id === id ? { ...w, image: url } : w)))
     })

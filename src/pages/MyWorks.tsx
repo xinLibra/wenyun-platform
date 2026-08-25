@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase, Generation } from '../lib/supabase'
@@ -88,6 +88,9 @@ export default function MyWorksPage() {
   const [detailWork, setDetailWork] = useState<Generation | null>(null)
   const [failedIds, setFailedIds] = useState<Set<string>>(() => new Set())
   const [retryTick, setRetryTick] = useState(0)
+  // failedIds 只作补图过滤依据，不进 effect 依赖：失败后不重跑补图（避免重试风暴），手动重试由 retryTick 触发
+  const failedIdsRef = useRef(failedIds)
+  failedIdsRef.current = failedIds
 
   useEffect(() => {
     let mounted = true
@@ -241,21 +244,6 @@ export default function MyWorksPage() {
             })
         }
 
-        // 优先批量取回已是 Storage 短链的缩略图（几十~几百字节，直接 img src，
-        // 不必逐条补拉）；历史 data: base64 行由 WorkImage 进入视口后再按需单条补拉
-        if (generationIds.length > 0) {
-          fetchHttpImageUrls(generationIds)
-            .then((shortMap) => {
-              if (!mounted || Object.keys(shortMap).length === 0) return
-              setGenerations((prev) =>
-                prev.map((g) => (shortMap[g.id] ? { ...g, image_url: shortMap[g.id] } : g))
-              )
-            })
-            .catch((e: any) => {
-              if (!mounted) return
-              console.warn('[MyWorks] fetch short image urls failed:', e?.message ?? e)
-            })
-        }
       } catch (err) {
         const anyErr = err as any
         // 禁止空 Error {}：显式拆出 message / code / hint，无则标记 unknown
@@ -282,41 +270,58 @@ export default function MyWorksPage() {
     }
   }, [navigate, reloadKey])
 
-  // 列表渲染后补图：按 id 逐条 select id, image_url（并发 2、单条 15s 超时）。
-  // 成功 → setState 回填该卡 src 替换占位；失败 → 标记 failedIds，卡片显示「加载失败」可重试。
-  // 依赖只取 isLoading/failedIds/retryTick：数据就绪时跑一次、用户点重试时再跑，
-  // 不随每次 setGenerations 重跑，避免把已发出的请求 cleanup 取消重发导致永远 loading。
+  // 列表渲染后补图（一条链路，不重复请求）：
+  // 1) 先批量预取 Storage 短链（http 行直接 img src 显示，不走 base64 下载）；
+  // 2) 仅剩的 data: base64 历史行再按 id 严格串行补拉（并发 1、单条 45s）。
+  // 成功 → setState 回填该卡 src 替换占位；失败 → 标记 failedIds（不做自动重试），卡片显示「加载失败」可手动重试。
+  // 依赖只取 isLoading/retryTick：数据就绪时跑一次、手动点重试时再跑。
+  // failedIds 经 ref 读取（不放进依赖）：失败后不重跑本 effect，杜绝同一 id 反复 FAIL 的重试风暴。
+  // 每 id 的 ok/fail 只由 [imageLoader] 打一次（不在此重复打印，减少刷屏）。
   useEffect(() => {
     if (isLoading) return
-    const pendingIds = generations
-      .filter((g) => isPlaceholderUrl(g.image_url) && !failedIds.has(g.id))
-      .map((g) => g.id)
-    if (pendingIds.length === 0) return
     let cancelled = false
-    loadImagesConcurrently(
-      pendingIds,
-      (id, url) => {
-        if (cancelled) return
-        console.log(`[MyWorks] image OK: ${id} (${(url.length / 1024).toFixed(1)} KB)`)
-        setGenerations((prev) => prev.map((g) => (g.id === id ? { ...g, image_url: url } : g)))
-      },
-      2,
-      (id, reason) => {
-        if (cancelled) return
-        console.log(`[MyWorks] image FAIL: ${id} (${reason})`)
-        setFailedIds((prev) => {
-          const next = new Set(prev)
-          next.add(id)
-          return next
-        })
+    const run = async () => {
+      const ids = generations.map((g) => g.id)
+      // 1) 短链预取：http 行直接回填，不需要走逐条补拉
+      const shortMap = ids.length > 0 ? await fetchHttpImageUrls(ids) : {}
+      if (cancelled) return
+      if (Object.keys(shortMap).length > 0) {
+        setGenerations((prev) =>
+          prev.map((g) => (shortMap[g.id] ? { ...g, image_url: shortMap[g.id] } : g))
+        )
       }
-    )
+      // 2) 仍占位的 data: base64 历史行：严格串行补拉（并发 1、单条 45s）
+      const pendingIds = generations
+        .filter(
+          (g) => isPlaceholderUrl(g.image_url) && !shortMap[g.id] && !failedIdsRef.current.has(g.id)
+        )
+        .map((g) => g.id)
+      if (pendingIds.length === 0) return
+      await loadImagesConcurrently(
+        pendingIds,
+        (id, url) => {
+          if (cancelled) return
+          setGenerations((prev) => prev.map((g) => (g.id === id ? { ...g, image_url: url } : g)))
+        },
+        1,
+        (id) => {
+          if (cancelled) return
+          setFailedIds((prev) => {
+            const next = new Set(prev)
+            next.add(id)
+            return next
+          })
+        },
+        45000
+      )
+    }
+    run()
     // 只在页面卸载时取消回调；不随每次渲染取消已发出的请求
     return () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, failedIds, retryTick])
+  }, [isLoading, retryTick])
 
   const handlePublicToggle = async (generationId: string, currentPublic: boolean) => {
     const newValue = !currentPublic
@@ -424,7 +429,7 @@ export default function MyWorksPage() {
     // 详情大图需要真实 image_url：若列表还没取到，先单条补拉（15s 超时，失败仍打开占位）
     if (isPlaceholderUrl(target.image_url)) {
       try {
-        const imgUrl = await fetchGenerationImage(target.id, 15000)
+        const imgUrl = await fetchGenerationImage(target.id, 45000)
         target = { ...target, image_url: imgUrl }
         setGenerations((prev) => prev.map((g) => (g.id === target.id ? target : g)))
       } catch (e: any) {

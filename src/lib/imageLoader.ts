@@ -27,17 +27,18 @@ export function isPlaceholderUrl(url: string | undefined | null): boolean {
 }
 
 /**
- * 列表渲染后按 id 批量补拉 image_url（并发受限，默认 2）。
+ * 列表渲染后按 id 批量补拉 image_url（严格串行并发 1、单条 45s 超时）。
  * 列表查询不投影 image_url（历史 data: base64 大字段是 statement timeout 元凶），
  * 由本函数在渲染后逐条取回，回填到对应卡片 <img>；
  * 单条成功/失败都会在 console 打出该 id 的 ok/fail，失败经 onFailure 回传供卡片显示「加载失败」可重试。
+ * 每个 id 在单次调用内只处理一次、失败不做自动重试（重试由调用方手动按钮触发），避免同一 id 反复 FAIL。
  */
 export async function loadImagesConcurrently(
   ids: string[],
   onResult: (id: string, url: string) => void,
-  concurrency = 2,
+  concurrency = 1,
   onFailure?: (id: string, reason: string) => void,
-  timeoutMs = 15000
+  timeoutMs = 45000
 ): Promise<void> {
   if (ids.length === 0) return
   let cursor = 0
@@ -113,7 +114,7 @@ export async function fetchHttpImageUrls(ids: string[]): Promise<Record<string, 
  * 单条按 id 取 image_url（补拉历史 data: base64；http 短链已在列表直取）。
  * 用于卡片进入视口后按需加载、详情/下载补图，单条短超时，失败抛错由调用方兜底。
  */
-export async function fetchGenerationImage(id: string, timeoutMs = 15000): Promise<string> {
+export async function fetchGenerationImage(id: string, timeoutMs = 45000): Promise<string> {
   const { data, error } = await withTimeout(
     supabase.from('generations').select('image_url').eq('id', id).single(),
     timeoutMs,
