@@ -2,10 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   POSTER_TEMPLATES,
+  POSTER_FONT_OPTIONS,
   renderPoster,
   downloadPoster,
   formatToday,
+  ELEMENT_BOUNDS,
+  DEFAULT_TITLE_EL,
+  DEFAULT_SUBTITLE_EL,
+  DEFAULT_DATE_EL,
   type PosterTemplateId,
+  type PosterFontKey,
+  type PosterTextElement,
+  type RenderedElements,
+  POSTER_WIDTH,
 } from '../lib/poster'
 import { Button } from './ui/Button'
 
@@ -15,35 +24,47 @@ interface PosterModalProps {
   productName: string
   /** 主视觉（3D 截图或 2D 合成预览的 dataURL；null 表示还在生成中） */
   mainVisual: string | null
-  /** 作品 id（供二维码「作品公开页」选项；无则禁用该选项） */
-  workId?: string | null
   siteName?: string
 }
 
-const DEFAULT_LOGO = '/纹韵logo-透明背景.png'
+const DEFAULT_LOGO = '/logo-icon.svg'
 const DEFAULT_SITE_NAME = '纹韵 · AI非遗纹样设计平台'
+
+/** 各元素字号范围 */
+const SIZE_RANGE: Record<'title' | 'subtitle' | 'date', { min: number; max: number }> = {
+  title: { min: 40, max: 120 },
+  subtitle: { min: 18, max: 56 },
+  date: { min: 18, max: 48 },
+}
+
+type DragKey = 'title' | 'subtitle' | 'date'
+
+function clamp(v: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, v))
+}
 
 export function PosterModal({
   open,
   onClose,
   productName,
   mainVisual,
-  workId,
   siteName = DEFAULT_SITE_NAME,
 }: PosterModalProps) {
   const [templateId, setTemplateId] = useState<PosterTemplateId>('mo_yun')
   const [title, setTitle] = useState('')
   const [subtitle, setSubtitle] = useState('')
-  const [dateText, setDateText] = useState('')
-  const [logoMode, setLogoMode] = useState<'default' | 'custom'>('default')
-  const [logoUrl, setLogoUrl] = useState(DEFAULT_LOGO)
-  const [qrTarget, setQrTarget] = useState<'home' | 'work' | 'custom'>('home')
-  const [customUrl, setCustomUrl] = useState('')
+  // 可拖拽文字元素：位置 / 字体 / 字号（日期自动取当天，不提供输入框）
+  const [titleEl, setTitleEl] = useState<PosterTextElement>(DEFAULT_TITLE_EL)
+  const [subtitleEl, setSubtitleEl] = useState<PosterTextElement>(DEFAULT_SUBTITLE_EL)
+  const [dateEl, setDateEl] = useState<PosterTextElement>(DEFAULT_DATE_EL)
 
   const [previewUrl, setPreviewUrl] = useState('')
   const [renderError, setRenderError] = useState('')
   const posterCanvasRef = useRef<HTMLCanvasElement | null>(null)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const previewRef = useRef<HTMLImageElement | null>(null)
+  /** 最近一次渲染的文字元素包围盒，用于预览命中检测 */
+  const elementsRef = useRef<RenderedElements | null>(null)
+  const dragRef = useRef<{ key: DragKey; dx: number; dy: number } | null>(null)
 
   // 打开时初始化表单
   useEffect(() => {
@@ -51,64 +72,58 @@ export function PosterModal({
     setTemplateId('mo_yun')
     setTitle(productName ? `${productName} · 定制` : '纹韵定制')
     setSubtitle('')
-    setDateText(formatToday())
-    setLogoMode('default')
-    setLogoUrl(DEFAULT_LOGO)
-    setQrTarget('home')
-    setCustomUrl('')
+    setTitleEl(DEFAULT_TITLE_EL)
+    setSubtitleEl(DEFAULT_SUBTITLE_EL)
+    setDateEl(DEFAULT_DATE_EL)
     setPreviewUrl('')
     setRenderError('')
+    dragRef.current = null
   }, [open, productName])
 
-  // 二维码链接（可配置：平台首页 / 作品公开页 / 自定义）
+  // 日期自动取当天（无输入框）
+  const dateText = useMemo(() => formatToday(), [])
+
+  // 二维码统一链接平台首页
   const qrValue = useMemo(() => {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    if (qrTarget === 'work' && workId) return `${origin}/gallery/${workId}`
-    if (qrTarget === 'custom' && customUrl.trim()) return customUrl.trim()
     return `${origin}/`
-  }, [qrTarget, workId, customUrl])
+  }, [])
 
-  // 合成海报（防抖，表单变化后自动重绘）
+  // 合成海报（防抖，表单/拖动变化后自动重绘；图片已缓存，拖动不会重新 decode）
   useEffect(() => {
     if (!open || !mainVisual) return
     let cancelled = false
     const timer = setTimeout(async () => {
       try {
         const template = POSTER_TEMPLATES.find((t) => t.id === templateId) ?? POSTER_TEMPLATES[0]
-        const canvas = await renderPoster({
+        const { canvas, elements } = await renderPoster({
           template,
           title: title.trim() || (productName ? `${productName} · 定制` : '纹韵定制'),
           subtitle: subtitle.trim(),
-          dateText: dateText || formatToday(),
-          logoUrl,
+          dateText,
+          logoUrl: DEFAULT_LOGO,
           mainVisual,
           qrValue,
           siteName,
+          titleEl,
+          subtitleEl,
+          dateEl,
         })
         if (cancelled) return
         posterCanvasRef.current = canvas
+        elementsRef.current = elements
         setPreviewUrl(canvas.toDataURL('image/png'))
         setRenderError('')
       } catch (e: any) {
         if (cancelled) return
         setRenderError(e?.message || '海报生成失败')
       }
-    }, 250)
+    }, 120)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [open, mainVisual, templateId, title, subtitle, dateText, logoUrl, qrValue, productName, siteName])
-
-  const handleLogoUpload = (file: File | undefined) => {
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      setLogoUrl(String(reader.result))
-      setLogoMode('custom')
-    }
-    reader.readAsDataURL(file)
-  }
+  }, [open, mainVisual, templateId, title, subtitle, dateText, titleEl, subtitleEl, dateEl, productName, siteName, qrValue])
 
   const handleDownload = (format: 'png' | 'jpg') => {
     if (!posterCanvasRef.current) {
@@ -118,7 +133,107 @@ export function PosterModal({
     downloadPoster(posterCanvasRef.current, format)
   }
 
+  // ---------- 预览拖拽 ----------
+
+  /** 将鼠标屏幕坐标映射为海报（1080×1440）坐标 */
+  const getPosterPoint = (clientX: number, clientY: number) => {
+    const el = previewRef.current
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    if (r.width <= 0) return null
+    const scale = r.width / POSTER_WIDTH
+    return { x: (clientX - r.left) / scale, y: (clientY - r.top) / scale }
+  }
+
+  /** 命中检测：鼠标点是否落在某个可拖文字元素上 */
+  const hitTest = (p: { x: number; y: number }): DragKey | null => {
+    const els = elementsRef.current
+    if (!els) return null
+    const candidates: Array<[DragKey, { x: number; y: number; w: number; h: number } | null]> = [
+      ['title', els.title],
+      ['subtitle', els.subtitle],
+      ['date', els.date],
+    ]
+    for (const [key, box] of candidates) {
+      if (!box) continue
+      const rx = Math.max(box.w / 2 + 24, 48)
+      const ry = Math.max(box.h / 2 + 20, 44)
+      if (Math.abs(p.x - box.x) <= rx && Math.abs(p.y - box.y) <= ry) return key
+    }
+    return null
+  }
+
+  const handlePreviewPointerDown = (e: React.PointerEvent<HTMLImageElement>) => {
+    const p = getPosterPoint(e.clientX, e.clientY)
+    if (!p) return
+    const key = hitTest(p)
+    if (!key) return
+    const box = elementsRef.current?.[key]
+    if (!box) return
+    dragRef.current = { key, dx: box.x - p.x, dy: box.y - p.y }
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    e.currentTarget.style.cursor = 'move'
+  }
+
+  const handlePreviewPointerMove = (e: React.PointerEvent<HTMLImageElement>) => {
+    const drag = dragRef.current
+    const p = getPosterPoint(e.clientX, e.clientY)
+    if (!p) return
+    if (drag) {
+      const x = clamp(Math.round(p.x + drag.dx), ELEMENT_BOUNDS.xMin, ELEMENT_BOUNDS.xMax)
+      const y = clamp(Math.round(p.y + drag.dy), ELEMENT_BOUNDS.yMin, ELEMENT_BOUNDS.yMax)
+      if (drag.key === 'title') setTitleEl((s) => ({ ...s, x, y }))
+      else if (drag.key === 'subtitle') setSubtitleEl((s) => ({ ...s, x, y }))
+      else setDateEl((s) => ({ ...s, x, y }))
+      return
+    }
+    // 未在拖动：悬停到元素上时提示可拖
+    e.currentTarget.style.cursor = hitTest(p) ? 'move' : 'grab'
+  }
+
+  const handlePreviewPointerUp = (e: React.PointerEvent<HTMLImageElement>) => {
+    dragRef.current = null
+    e.currentTarget.style.cursor = 'grab'
+  }
+
   const ready = !!mainVisual && !!previewUrl && !renderError
+
+  const renderStyleRow = (
+    label: string,
+    value: PosterTextElement,
+    onChange: (v: PosterTextElement) => void,
+    sizeRange: { min: number; max: number }
+  ) => (
+    <div className="flex items-center gap-2">
+      <span className="font-song text-xs text-deep-blue w-14 shrink-0">{label}</span>
+      <select
+        value={value.font}
+        onChange={(e) => onChange({ ...value, font: e.target.value as PosterFontKey })}
+        className="px-2 py-1.5 border border-deep-blue-200 rounded-sm font-song text-sm text-deep-blue bg-white focus:border-palace-red outline-none"
+      >
+        {POSTER_FONT_OPTIONS.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <input
+        type="number"
+        min={sizeRange.min}
+        max={sizeRange.max}
+        step={1}
+        value={value.size}
+        onChange={(e) =>
+          onChange({
+            ...value,
+            size: clamp(Number(e.target.value) || sizeRange.min, sizeRange.min, sizeRange.max),
+          })
+        }
+        className="w-20 px-2 py-1.5 border border-deep-blue-200 rounded-sm font-song text-sm text-deep-blue focus:border-palace-red outline-none"
+        title="字号"
+      />
+    </div>
+  )
 
   return (
     <AnimatePresence>
@@ -205,10 +320,23 @@ export function PosterModal({
                   />
                 </div>
 
+                {/* 文字样式：字体 + 字号（可在预览拖拽位置） */}
+                <div>
+                  <label className="font-song text-sm text-deep-blue mb-2 block">
+                    文字样式{' '}
+                    <span className="text-deep-blue-light text-xs">（在右侧预览中可直接拖动标题 / 一句话 / 日期）</span>
+                  </label>
+                  <div className="flex flex-col gap-2">
+                    {renderStyleRow('标题', titleEl, setTitleEl, SIZE_RANGE.title)}
+                    {renderStyleRow('一句话', subtitleEl, setSubtitleEl, SIZE_RANGE.subtitle)}
+                    {renderStyleRow('日期', dateEl, setDateEl, SIZE_RANGE.date)}
+                  </div>
+                </div>
+
                 {/* 日期（自动） */}
                 <div>
                   <label className="font-song text-sm text-deep-blue mb-2 block">
-                    日期 <span className="text-deep-blue-light">（自动生成）</span>
+                    日期 <span className="text-deep-blue-light">（自动取当天）</span>
                   </label>
                   <input
                     value={dateText}
@@ -217,98 +345,18 @@ export function PosterModal({
                   />
                 </div>
 
-                {/* Logo */}
+                {/* Logo（统一站内默认 Logo） */}
                 <div>
-                  <label className="font-song text-sm text-deep-blue mb-2 block">网站 Logo</label>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLogoMode('default')
-                        setLogoUrl(DEFAULT_LOGO)
-                      }}
-                      className={`px-3 py-1.5 rounded-sm border-2 font-song text-sm transition-all ${
-                        logoMode === 'default'
-                          ? 'border-palace-red text-palace-red'
-                          : 'border-deep-blue-100 text-deep-blue'
-                      }`}
-                    >
-                      使用默认
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`px-3 py-1.5 rounded-sm border-2 font-song text-sm transition-all ${
-                        logoMode === 'custom'
-                          ? 'border-palace-red text-palace-red'
-                          : 'border-deep-blue-100 text-deep-blue'
-                      }`}
-                    >
-                      上传 Logo
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      onChange={(e) => handleLogoUpload(e.target.files?.[0])}
+                  <label className="font-song text-sm text-deep-blue mb-2 block">
+                    网站 Logo <span className="text-deep-blue-light">（统一使用站内默认）</span>
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={DEFAULT_LOGO}
+                      alt="网站 Logo"
+                      className="h-9 w-auto object-contain text-palace-red"
                     />
-                    {logoUrl && (
-                      <img
-                        src={logoUrl}
-                        alt="logo"
-                        className="h-8 w-auto object-contain border border-deep-blue-100 rounded-sm p-0.5"
-                      />
-                    )}
-                  </div>
-                </div>
-
-                {/* 二维码链接 */}
-                <div>
-                  <label className="font-song text-sm text-deep-blue mb-2 block">二维码链接</label>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex gap-3 flex-wrap">
-                      <label className="flex items-center gap-1.5 font-song text-sm text-deep-blue cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={qrTarget === 'home'}
-                          onChange={() => setQrTarget('home')}
-                        />
-                        平台首页
-                      </label>
-                      <label
-                        className={`flex items-center gap-1.5 font-song text-sm cursor-pointer ${
-                          workId ? 'text-deep-blue' : 'text-deep-blue-light'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          checked={qrTarget === 'work'}
-                          disabled={!workId}
-                          onChange={() => setQrTarget('work')}
-                        />
-                        作品公开页
-                      </label>
-                      <label className="flex items-center gap-1.5 font-song text-sm text-deep-blue cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={qrTarget === 'custom'}
-                          onChange={() => setQrTarget('custom')}
-                        />
-                        自定义
-                      </label>
-                    </div>
-                    {qrTarget === 'custom' && (
-                      <input
-                        value={customUrl}
-                        onChange={(e) => setCustomUrl(e.target.value.slice(0, 200))}
-                        placeholder="https://…"
-                        className="w-full px-3 py-2 border border-deep-blue-200 rounded-sm font-song text-deep-blue focus:border-palace-red outline-none"
-                      />
-                    )}
-                    {qrTarget === 'work' && !workId && (
-                      <p className="font-song text-xs text-palace-red">当前未关联作品，暂不可选</p>
-                    )}
+                    <span className="font-song text-sm text-deep-blue-light">纹韵 · AI非遗纹样设计平台</span>
                   </div>
                 </div>
 
@@ -321,9 +369,7 @@ export function PosterModal({
                     下载 JPG
                   </Button>
                 </div>
-                {renderError && (
-                  <p className="font-song text-sm text-palace-red">{renderError}</p>
-                )}
+                {renderError && <p className="font-song text-sm text-palace-red">{renderError}</p>}
               </div>
 
               {/* 右侧：预览 */}
@@ -334,16 +380,23 @@ export function PosterModal({
                     <p className="font-song text-deep-blue-light">正在生成主视觉…</p>
                   ) : previewUrl ? (
                     <img
+                      ref={previewRef}
                       src={previewUrl}
                       alt="海报预览"
-                      className="max-h-[70vh] w-auto max-w-full object-contain rounded-sm shadow-lg"
+                      draggable={false}
+                      onPointerDown={handlePreviewPointerDown}
+                      onPointerMove={handlePreviewPointerMove}
+                      onPointerUp={handlePreviewPointerUp}
+                      onPointerCancel={handlePreviewPointerUp}
+                      className="max-h-[70vh] w-auto max-w-full object-contain rounded-sm shadow-lg select-none"
+                      style={{ touchAction: 'none', cursor: 'grab' }}
                     />
                   ) : (
                     <p className="font-song text-deep-blue-light">海报合成中…</p>
                   )}
                 </div>
                 <p className="font-song text-xs text-deep-blue-light">
-                  主视觉优先使用 3D 截图；未启用 3D 时自动使用定制合成效果图。
+                  拖动标题 / 一句话 / 日期可调整位置；导出 PNG/JPG 与预览一致。主视觉优先使用 3D 截图。
                 </p>
               </div>
             </div>

@@ -34,3 +34,44 @@ export async function downloadImage(
   // 延迟释放，避免个别浏览器在下载完成前 revoke 导致失败
   setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
 }
+
+function loadImageForCanvas(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('图片加载失败，无法转换格式'))
+    img.src = url
+  })
+}
+
+/**
+ * 按指定格式下载图片：PNG 直接走 downloadImage；
+ * JPG 需经 Canvas 合成（白底填充防透明区变黑）后导出 JPEG。
+ * 远程 URL 需服务端允许 CORS（Supabase Storage 已开启），否则会抛错。
+ */
+export async function downloadImageAsFormat(
+  urlOrDataUrl: string,
+  filename: string,
+  format: 'png' | 'jpg'
+): Promise<void> {
+  if (format === 'png') return downloadImage(urlOrDataUrl, filename)
+
+  const img = await loadImageForCanvas(urlOrDataUrl)
+  const canvas = document.createElement('canvas')
+  canvas.width = img.naturalWidth || img.width || 1
+  canvas.height = img.naturalHeight || img.height || 1
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('无法创建画布，格式转换失败')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(img, 0, 0)
+
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.92)
+  const a = document.createElement('a')
+  a.href = dataUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}

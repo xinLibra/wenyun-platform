@@ -28,7 +28,7 @@ import {
 } from '../data/patternTaxonomy'
 import { getFusionRecommendations } from '../config/fusionRecommendations'
 import { getFusionPairPreset } from '../config/fusionPairPresets'
-import { downloadImage } from '../utils/downloadImage'
+import { downloadImage, downloadImageAsFormat } from '../utils/downloadImage'
 import {
   writePendingPattern,
   writeGlobalSelectedPattern,
@@ -589,6 +589,26 @@ export default function CreatePattern() {
     } catch (err) {
       console.error('[CreatePattern] 分享降级下载失败:', err)
       showToastMessage('分享失败，请重试')
+    }
+  }
+
+  /** 生成结果下载：可选 PNG / JPG（AI 生成与纹样融合共用） */
+  const handleResultDownload = async (format: 'png' | 'jpg') => {
+    const imgUrl = createMode === 'fusion' ? fusionResultImage : generatedImage
+    if (!imgUrl) {
+      showToastMessage('请先生成纹样后再下载')
+      return
+    }
+    try {
+      await downloadImageAsFormat(
+        imgUrl,
+        `纹韵纹样_${Date.now()}.${format === 'jpg' ? 'jpg' : 'png'}`,
+        format
+      )
+      showToastMessage('图片已开始下载')
+    } catch (err) {
+      console.error('[CreatePattern] 下载失败:', err)
+      showToastMessage('下载失败，请检查网络或图片链接后重试')
     }
   }
 
@@ -1881,22 +1901,18 @@ export default function CreatePattern() {
                 />
               </div>
               
-              <div className="mt-4 flex justify-center">
+              <div className="mt-4 flex justify-center gap-3">
                 <button
-                  onClick={async () => {
-                    const imgUrl = createMode === 'fusion' ? fusionResultImage : generatedImage
-                    if (!imgUrl) return
-                    try {
-                      await downloadImage(imgUrl, `纹韵纹样_${Date.now()}.png`)
-                      showToastMessage('图片已开始下载')
-                    } catch (err) {
-                      console.error('下载失败:', err)
-                      showToastMessage('下载失败，请检查网络或图片链接后重试')
-                    }
-                  }}
+                  onClick={() => handleResultDownload('png')}
                   className="px-6 py-3 bg-palace-red text-rice-paper font-song rounded-sm hover:bg-palace-red-dark transition-colors shadow-md"
                 >
-                  下载图片
+                  下载 PNG
+                </button>
+                <button
+                  onClick={() => handleResultDownload('jpg')}
+                  className="px-6 py-3 border-2 border-rice-paper/80 text-rice-paper font-song rounded-sm hover:bg-rice-paper/10 transition-colors"
+                >
+                  下载 JPG
                 </button>
               </div>
               

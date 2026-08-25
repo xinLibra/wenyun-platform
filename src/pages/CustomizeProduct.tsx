@@ -908,7 +908,6 @@ export default function CustomizeProduct() {
 
   const [showPosterModal, setShowPosterModal] = useState(false)
   const [posterMainVisual, setPosterMainVisual] = useState<string | null>(null)
-  const [posterWorkId, setPosterWorkId] = useState<string | null>(null)
 
   /** 打开海报表单：先捕获主视觉（优先 3D 截图，否则 2D 合成预览图） */
   const handleOpenPoster = async () => {
@@ -947,14 +946,6 @@ export default function CustomizeProduct() {
       }
     }
     setPosterMainVisual(main)
-    // 尝试读取作品 id，供二维码「作品公开页」选项
-    try {
-      const raw = safeSessionGet(SELECTED_PATTERN_GLOBAL_KEY)
-      const parsed = raw ? JSON.parse(raw) : null
-      setPosterWorkId(parsed?.id || null)
-    } catch {
-      setPosterWorkId(null)
-    }
   }
 
   const handleAddToCart = () => {
@@ -2318,7 +2309,6 @@ export default function CustomizeProduct() {
         onClose={() => setShowPosterModal(false)}
         productName={currentProduct?.name || ''}
         mainVisual={posterMainVisual}
-        workId={posterWorkId}
       />
 
       <AnimatePresence>

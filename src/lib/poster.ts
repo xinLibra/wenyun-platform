@@ -1,7 +1,7 @@
 // 海报合成引擎：纯前端 Canvas，不依赖 AI 场景生成。
 // 背景模板为代码绘制的静态渐变 + 装饰（模板用静态图即可的等价实现，无需图片资源）；
 // 主视觉用当前定制效果图（优先 3D canvas 截图，否则 2D 合成预览图）；
-// 右下角生成二维码（链接可配置），最终输出 PNG/JPG 下载。
+// 右下角生成二维码（统一链接平台首页），最终输出 PNG/JPG 下载。
 import * as QRCode from 'qrcode'
 
 export type PosterTemplateId = 'mo_yun' | 'liu_jin' | 'zhu_sha' | 'qing_lv' | 'su_ya'
@@ -22,6 +22,8 @@ export interface PosterTemplate {
   qrDark: string
   /** 装饰样式 */
   decoration: 'ink' | 'rings' | 'seal' | 'mountains' | 'plain'
+  /** 深色背景模板：Logo 需反白着色才可见 */
+  isDark?: boolean
 }
 
 export const POSTER_TEMPLATES: PosterTemplate[] = [
@@ -46,6 +48,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     subtitleColor: '#c9d4e6',
     qrDark: '#17304f',
     decoration: 'rings',
+    isDark: true,
   },
   {
     id: 'zhu_sha',
@@ -82,28 +85,74 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
   },
 ]
 
+/** 文字字体（与定制页字体对齐：书法/宋/黑/楷） */
+export type PosterFontKey = 'shufa' | 'song' | 'hei' | 'kai'
+
+export const POSTER_FONT_OPTIONS: ReadonlyArray<{
+  key: PosterFontKey
+  label: string
+  family: string
+}> = [
+  { key: 'shufa', label: '书法体', family: '"Ma Shan Zheng", "KaiTi", serif' },
+  { key: 'song', label: '宋体', family: '"Noto Serif SC", "Songti SC", serif' },
+  { key: 'hei', label: '黑体', family: '"Noto Sans SC", "Microsoft YaHei", sans-serif' },
+  { key: 'kai', label: '楷体', family: '"KaiTi", "STKaiti", serif' },
+]
+
+export const FONT_FAMILY: Record<PosterFontKey, string> = POSTER_FONT_OPTIONS.reduce(
+  (acc, o) => {
+    acc[o.key] = o.family
+    return acc
+  },
+  {} as Record<PosterFontKey, string>
+)
+
+/** 可拖拽文字元素：位置为中心点（1080×1440 坐标系），可调字体与字号 */
+export interface PosterTextElement {
+  x: number
+  y: number
+  font: PosterFontKey
+  size: number
+}
+
+export const DEFAULT_TITLE_EL: PosterTextElement = { x: 540, y: 284, font: 'shufa', size: 76 }
+export const DEFAULT_SUBTITLE_EL: PosterTextElement = { x: 540, y: 368, font: 'song', size: 30 }
+export const DEFAULT_DATE_EL: PosterTextElement = { x: 150, y: 1140, font: 'song', size: 30 }
+
+/** 元素可拖范围（海报坐标） */
+export const ELEMENT_BOUNDS = { xMin: 70, yMin: 70, xMax: 1080 - 70, yMax: 1440 - 70 }
+
 export interface PosterOptions {
   template: PosterTemplate
   /** 主标题（限 12 字） */
   title: string
   /** 一句话（限 30 字） */
   subtitle: string
-  /** 日期文案（自动生成，如 2026年8月25日） */
+  /** 日期文案（自动取当天） */
   dateText: string
-  /** Logo 图（dataURL 或同源 http 地址；失败自动降级为文字） */
+  /** Logo 图（统一使用站内默认 Logo；失败自动降级为文字） */
   logoUrl: string
   /** 主视觉图（3D 截图 / 2D 合成预览 dataURL） */
   mainVisual: string
-  /** 二维码内容（URL） */
+  /** 二维码内容（平台首页 URL） */
   qrValue: string
   /** 站点名 */
   siteName: string
+  /** 标题元素（位置 / 字体 / 字号，缺省用默认） */
+  titleEl?: Partial<PosterTextElement>
+  /** 一句话元素 */
+  subtitleEl?: Partial<PosterTextElement>
+  /** 日期元素 */
+  dateEl?: Partial<PosterTextElement>
 }
 
 export const POSTER_WIDTH = 1080
 export const POSTER_HEIGHT = 1440
 
 // ---------- 基础工具 ----------
+
+/** 图片缓存：拖动调位置时避免每次重新 decode 主视觉/LoGo */
+const imageCache = new Map<string, Promise<HTMLImageElement>>()
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -113,6 +162,18 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error(`图片加载失败: ${src.slice(0, 80)}…`))
     img.src = src
   })
+}
+
+function loadImageCached(src: string): Promise<HTMLImageElement> {
+  let p = imageCache.get(src)
+  if (!p) {
+    p = loadImage(src).catch((e) => {
+      imageCache.delete(src)
+      throw e
+    })
+    imageCache.set(src, p)
+  }
+  return p
 }
 
 function roundRect(
@@ -269,12 +330,95 @@ function drawDecorations(
   }
 }
 
+// ---------- 文字元素 ----------
+
+export interface RenderedElementBox {
+  /** 中心 x */
+  x: number
+  /** 中心 y */
+  y: number
+  w: number
+  h: number
+}
+
+export interface RenderedElements {
+  title: RenderedElementBox
+  subtitle: RenderedElementBox | null
+  date: RenderedElementBox
+}
+
+function drawTitle(
+  ctx: CanvasRenderingContext2D,
+  opts: PosterOptions,
+  t: PosterTextElement
+): RenderedElementBox {
+  const cleanTitle = opts.title.trim() || '纹韵定制'
+  const font = FONT_FAMILY[t.font]
+  ctx.fillStyle = opts.template.titleColor
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const lineHeight = t.size * 1.26
+  let lines: string[]
+  if (cleanTitle.length <= 7) {
+    lines = [cleanTitle]
+  } else {
+    const half = Math.ceil(cleanTitle.length / 2)
+    lines = [cleanTitle.slice(0, half), cleanTitle.slice(half)]
+  }
+  ctx.font = `${t.size}px ${font}`
+  const startY = t.y - ((lines.length - 1) * lineHeight) / 2
+  lines.forEach((ln, i) => ctx.fillText(ln, t.x, startY + i * lineHeight))
+  const measured = ctx.measureText(lines[0])
+  return { x: t.x, y: t.y, w: measured.width, h: lines.length * lineHeight }
+}
+
+function drawSubtitle(
+  ctx: CanvasRenderingContext2D,
+  opts: PosterOptions,
+  t: PosterTextElement
+): RenderedElementBox | null {
+  const cleanSubtitle = opts.subtitle.trim()
+  if (!cleanSubtitle) return null
+  ctx.fillStyle = opts.template.subtitleColor
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = `${t.size}px ${FONT_FAMILY[t.font]}`
+  ctx.fillText(cleanSubtitle, t.x, t.y)
+  const measured = ctx.measureText(cleanSubtitle)
+  return { x: t.x, y: t.y, w: measured.width, h: t.size * 1.2 }
+}
+
+function drawDate(
+  ctx: CanvasRenderingContext2D,
+  opts: PosterOptions,
+  t: PosterTextElement
+): RenderedElementBox {
+  ctx.save()
+  ctx.fillStyle = opts.template.subtitleColor
+  ctx.globalAlpha = 0.9
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = `${t.size}px ${FONT_FAMILY[t.font]}`
+  ctx.fillText(opts.dateText, t.x, t.y)
+  ctx.globalAlpha = 0.6
+  ctx.font = `${Math.round(t.size * 0.8)}px "Noto Sans SC", "Microsoft YaHei", sans-serif`
+  ctx.fillText('AI 非遗纹样 · 私人定制', t.x, t.y + t.size * 1.7)
+  ctx.restore()
+  const measured = ctx.measureText(opts.dateText)
+  return { x: t.x, y: t.y, w: measured.width, h: t.size * 1.2 }
+}
+
 // ---------- 主渲染 ----------
 
-export async function renderPoster(opts: PosterOptions): Promise<HTMLCanvasElement> {
-  const { template, title, subtitle, dateText, logoUrl, mainVisual, qrValue, siteName } = opts
+export async function renderPoster(
+  opts: PosterOptions
+): Promise<{ canvas: HTMLCanvasElement; elements: RenderedElements }> {
+  const { template, logoUrl, mainVisual, qrValue, siteName } = opts
   const W = POSTER_WIDTH
   const H = POSTER_HEIGHT
+  const titleEl: PosterTextElement = { ...DEFAULT_TITLE_EL, ...opts.titleEl }
+  const subtitleEl: PosterTextElement = { ...DEFAULT_SUBTITLE_EL, ...opts.subtitleEl }
+  const dateEl: PosterTextElement = { ...DEFAULT_DATE_EL, ...opts.dateEl }
 
   const canvas = document.createElement('canvas')
   canvas.width = W
@@ -285,11 +429,12 @@ export async function renderPoster(opts: PosterOptions): Promise<HTMLCanvasEleme
   // 字体预热，避免 canvas 文字渲染成默认字体
   try {
     const fonts = document.fonts
-    await Promise.all([
-      fonts?.load('84px "Ma Shan Zheng"').catch(() => undefined),
-      fonts?.load('32px "Noto Serif SC"').catch(() => undefined),
-      fonts?.load('26px "Noto Sans SC"').catch(() => undefined),
-    ])
+    await Promise.all(
+      POSTER_FONT_OPTIONS.map((o) => {
+        const primary = o.family.split('"')[1] || 'serif'
+        return fonts?.load(`84px "${primary}"`).catch(() => undefined)
+      })
+    )
   } catch {
     /* 忽略：字体加载失败只影响观感 */
   }
@@ -314,12 +459,12 @@ export async function renderPoster(opts: PosterOptions): Promise<HTMLCanvasEleme
   ctx.strokeRect(56, 56, W - 112, H - 112)
   ctx.restore()
 
-  // 4. Logo（顶部居中，失败降级为文字）
-  const logoH = 92
+  // 4. Logo（顶部居中；深色模板反白着色保证可见；失败降级为文字）
+  const logoH = 88
   let logoImg: HTMLImageElement | null = null
   if (logoUrl) {
     try {
-      logoImg = await loadImage(logoUrl)
+      logoImg = await loadImageCached(logoUrl)
     } catch {
       logoImg = null
     }
@@ -327,10 +472,30 @@ export async function renderPoster(opts: PosterOptions): Promise<HTMLCanvasEleme
   if (logoImg) {
     const lw = logoImg.naturalWidth || 1
     const lh = logoImg.naturalHeight || 1
-    const scale = Math.min(logoH / lh, 340 / lw)
+    const scale = Math.min(logoH / lh, 300 / lw)
     const w = lw * scale
     const h = lh * scale
-    ctx.drawImage(logoImg, (W - w) / 2, 90, w, h)
+    const x = (W - w) / 2
+    const y = 64
+    if (template.isDark) {
+      // 反白：离屏画布先画原图，再以 source-in 用白色重着色
+      const tmp = document.createElement('canvas')
+      tmp.width = Math.max(1, Math.ceil(w))
+      tmp.height = Math.max(1, Math.ceil(h))
+      const tctx = tmp.getContext('2d')
+      if (tctx) {
+        tctx.clearRect(0, 0, tmp.width, tmp.height)
+        tctx.drawImage(logoImg, 0, 0, tmp.width, tmp.height)
+        tctx.globalCompositeOperation = 'source-in'
+        tctx.fillStyle = '#ffffff'
+        tctx.fillRect(0, 0, tmp.width, tmp.height)
+        ctx.drawImage(tmp, x, y)
+      } else {
+        ctx.drawImage(logoImg, x, y, w, h)
+      }
+    } else {
+      ctx.drawImage(logoImg, x, y, w, h)
+    }
   } else {
     ctx.fillStyle = template.titleColor
     ctx.font = '46px "Ma Shan Zheng", "KaiTi", serif'
@@ -345,35 +510,17 @@ export async function renderPoster(opts: PosterOptions): Promise<HTMLCanvasEleme
   ctx.font = '26px "Noto Sans SC", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(siteName, W / 2, 232)
+  ctx.fillText(siteName, W / 2, 196)
   ctx.globalAlpha = 1
 
-  // 6. 标题（书法体，超 7 字自动折两行）
-  ctx.fillStyle = template.titleColor
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  const cleanTitle = title.trim() || '纹韵定制'
-  if (cleanTitle.length <= 7) {
-    ctx.font = '84px "Ma Shan Zheng", "KaiTi", serif'
-    ctx.fillText(cleanTitle, W / 2, 340)
-  } else {
-    const half = Math.ceil(cleanTitle.length / 2)
-    ctx.font = '60px "Ma Shan Zheng", "KaiTi", serif'
-    ctx.fillText(cleanTitle.slice(0, half), W / 2, 312)
-    ctx.fillText(cleanTitle.slice(half), W / 2, 374)
-  }
+  // 6. 标题（可拖/可调字体字号；超 7 字自动折两行）
+  const titleBox = drawTitle(ctx, opts, titleEl)
 
-  // 7. 副文案
-  const cleanSubtitle = subtitle.trim()
-  if (cleanSubtitle) {
-    ctx.fillStyle = template.subtitleColor
-    ctx.font = '32px "Noto Serif SC", serif'
-    ctx.textAlign = 'center'
-    ctx.fillText(cleanSubtitle, W / 2, 438)
-  }
+  // 7. 一句话（可拖/可调字体字号）
+  const subtitleBox = drawSubtitle(ctx, opts, subtitleEl)
 
-  // 8. 主视觉卡片
-  const card = { x: 180, y: 478, w: 720, h: 560 }
+  // 8. 主视觉卡片（放大主图、缩小外框留白）
+  const card = { x: 104, y: 418, w: 872, h: 628 }
   ctx.save()
   ctx.shadowColor = 'rgba(0,0,0,0.18)'
   ctx.shadowBlur = 36
@@ -386,18 +533,18 @@ export async function renderPoster(opts: PosterOptions): Promise<HTMLCanvasEleme
   ctx.strokeStyle = template.accent
   ctx.globalAlpha = 0.45
   ctx.lineWidth = 1.5
-  roundRect(ctx, card.x + 10, card.y + 10, card.w - 20, card.h - 20, 10)
+  roundRect(ctx, card.x + 6, card.y + 6, card.w - 12, card.h - 12, 10)
   ctx.stroke()
   ctx.restore()
 
   if (mainVisual) {
     try {
-      const img = await loadImage(mainVisual)
+      const img = await loadImageCached(mainVisual)
       drawImageContain(ctx, img, {
-        x: card.x + 26,
-        y: card.y + 26,
-        w: card.w - 52,
-        h: card.h - 52,
+        x: card.x + 14,
+        y: card.y + 14,
+        w: card.w - 28,
+        h: card.h - 28,
       })
     } catch {
       ctx.fillStyle = template.subtitleColor
@@ -415,16 +562,16 @@ export async function renderPoster(opts: PosterOptions): Promise<HTMLCanvasEleme
   ctx.globalAlpha = 0.25
   ctx.lineWidth = 1.5
   ctx.beginPath()
-  ctx.moveTo(110, 1068)
-  ctx.lineTo(W - 110, 1068)
+  ctx.moveTo(110, 1066)
+  ctx.lineTo(W - 110, 1066)
   ctx.stroke()
   ctx.restore()
 
-  // 10. 二维码（右下）+ 扫码提示
+  // 10. 二维码（右下，统一链接平台首页）+ 扫码提示
+  const qrSize = 200
+  const qrX = 756
+  const qrY = 1074
   if (qrValue) {
-    const qrSize = 220
-    const qrX = 740
-    const qrY = 1080
     ctx.save()
     roundRect(ctx, qrX - 14, qrY - 14, qrSize + 28, qrSize + 28, 10)
     ctx.fillStyle = 'rgba(255,255,255,0.96)'
@@ -441,9 +588,10 @@ export async function renderPoster(opts: PosterOptions): Promise<HTMLCanvasEleme
       ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize)
       ctx.fillStyle = template.subtitleColor
       ctx.globalAlpha = 0.85
-      ctx.font = '26px "Noto Serif SC", serif'
+      ctx.font = '24px "Noto Serif SC", serif'
       ctx.textAlign = 'center'
-      ctx.fillText('扫码查看', qrX + qrSize / 2, qrY + qrSize + 42)
+      ctx.textBaseline = 'middle'
+      ctx.fillText('扫码体验纹韵', qrX + qrSize / 2, qrY + qrSize + 38)
       ctx.globalAlpha = 1
     } catch {
       ctx.fillStyle = template.subtitleColor
@@ -453,17 +601,8 @@ export async function renderPoster(opts: PosterOptions): Promise<HTMLCanvasEleme
     }
   }
 
-  // 11. 日期（左下）
-  ctx.save()
-  ctx.fillStyle = template.subtitleColor
-  ctx.globalAlpha = 0.9
-  ctx.font = '30px "Noto Serif SC", serif'
-  ctx.textAlign = 'left'
-  ctx.fillText(dateText, 110, 1160)
-  ctx.globalAlpha = 0.6
-  ctx.font = '24px "Noto Sans SC", sans-serif'
-  ctx.fillText('AI 非遗纹样 · 私人定制', 110, 1206)
-  ctx.restore()
+  // 11. 日期（可拖/可调字体字号；自动取当天）
+  const dateBox = drawDate(ctx, opts, dateEl)
 
   // 12. 页脚
   ctx.save()
@@ -471,10 +610,11 @@ export async function renderPoster(opts: PosterOptions): Promise<HTMLCanvasEleme
   ctx.globalAlpha = 0.5
   ctx.font = '22px "Noto Sans SC", sans-serif'
   ctx.textAlign = 'center'
-  ctx.fillText(`${siteName} · 让传统纹样走进生活`, W / 2, 1374)
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`${siteName} · 让传统纹样走进生活`, W / 2, 1376)
   ctx.restore()
 
-  return canvas
+  return { canvas, elements: { title: titleBox, subtitle: subtitleBox, date: dateBox } }
 }
 
 /** 自动生成日期文案 */
