@@ -30,12 +30,14 @@ export function isPlaceholderUrl(url: string | undefined | null): boolean {
  * 列表渲染后按 id 批量补拉 image_url（并发受限，默认 2）。
  * 列表查询不投影 image_url（历史 data: base64 大字段是 statement timeout 元凶），
  * 由本函数在渲染后逐条取回，回填到对应卡片 <img>；
- * 单条失败只影响该卡（保持占位），整页不超时、不白屏。
+ * 单条成功/失败都会在 console 打出该 id 的 ok/fail，失败经 onFailure 回传供卡片显示「加载失败」可重试。
  */
 export async function loadImagesConcurrently(
   ids: string[],
   onResult: (id: string, url: string) => void,
-  concurrency = 2
+  concurrency = 2,
+  onFailure?: (id: string, reason: string) => void,
+  timeoutMs = 15000
 ): Promise<void> {
   if (ids.length === 0) return
   let cursor = 0
@@ -44,15 +46,24 @@ export async function loadImagesConcurrently(
       const id = ids[cursor++]
       try {
         const { data, error } = await withTimeout(
-          supabase.from('generations').select('image_url').eq('id', id).single(),
-          8000,
+          supabase.from('generations').select('id, image_url').eq('id', id).single(),
+          timeoutMs,
           '加载缩略图'
         )
-        const url = (data as any)?.image_url as string | undefined
-        if (!error && url) onResult(id, url)
+        const row = data as any
+        const url = row?.image_url as string | undefined
+        if (!error && url) {
+          console.log(`[imageLoader] OK ${id}: ${url.length} chars`)
+          onResult(id, url)
+        } else {
+          const reason = error ? `${error.message ?? 'query error'}` : 'empty image_url'
+          console.warn(`[imageLoader] FAIL ${id}: ${reason}`)
+          onFailure?.(id, reason)
+        }
       } catch (e: any) {
-        // 单条失败只影响该卡片：保持占位，不刷屏
-        console.warn(`[imageLoader] load failed for ${id}:`, e?.message ?? e)
+        const reason = e?.message ?? String(e)
+        console.warn(`[imageLoader] FAIL ${id}: ${reason}`)
+        onFailure?.(id, reason)
       }
     }
   })
@@ -102,7 +113,7 @@ export async function fetchHttpImageUrls(ids: string[]): Promise<Record<string, 
  * 单条按 id 取 image_url（补拉历史 data: base64；http 短链已在列表直取）。
  * 用于卡片进入视口后按需加载、详情/下载补图，单条短超时，失败抛错由调用方兜底。
  */
-export async function fetchGenerationImage(id: string, timeoutMs = 8000): Promise<string> {
+export async function fetchGenerationImage(id: string, timeoutMs = 15000): Promise<string> {
   const { data, error } = await withTimeout(
     supabase.from('generations').select('image_url').eq('id', id).single(),
     timeoutMs,

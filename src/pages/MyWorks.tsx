@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase, Generation } from '../lib/supabase'
@@ -9,6 +9,7 @@ import { withTimeout, classifyError, sleep, logSupabaseConfig } from '../lib/asy
 import {
   PATTERN_PLACEHOLDER,
   isPlaceholderUrl,
+  loadImagesConcurrently,
   fetchHttpImageUrls,
   fetchGenerationImage,
 } from '../lib/imageLoader'
@@ -40,61 +41,38 @@ function writeWorksCache(userId: string, data: Generation[]) {
 }
 
 /**
- * 单卡缩略图按需加载：卡片进入视口（预留 300px）才按 id 补拉 image_url；
- * 已是 http 短链的直接渲染；失败保留占位图，单条 8s 超时，不拖死整页。
+ * 单卡缩略图：纯展示组件，不自己发请求（避免组件级 effect 被反复 cleanup 导致永不更新）。
+ * - 有真实图（http 短链 / data: base64）→ 直接渲染
+ * - 失败 → 显示「加载失败」+ 重试按钮
+ * - 否则 → 占位图（等待页面级补图回填）
  */
 function WorkImage({
   generation,
-  onImageLoaded,
+  failed,
+  onRetry,
 }: {
   generation: Generation
-  onImageLoaded: (id: string, url: string) => void
+  failed: boolean
+  onRetry: () => void
 }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [inView, setInView] = useState(false)
-  const [failed, setFailed] = useState(false)
   const url = generation.image_url
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el || !isPlaceholderUrl(url) || failed) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setInView(true)
-          observer.disconnect()
-        }
-      },
-      { rootMargin: '300px' }
+  if (!isPlaceholderUrl(url)) {
+    return <img src={url} alt="纹样作品" className="w-full h-full object-cover" />
+  }
+  if (failed) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-rice-paper-dark">
+        <span className="font-song text-xs text-deep-blue-light">加载失败</span>
+        <button
+          onClick={onRetry}
+          className="px-3 py-1 bg-palace-red text-rice-paper rounded-sm font-song text-xs hover:bg-palace-red-dark transition-colors"
+        >
+          重试
+        </button>
+      </div>
     )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [url, failed])
-
-  useEffect(() => {
-    if (!inView || !isPlaceholderUrl(url) || failed) return
-    let cancelled = false
-    fetchGenerationImage(generation.id, 8000)
-      .then((imgUrl) => {
-        if (!cancelled && imgUrl) onImageLoaded(generation.id, imgUrl)
-      })
-      .catch((e: any) => {
-        if (!cancelled) {
-          console.warn(`[MyWorks] load image failed for ${generation.id}:`, e?.message ?? e)
-          setFailed(true) // 失败保留占位，不重复请求、不阻塞其他卡片
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [inView, url, failed, generation.id, onImageLoaded])
-
-  const src = isPlaceholderUrl(url) ? PATTERN_PLACEHOLDER : url
-  return (
-    <div ref={containerRef} className="w-full h-full">
-      <img src={src} alt="纹样作品" className="w-full h-full object-cover" />
-    </div>
-  )
+  }
+  return <img src={PATTERN_PLACEHOLDER} alt="纹样作品" className="w-full h-full object-cover" />
 }
 
 export default function MyWorksPage() {
@@ -108,6 +86,8 @@ export default function MyWorksPage() {
   const [editTitle, setEditTitle] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const [detailWork, setDetailWork] = useState<Generation | null>(null)
+  const [failedIds, setFailedIds] = useState<Set<string>>(() => new Set())
+  const [retryTick, setRetryTick] = useState(0)
 
   useEffect(() => {
     let mounted = true
@@ -302,6 +282,42 @@ export default function MyWorksPage() {
     }
   }, [navigate, reloadKey])
 
+  // 列表渲染后补图：按 id 逐条 select id, image_url（并发 2、单条 15s 超时）。
+  // 成功 → setState 回填该卡 src 替换占位；失败 → 标记 failedIds，卡片显示「加载失败」可重试。
+  // 依赖只取 isLoading/failedIds/retryTick：数据就绪时跑一次、用户点重试时再跑，
+  // 不随每次 setGenerations 重跑，避免把已发出的请求 cleanup 取消重发导致永远 loading。
+  useEffect(() => {
+    if (isLoading) return
+    const pendingIds = generations
+      .filter((g) => isPlaceholderUrl(g.image_url) && !failedIds.has(g.id))
+      .map((g) => g.id)
+    if (pendingIds.length === 0) return
+    let cancelled = false
+    loadImagesConcurrently(
+      pendingIds,
+      (id, url) => {
+        if (cancelled) return
+        console.log(`[MyWorks] image OK: ${id} (${(url.length / 1024).toFixed(1)} KB)`)
+        setGenerations((prev) => prev.map((g) => (g.id === id ? { ...g, image_url: url } : g)))
+      },
+      2,
+      (id, reason) => {
+        if (cancelled) return
+        console.log(`[MyWorks] image FAIL: ${id} (${reason})`)
+        setFailedIds((prev) => {
+          const next = new Set(prev)
+          next.add(id)
+          return next
+        })
+      }
+    )
+    // 只在页面卸载时取消回调；不随每次渲染取消已发出的请求
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, failedIds, retryTick])
+
   const handlePublicToggle = async (generationId: string, currentPublic: boolean) => {
     const newValue = !currentPublic
     setGenerations((prev) =>
@@ -405,10 +421,10 @@ export default function MyWorksPage() {
 
   const handleViewDetail = async (generation: Generation) => {
     let target = generation
-    // 详情大图需要真实 image_url：若列表还没取到，先单条补拉（短超时，失败仍打开占位）
+    // 详情大图需要真实 image_url：若列表还没取到，先单条补拉（15s 超时，失败仍打开占位）
     if (isPlaceholderUrl(target.image_url)) {
       try {
-        const imgUrl = await fetchGenerationImage(target.id, 8000)
+        const imgUrl = await fetchGenerationImage(target.id, 15000)
         target = { ...target, image_url: imgUrl }
         setGenerations((prev) => prev.map((g) => (g.id === target.id ? target : g)))
       } catch (e: any) {
@@ -416,6 +432,16 @@ export default function MyWorksPage() {
       }
     }
     setDetailWork(target)
+  }
+
+  /** 卡片「加载失败 → 重试」：解除失败标记并触发补图 effect 重新拉取 */
+  const handleRetryImage = (id: string) => {
+    setFailedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+    setRetryTick((t) => t + 1)
   }
 
   const startEdit = (generation: Generation) => {
@@ -597,11 +623,8 @@ export default function MyWorksPage() {
                       >
                         <WorkImage
                           generation={generation}
-                          onImageLoaded={(id, imgUrl) =>
-                            setGenerations((prev) =>
-                              prev.map((g) => (g.id === id ? { ...g, image_url: imgUrl } : g))
-                            )
-                          }
+                          failed={failedIds.has(generation.id)}
+                          onRetry={() => handleRetryImage(generation.id)}
                         />
                       </div>
                       <div className="p-3">
