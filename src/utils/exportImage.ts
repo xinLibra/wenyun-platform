@@ -51,21 +51,25 @@ async function ensureFontLoaded(font: string) {
 }
 
 // 绘制居中放大 / 自由模式（对应 PatternRenderer 的 renderImageMode）
+// 位置基准为产品图矩形（drawX/drawY/drawW/drawH），保证纹样是「贴在产品上」而不是散落在整张图上
 function drawCenterOrFreeMode(
   ctx: CanvasRenderingContext2D,
   patternImg: HTMLImageElement,
   params: ExportParams,
-  canvasW: number,
-  canvasH: number
+  drawX: number,
+  drawY: number,
+  drawW: number,
+  drawH: number
 ) {
   const { scale, rotation, positionX, positionY, blendMode } = params
-  const centerX = canvasW / 2 + ((positionX - 50) / 100) * canvasW
-  const centerY = canvasH / 2 + ((positionY - 50) / 100) * canvasH
-  const drawSize = Math.min(canvasW, canvasH) * 0.4 * (scale / 100)
+  const centerX = drawX + drawW / 2 + ((positionX - 50) / 100) * drawW
+  const centerY = drawY + drawH / 2 + ((positionY - 50) / 100) * drawH
+  const drawSize = Math.min(drawW, drawH) * 0.4 * (scale / 100)
+  if (drawSize <= 0) return
 
   ctx.save()
   ctx.globalCompositeOperation = blendMode as GlobalCompositeOperation
-  ctx.globalAlpha = 0.7
+  ctx.globalAlpha = 0.85
   ctx.translate(centerX, centerY)
   ctx.rotate((rotation * Math.PI) / 180)
   ctx.drawImage(patternImg, -drawSize / 2, -drawSize / 2, drawSize, drawSize)
@@ -77,40 +81,48 @@ function drawCornerMode(
   ctx: CanvasRenderingContext2D,
   patternImg: HTMLImageElement,
   params: ExportParams,
-  canvasW: number,
-  canvasH: number
+  drawX: number,
+  drawY: number,
+  drawW: number,
+  drawH: number
 ) {
   // corner 模式默认在左上角区域，逻辑与 center 模式一致，只是初始 positionX/Y 偏左上
-  drawCenterOrFreeMode(ctx, patternImg, params, canvasW, canvasH)
+  drawCenterOrFreeMode(ctx, patternImg, params, drawX, drawY, drawW, drawH)
 }
 
 // 绘制重复平铺模式（对应 renderTileMode，需要手动实现 background-repeat: repeat）
+// 关键：只平铺在产品图矩形内（外层已 clip），且用 multiply 混合让产品图明暗光影透出，
+// 呈现「纹样印在产品表面」的贴图效果，而不是整张图被纹样铺满的平面块
 function drawTileMode(
   ctx: CanvasRenderingContext2D,
   patternImg: HTMLImageElement,
   params: ExportParams,
-  canvasW: number,
-  canvasH: number
+  drawX: number,
+  drawY: number,
+  drawW: number,
+  drawH: number
 ) {
-  const { scale, rotation, blendMode } = params
-  // 对应 CSS 的 backgroundSize: `${scale / 2}%`
-  const tileSize = canvasW * (scale / 2 / 100)
+  const { scale, rotation } = params
+  // 对应 CSS 的 backgroundSize: `${scale / 2}%`（相对产品图矩形）
+  const tileSize = drawW * (scale / 2 / 100)
   if (tileSize <= 0) return
 
   ctx.save()
-  ctx.globalCompositeOperation = blendMode as GlobalCompositeOperation
-  ctx.globalAlpha = 0.7
+  ctx.globalCompositeOperation = 'multiply'
+  ctx.globalAlpha = 0.9
 
-  // 整体围绕画布中心旋转
-  ctx.translate(canvasW / 2, canvasH / 2)
+  // 整体围绕产品图中心旋转
+  const centerX = drawX + drawW / 2
+  const centerY = drawY + drawH / 2
+  ctx.translate(centerX, centerY)
   ctx.rotate((rotation * Math.PI) / 180)
-  ctx.translate(-canvasW / 2, -canvasH / 2)
+  ctx.translate(-centerX, -centerY)
 
-  // 多铺一圈防止旋转后边角露白
-  const startX = -tileSize
-  const startY = -tileSize
-  const endX = canvasW + tileSize
-  const endY = canvasH + tileSize
+  // 在产品矩形基础上多铺一圈，防止旋转后边缘露白（裁剪由外层 clip 兜底）
+  const startX = drawX - tileSize
+  const startY = drawY - tileSize
+  const endX = drawX + drawW + tileSize
+  const endY = drawY + drawH + tileSize
 
   for (let y = startY; y < endY; y += tileSize) {
     for (let x = startX; x < endX; x += tileSize) {
@@ -121,36 +133,41 @@ function drawTileMode(
 }
 
 // 绘制腰封模式（对应 renderBandMode，需要手动实现 background-repeat: repeat-x）
+// 腰封位置/宽度基于产品图矩形；同样用 multiply 混合，产品轮廓不会被盖成平面块
 function drawBandMode(
   ctx: CanvasRenderingContext2D,
   patternImg: HTMLImageElement,
   params: ExportParams,
-  canvasW: number,
-  canvasH: number
+  drawX: number,
+  drawY: number,
+  drawW: number,
+  drawH: number
 ) {
-  const { scale, rotation, positionX, positionY, blendMode } = params
-  const bandHeight = canvasH * (scale / 5 / 100)
-  const bandTop = canvasH * ((positionY - scale / 10) / 100)
-  const tileSize = canvasW * (scale / 4 / 100)
+  const { scale, rotation, positionX, positionY } = params
+  const bandHeight = drawH * (scale / 5 / 100)
+  const bandTop = drawY + drawH * ((positionY - scale / 10) / 100)
+  const tileSize = drawW * (scale / 4 / 100)
   if (tileSize <= 0 || bandHeight <= 0) return
 
-  const bandLeft = canvasW * (((positionX - 50) * 0.8 + 50) / 100) - canvasW / 2
+  const bandLeft = ((positionX - 50) * 0.8) / 100 * drawW
 
   ctx.save()
-  ctx.globalCompositeOperation = blendMode as GlobalCompositeOperation
-  ctx.globalAlpha = 0.7
+  ctx.globalCompositeOperation = 'multiply'
+  ctx.globalAlpha = 0.9
 
-  // 裁剪出腰封区域，避免平铺内容溢出到区域外
+  // 裁剪出腰封区域（与产品矩形重叠部分），避免平铺内容溢出到区域外
   ctx.beginPath()
-  ctx.rect(0, bandTop, canvasW, bandHeight)
+  ctx.rect(drawX, bandTop, drawW, bandHeight)
   ctx.clip()
 
-  ctx.translate(canvasW / 2 + bandLeft, bandTop + bandHeight / 2)
+  const centerX = drawX + drawW / 2 + bandLeft
+  const centerY = bandTop + bandHeight / 2
+  ctx.translate(centerX, centerY)
   ctx.rotate((rotation * Math.PI) / 180)
-  ctx.translate(-(canvasW / 2 + bandLeft), -(bandTop + bandHeight / 2))
+  ctx.translate(-centerX, -centerY)
 
-  const startX = -tileSize
-  const endX = canvasW + tileSize
+  const startX = drawX - tileSize
+  const endX = drawX + drawW + tileSize
 
   for (let x = startX; x < endX; x += tileSize) {
     ctx.drawImage(patternImg, x, bandTop, tileSize, bandHeight)
@@ -223,26 +240,35 @@ export async function renderCompositeCanvas(params: ExportParams): Promise<HTMLC
   const scaleRatio = Math.min(canvasW / productImg.width, canvasH / productImg.height)
   const drawW = productImg.width * scaleRatio
   const drawH = productImg.height * scaleRatio
-  ctx.drawImage(productImg, (canvasW - drawW) / 2, (canvasH - drawH) / 2, drawW, drawH)
+  const drawX = (canvasW - drawW) / 2
+  const drawY = (canvasH - drawH) / 2
+  ctx.drawImage(productImg, drawX, drawY, drawW, drawH)
 
   // 按排版模式画纹样（无纹样时跳过）
   if (patternImg) {
+    // 纹样只出现在产品图区域内：统一 clip 到产品矩形，
+    // 杜绝「纹样铺满整张图、产品被完全盖住」的平面纹样块
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(drawX, drawY, drawW, drawH)
+    ctx.clip()
     switch (params.layoutMode) {
       case 'tile':
-        drawTileMode(ctx, patternImg, params, canvasW, canvasH)
+        drawTileMode(ctx, patternImg, params, drawX, drawY, drawW, drawH)
         break
       case 'band':
-        drawBandMode(ctx, patternImg, params, canvasW, canvasH)
+        drawBandMode(ctx, patternImg, params, drawX, drawY, drawW, drawH)
         break
       case 'corner':
-        drawCornerMode(ctx, patternImg, params, canvasW, canvasH)
+        drawCornerMode(ctx, patternImg, params, drawX, drawY, drawW, drawH)
         break
       case 'center':
       case 'free':
       default:
-        drawCenterOrFreeMode(ctx, patternImg, params, canvasW, canvasH)
+        drawCenterOrFreeMode(ctx, patternImg, params, drawX, drawY, drawW, drawH)
         break
     }
+    ctx.restore()
   }
 
   // 重置混合模式，避免影响文字绘制

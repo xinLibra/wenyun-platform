@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase, Generation } from '../lib/supabase'
@@ -6,7 +6,12 @@ import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { useFavorites } from '../context/FavoriteContext'
 import { withTimeout, classifyError, sleep, logSupabaseConfig } from '../lib/async'
-import { loadImagesConcurrently, PATTERN_PLACEHOLDER, isPlaceholderUrl } from '../lib/imageLoader'
+import {
+  PATTERN_PLACEHOLDER,
+  isPlaceholderUrl,
+  fetchHttpImageUrls,
+  fetchGenerationImage,
+} from '../lib/imageLoader'
 import WorkDetailModal from '../components/WorkDetailModal'
 
 const SESSION_TIMEOUT_MS = 20000
@@ -32,6 +37,64 @@ function writeWorksCache(userId: string, data: Generation[]) {
   } catch (e: any) {
     console.warn('[MyWorks] write cache failed:', e?.message ?? e)
   }
+}
+
+/**
+ * 单卡缩略图按需加载：卡片进入视口（预留 300px）才按 id 补拉 image_url；
+ * 已是 http 短链的直接渲染；失败保留占位图，单条 8s 超时，不拖死整页。
+ */
+function WorkImage({
+  generation,
+  onImageLoaded,
+}: {
+  generation: Generation
+  onImageLoaded: (id: string, url: string) => void
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [inView, setInView] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const url = generation.image_url
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || !isPlaceholderUrl(url) || failed) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setInView(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '300px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [url, failed])
+
+  useEffect(() => {
+    if (!inView || !isPlaceholderUrl(url) || failed) return
+    let cancelled = false
+    fetchGenerationImage(generation.id, 8000)
+      .then((imgUrl) => {
+        if (!cancelled && imgUrl) onImageLoaded(generation.id, imgUrl)
+      })
+      .catch((e: any) => {
+        if (!cancelled) {
+          console.warn(`[MyWorks] load image failed for ${generation.id}:`, e?.message ?? e)
+          setFailed(true) // 失败保留占位，不重复请求、不阻塞其他卡片
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [inView, url, failed, generation.id, onImageLoaded])
+
+  const src = isPlaceholderUrl(url) ? PATTERN_PLACEHOLDER : url
+  return (
+    <div ref={containerRef} className="w-full h-full">
+      <img src={src} alt="纹样作品" className="w-full h-full object-cover" />
+    </div>
+  )
 }
 
 export default function MyWorksPage() {
@@ -197,6 +260,22 @@ export default function MyWorksPage() {
               console.error('[MyWorks] favorites query threw:', favErr?.message ?? favErr, favErr)
             })
         }
+
+        // 优先批量取回已是 Storage 短链的缩略图（几十~几百字节，直接 img src，
+        // 不必逐条补拉）；历史 data: base64 行由 WorkImage 进入视口后再按需单条补拉
+        if (generationIds.length > 0) {
+          fetchHttpImageUrls(generationIds)
+            .then((shortMap) => {
+              if (!mounted || Object.keys(shortMap).length === 0) return
+              setGenerations((prev) =>
+                prev.map((g) => (shortMap[g.id] ? { ...g, image_url: shortMap[g.id] } : g))
+              )
+            })
+            .catch((e: any) => {
+              if (!mounted) return
+              console.warn('[MyWorks] fetch short image urls failed:', e?.message ?? e)
+            })
+        }
       } catch (err) {
         const anyErr = err as any
         // 禁止空 Error {}：显式拆出 message / code / hint，无则标记 unknown
@@ -222,15 +301,6 @@ export default function MyWorksPage() {
       mounted = false
     }
   }, [navigate, reloadKey])
-
-  // 列表渲染后按 id 批量补图（并发 3）：把取到的 image_url 填回对应卡片，单条失败只影响该卡
-  useEffect(() => {
-    const pendingIds = generations.filter((g) => !g.image_url).map((g) => g.id)
-    if (pendingIds.length === 0) return
-    loadImagesConcurrently(pendingIds, (id, url) => {
-      setGenerations((prev) => prev.map((g) => (g.id === id ? { ...g, image_url: url } : g)))
-    })
-  }, [generations])
 
   const handlePublicToggle = async (generationId: string, currentPublic: boolean) => {
     const newValue = !currentPublic
@@ -333,8 +403,19 @@ export default function MyWorksPage() {
     }
   }
 
-  const handleViewDetail = (generation: Generation) => {
-    setDetailWork(generation)
+  const handleViewDetail = async (generation: Generation) => {
+    let target = generation
+    // 详情大图需要真实 image_url：若列表还没取到，先单条补拉（短超时，失败仍打开占位）
+    if (isPlaceholderUrl(target.image_url)) {
+      try {
+        const imgUrl = await fetchGenerationImage(target.id, 8000)
+        target = { ...target, image_url: imgUrl }
+        setGenerations((prev) => prev.map((g) => (g.id === target.id ? target : g)))
+      } catch (e: any) {
+        console.warn('[MyWorks] fetch detail image failed:', e?.message ?? e)
+      }
+    }
+    setDetailWork(target)
   }
 
   const startEdit = (generation: Generation) => {
@@ -514,10 +595,13 @@ export default function MyWorksPage() {
                         className="aspect-square bg-rice-paper-dark overflow-hidden cursor-pointer"
                         onClick={() => handleViewDetail(generation)}
                       >
-                        <img
-                          src={isPlaceholderUrl(generation.image_url) ? PATTERN_PLACEHOLDER : generation.image_url}
-                          alt="纹样作品"
-                          className="w-full h-full object-cover"
+                        <WorkImage
+                          generation={generation}
+                          onImageLoaded={(id, imgUrl) =>
+                            setGenerations((prev) =>
+                              prev.map((g) => (g.id === id ? { ...g, image_url: imgUrl } : g))
+                            )
+                          }
                         />
                       </div>
                       <div className="p-3">

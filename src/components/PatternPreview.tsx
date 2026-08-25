@@ -62,45 +62,11 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
 
   const config = sizeConfig[size];
 
+  // tile / band 属于「纹样贴在产品上」：作为产品图的背景平铺，
+  // 产品图用 multiply 混合叠加，让产品轮廓与明暗透出，而不是把产品盖成一块平面纹样
+  const isTileOrBand = layoutMode === 'tile' || layoutMode === 'band';
+
   const renderPattern = () => {
-    if (layoutMode === 'band') {
-      return (
-        <div
-          className="absolute"
-          style={{
-            left: `${(positionX - 50) * 0.8}%`,
-            right: `${(50 - positionX) * 0.8}%`,
-            top: `${positionY - 10}%`,
-            height: '20%',
-            backgroundImage: `url(${patternImage})`,
-            backgroundSize: `${scale / 4}%`,
-            backgroundRepeat: 'repeat-x',
-            opacity: 0.7,
-            mixBlendMode: blendMode as any,
-            transform: `rotate(${rotation}deg)`,
-            transformOrigin: 'center center',
-          }}
-        />
-      );
-    }
-
-    if (layoutMode === 'tile') {
-      return (
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `url(${patternImage})`,
-            backgroundSize: `${scale / 2}%`,
-            backgroundRepeat: 'repeat',
-            opacity: 0.7,
-            mixBlendMode: blendMode as any,
-            transform: `rotate(${rotation}deg)`,
-            transformOrigin: 'center center',
-          }}
-        />
-      );
-    }
-
     if (layoutMode === 'corner') {
       return (
         <div
@@ -152,17 +118,31 @@ const PatternPreview: React.FC<PatternPreviewProps> = ({
       )}
 
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative">
+        <div
+          className="relative"
+          style={
+            isTileOrBand
+              ? {
+                  backgroundImage: `url(${patternImage})`,
+                  backgroundSize:
+                    layoutMode === 'band' ? `${scale / 4}% 20%` : `${scale / 2}%`,
+                  backgroundRepeat: layoutMode === 'band' ? 'repeat-x' : 'repeat',
+                  backgroundPosition: layoutMode === 'band' ? `0 ${positionY - 10}%` : 'center',
+                  transform: `rotate(${rotation}deg)`,
+                }
+              : undefined
+          }
+        >
           <img
             src={productImage}
             alt="产品"
             className={`${config.productSize} object-contain`}
+            style={isTileOrBand ? { mixBlendMode: 'multiply' } : undefined}
           />
-          {(layoutMode === 'tile' || layoutMode === 'band') && renderPattern()}
         </div>
       </div>
 
-      {(layoutMode !== 'tile' && layoutMode !== 'band') && renderPattern()}
+      {!isTileOrBand && renderPattern()}
       
       {textOverlay && (
         <div
