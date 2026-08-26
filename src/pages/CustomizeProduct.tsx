@@ -319,11 +319,8 @@ export default function CustomizeProduct() {
     }
     return 'free'
   })
-    const [patternArea, setPatternArea] = useState<PatternAreaKey>(() => {
-    const pid = safeGetItem('selected_product_id') || products[0]?.id || ''
-    // 手提包/托特：默认「正中贴花」，用户可在「纹样范围」切「全包」
-    return pid === 'tote' ? 'center' : 'chest'
-  })
+  // 纹样范围固定：托特「正中贴花」，其余「胸前」；不提供「纹样范围」切换
+  const patternArea: PatternAreaKey = selectedProduct === 'tote' ? 'center' : 'chest'
   const [activeColorPart, setActiveColorPart] = useState<string | null>(null)
   const [hue, setHue] = useState(210)
   const [lightness, setLightness] = useState(45)
@@ -453,9 +450,6 @@ export default function CustomizeProduct() {
       }
     }
 
-    // 手提包/托特：默认「正中贴花」，可在「纹样范围」切「全包」
-    const defaultPatternArea: PatternAreaKey = productId === 'tote' ? 'center' : 'chest'
-
     const draftKey = `product_config_draft_${productId}`
     const savedDraft = safeGetItem(draftKey)
     
@@ -488,7 +482,6 @@ export default function CustomizeProduct() {
         }
         setProductColors(draft.colors || {})
         setActiveColorPart(null)
-        setPatternArea(defaultPatternArea)
         return
       } catch {
         // 解析失败，使用默认值
@@ -514,7 +507,6 @@ export default function CustomizeProduct() {
     setLayoutMode('free')
     setProductColors({})
     setActiveColorPart(null)
-    setPatternArea(defaultPatternArea)
   }
   
   const [isBuying, setIsBuying] = useState(false)
@@ -1699,53 +1691,6 @@ export default function CustomizeProduct() {
                         </div>
                       </div>
                     )}
-
-                    {/* ===== 区块：纹样范围（仅 3D 产品；正中贴花 / 全包；托特默认正中可切全包） ===== */}
-                    {is3DProduct && (() => {
-                      const tm = product3DConfig?.meshConfig?.textureTargetMaterials
-                      if (!tm) return null
-                      const hasChest = !!tm.chest?.length
-                      const hasCenter = !!tm.center?.length
-                      if (!hasChest && !hasCenter) return null
-                      const leftKey: PatternAreaKey = hasCenter ? 'center' : 'chest'
-                      const leftLabel = hasCenter ? '正中贴花' : '仅胸前'
-                      const rightKey: PatternAreaKey = 'full'
-                      const rightLabel = '全包'
-                      return (
-                        <div className="border border-deep-blue-200 rounded-sm overflow-hidden">
-                          <div className="flex items-center justify-between px-3 py-2.5 bg-deep-blue/5">
-                            <span className="font-shufa text-sm text-deep-blue flex items-center">
-                              <span className="w-5 h-5 bg-palace-red rounded-sm flex items-center justify-center text-ming-yellow mr-2 text-xs">纹</span>
-                              纹样范围
-                            </span>
-                          </div>
-                          <div className="p-4 flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setPatternArea(leftKey)}
-                              className={`flex-1 py-2 text-sm font-song rounded-sm transition-all duration-300 ${
-                                patternArea === leftKey
-                                  ? 'bg-palace-red text-rice-paper shadow-sm'
-                                  : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                              }`}
-                            >
-                              {leftLabel}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setPatternArea('full')}
-                              className={`flex-1 py-2 text-sm font-song rounded-sm transition-all duration-300 ${
-                                patternArea === rightKey
-                                  ? 'bg-palace-red text-rice-paper shadow-sm'
-                                  : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red hover:text-palace-red'
-                              }`}
-                            >
-                              {rightLabel}
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })()}
 
                     {/* ===== 区块二：部件配色 ===== */}
                     {product3DConfig?.meshConfig?.colorMaterials?.length ? (
