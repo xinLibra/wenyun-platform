@@ -5,7 +5,6 @@
     "modelUrl": "tote_bag.glb",
     "meshConfig": {
       "textureTargetMaterial": [
-        "tripo_part_0_material",
         "tripo_part_new_0_0_material"
       ],
       "textureTargetMaterials": {

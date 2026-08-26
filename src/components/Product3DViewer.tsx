@@ -181,6 +181,9 @@ function Model({
 
   useEffect(() => {
     const targets = getTextureTargets(textureTargetMaterial, textureTargetMaterials, patternArea)
+    // 本次实际贴图 / 换色的材质名收集（供 Console 汇总）
+    const texturedMats = new Set<string>()
+    const recoloredMats = new Set<string>()
 
     // 统计场景 mesh 数：只有 1 个 mesh 时，贴图/上色无条件命中（抱枕等单网格产品兜底）
     const allMeshes: THREE.Mesh[] = []
@@ -357,6 +360,7 @@ function Model({
           mat.transparent = patternOpacity < 1
           mat.depthWrite = patternOpacity >= 1
           mat.needsUpdate = true
+          texturedMats.add(mat.name || mesh.name || child.name || '-')
         } else {
           // 未命中贴图目标：清 map + 严格恢复 initialColor（绝不会黑，因为存时已修正）
           mat.map = null
@@ -387,6 +391,7 @@ function Model({
             mat.emissiveIntensity = 0
           }
           mat.needsUpdate = true
+          recoloredMats.add(mat.name || mesh.name || child.name || '-')
           console.log(
             `[3D Viewer recolor] part=${cm.name}(${cm.label || ''}) hex=${hex} materialName="${mat.name}" mesh="${mesh.name}" node="${child.name}" mode=${mode}`
           )
@@ -420,6 +425,11 @@ function Model({
       })
       console.log(`[3D Viewer] ${modelUrl} 材质 dump（创建默认材质后）:\n${dump.join('\n')}`)
     }
+
+    // ===== 汇总：本次实际执行的贴图 / 换色材质列表 =====
+    console.log(
+      `[3D Viewer apply] patternArea=${patternArea} targets=${JSON.stringify(targets)} textured=[${[...texturedMats].join(', ')}] recolored=[${[...recoloredMats].join(', ')}]`
+    )
   }, [clonedScene, texture, scene, textureTargetMaterial, textureTargetMaterials, patternArea, colorMaterials, colorMap, patternOpacity])
 
   return (
