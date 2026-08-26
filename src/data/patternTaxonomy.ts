@@ -29,7 +29,7 @@ export const PATTERN_THEMES: PatternTheme[] = [
       { id: 'plum', label: '梅花纹', trigger: 'ichpattern_plum' },
       { id: 'peony', label: '牡丹纹', trigger: 'ichpattern_peony' },
       { id: 'orchid', label: '兰花纹', trigger: 'ichpattern_orchid' },
-      { id: 'furong', label: '芙蓉花纹', trigger: 'ichpattern_furong' },
+      { id: 'furong', label: '芙蓉花纹', trigger: 'ichpattern_hibiscus' },
       { id: 'pomegranate_flower', label: '石榴花纹', trigger: 'ichpattern_pomegranate_flower' },
       { id: 'plant', label: '植物纹', trigger: 'ichpattern_plant' },
     ],

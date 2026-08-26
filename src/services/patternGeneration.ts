@@ -703,7 +703,8 @@ export interface FusionPromptInfo {
  *   - 推荐权重反映该 LoRA 训练效果（瑞兽 0.7 / 花卉 0.8），再乘比例分配主次，
  *     避免两个 LoRA 同时满权导致叠色过冲。
  *   - 权重 < 0.05 视为该子类无贡献：省略 <lora:...> 标签，但 trigger 仍写入 prompt。
- *   - loraMap 中 loraFile 为 null 的子类（兰/芙蓉/石榴花等）：不加 lora 标签，只写 trigger，不崩溃。
+ *   - loraMap 中 loraFile 为 null 的子类：不加 lora 标签，只写 trigger，不崩溃。
+ *     （2026-08-26 起兰花/芙蓉花/石榴花已挂载专属 LoRA，不再命中该分支。）
  */
 export function buildFusionPromptParts(options: FusionGenerationOptions): FusionPromptInfo {
   const { subcategoryA, subcategoryB, ratioA, ratioB, params } = options

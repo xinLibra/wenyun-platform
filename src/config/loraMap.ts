@@ -60,13 +60,17 @@ export interface LoraMapEntry {
  *   - ICH_lion_pattern_lora_v1            ← outputs/lion_v1/
  *   - ICH_dragon_phoenix_pattern_lora_v7  ← outputs/dragon_phoenix_v7/
  *
- * ===== 花卉 6 个专属子类 + 通用花卉 fallback =====
- * （2026-08-20 朋友按 DELIVERY.md 交付，已复制到 WebUI models/Lora）
+ * ===== 花卉 9 个专属子类 + 通用花卉 fallback =====
+ * （2026-08-20 朋友按 DELIVERY.md 交付，已复制到 WebUI models/Lora；
+ *   2026-08-26 追加 兰花/芙蓉花/石榴花 三个专属 LoRA，trigger 以 safetensors metadata 为准）
  *   - peony          → ICH_peony_pattern_lora_v7_clear    trigger: ich_flower_pattern + ich_peony_pattern
  *   - chrysanthemum  → ICH_chrysanthemum_pattern_lora_v3   trigger: ichpattern_chrysanthemum
  *   - plum           → ICH_plum_blossom_pattern_lora_v2    trigger: ichpattern_plum_blossom（训练原词）+ 兼容旧 ichpattern_plum
  *   - lotus          → ICH_lotus_pattern_lora_v3_attr      trigger: ich_flower_pattern + ich_lotus_pattern
  *   - flower_bird    → ICH_flower_bird_pattern_lora_v3     trigger: ich_flower_pattern + ich_flower_bird_pattern
+ *   - orchid         → ICH_orchid_pattern_lora_v3          trigger: ichpattern_orchid
+ *   - furong         → ICH_hibiscus_pattern_lora_v5        trigger: ichpattern_hibiscus（旧占位 ichpattern_furong 已废弃）
+ *   - pomegranate_flower → ICH_pomegranate_flower_pattern_lora_v6  trigger: ichpattern_pomegranate_flower
  *   - gourd / interlocking_floral / plant                  → 无专属模型 → 通用花卉 ICH_flower_general_final
  *
  * 注：ICH_qilin_pattern_lora_v1（麒麟纹）源文件已训练，但 patternTaxonomy 中暂无 qilin 子类，
@@ -152,14 +156,17 @@ export const LORA_MAP: LoraMapEntry[] = [
     loraFile: 'ICH_peony_pattern_lora_v7_clear',
     loraWeight: FLOWER_LORA_WEIGHT,
   },
-  // 新增花卉子类（2026-08-23）：暂无专属 LoRA，只写 trigger，不追加 <lora:...> 标签
+  // 新增花卉子类（2026-08-26）：已挂载专属 LoRA（朋友交付，文件已置于 WebUI models/Lora）
+  //   - 兰花 trigger: ichpattern_orchid（metadata 确认，与训练 caption 一致）
+  //   - 芙蓉花 trigger: ichpattern_hibiscus（safetensors metadata 确认；旧占位 ichpattern_furong 已废弃）
+  //   - 石榴花 trigger: ichpattern_pomegranate_flower（metadata 确认，与训练 caption 一致）
   {
     subcategoryId: 'orchid',
     themeId: 'floral',
     subLabelZh: '兰花纹',
     subLabelEn: 'orchid',
     trigger: 'ichpattern_orchid',
-    loraFile: null,
+    loraFile: 'ICH_orchid_pattern_lora_v3',
     loraWeight: FLOWER_LORA_WEIGHT,
   },
   {
@@ -167,8 +174,8 @@ export const LORA_MAP: LoraMapEntry[] = [
     themeId: 'floral',
     subLabelZh: '芙蓉花纹',
     subLabelEn: 'hibiscus',
-    trigger: 'ichpattern_furong',
-    loraFile: null,
+    trigger: 'ichpattern_hibiscus',
+    loraFile: 'ICH_hibiscus_pattern_lora_v5',
     loraWeight: FLOWER_LORA_WEIGHT,
   },
   {
@@ -177,7 +184,7 @@ export const LORA_MAP: LoraMapEntry[] = [
     subLabelZh: '石榴花纹',
     subLabelEn: 'pomegranate flower',
     trigger: 'ichpattern_pomegranate_flower',
-    loraFile: null,
+    loraFile: 'ICH_pomegranate_flower_pattern_lora_v6',
     loraWeight: FLOWER_LORA_WEIGHT,
   },
 
