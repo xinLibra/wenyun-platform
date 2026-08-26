@@ -82,6 +82,12 @@ export const SUBCATEGORY_PANTONE_MAP: Record<string, SubcategoryPantone> = {
   lotus:                { pantoneCode: '16-1450 TCX', label: '藕粉',   englishName: 'light pink',       promptTag: 'monochrome-black', reason: '莲花清雅，淡粉' },
   // 花鸟：工笔重彩，朱红
   flower_bird:          { pantoneCode: '18-1555 TCX', label: '朱红',   englishName: 'vermillion',       promptTag: 'monochrome-black', reason: '花鸟工笔，朱红点睛' },
+  // 葫芦：藤蔓翠绿
+  gourd:                { pantoneCode: '15-1260 TCX', label: '嫩绿',   englishName: 'fresh green',      promptTag: 'monochrome-black', reason: '葫芦藤蔓，嫩绿' },
+  // 缠枝：缠枝莲纹，松石绿
+  interlocking_floral:  { pantoneCode: '16-0541 TCX', label: '松石绿', englishName: 'turquoise green',  promptTag: 'monochrome-black', reason: '缠枝连绵，松石绿' },
+  // 植物：草木青绿
+  plant:                { pantoneCode: '15-1260 TCX', label: '嫩绿',   englishName: 'fresh green',      promptTag: 'monochrome-black', reason: '草木青葱，嫩绿' },
   // 兰花：空谷幽兰，月白/淡紫
   orchid:               { pantoneCode: '14-3904 TCX', label: '淡紫',   englishName: 'soft lilac',       promptTag: 'monochrome-black', reason: '空谷幽兰，淡雅' },
   // 芙蓉：朝开暮合，芙蓉出水，粉色
@@ -221,6 +227,22 @@ export const GENERATION_PRESETS: Record<string, GenerationPreset> = {
   // ===== 花卉子类默认值 =====
   // 配色：每个子类对应一个具体潘通色号（见 SUBCATEGORY_PANTONE_MAP），不再使用 multicolor 语义预设
   // applyPreset 会自动用 SUBCATEGORY_PANTONE_MAP 中的真实色号覆盖 colorScheme
+  interlocking_floral: {
+    arrangement: 'seamless',
+    symmetry: 'none',
+    complexity: 65,
+    textureDetail: 45,
+    culturalIntensity: 70,
+    colorScheme: { mode: 'pantone', pantone: '16-0541 TCX' },
+  },
+  gourd: {
+    arrangement: 'single',
+    symmetry: 'none',
+    complexity: 55,
+    textureDetail: 30,
+    culturalIntensity: 70,
+    colorScheme: { mode: 'pantone', pantone: '15-1260 TCX' },
+  },
   flower_bird: {
     arrangement: 'single',
     symmetry: 'none',
@@ -260,6 +282,14 @@ export const GENERATION_PRESETS: Record<string, GenerationPreset> = {
     textureDetail: 30,
     culturalIntensity: 75,
     colorScheme: { mode: 'pantone', pantone: '16-1450 TCX' },
+  },
+  plant: {
+    arrangement: 'single',
+    symmetry: 'none',
+    complexity: 55,
+    textureDetail: 30,
+    culturalIntensity: 70,
+    colorScheme: { mode: 'pantone', pantone: '15-1260 TCX' },
   },
   orchid: {
     arrangement: 'single',

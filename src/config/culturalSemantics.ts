@@ -228,6 +228,30 @@ export const CULTURAL_SEMANTICS: CulturalSemantic[] = [
   { id: 'flower_bird_8', scene: '新婚/美满', keywords: ['婚礼', '新婚', '成双', '美满'], meaning: '双鸟栖枝，寓意比翼双飞、恩爱美满', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
   { id: 'flower_bird_9', scene: '祝寿/延年', keywords: ['祝寿', '延年', '长寿', '寿辰'], meaning: '绶带鸟衔芝，寓意福寿绵长、健康延年', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
   { id: 'flower_bird_10', scene: '书房/文雅', keywords: ['书房', '文房', '文雅', '雅室'], meaning: '鸟语花韵，为书房增添闲雅意趣', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
+
+  // ==================== 缠枝花纹 ====================
+  { id: 'interlocking_floral_1', scene: '绵延/长久', keywords: ['绵延', '长久', '连绵不断', '生生不息'], meaning: '缠枝连绵不断，寓意生生不息、福泽绵长', patternLabel: '缠枝花纹', patternId: 'interlocking_floral', themeId: 'floral' },
+  { id: 'interlocking_floral_2', scene: '家族/传承', keywords: ['家族', '传承', '香火', '绵延'], meaning: '藤蔓缠绕相生，寓意家族兴旺、代代相传', patternLabel: '缠枝花纹', patternId: 'interlocking_floral', themeId: 'floral' },
+  { id: 'interlocking_floral_3', scene: '婚礼/爱情', keywords: ['婚礼', '爱情', '缠缠绵绵', '长久'], meaning: '枝蔓相依，寓意爱情缠绵、长长久久', patternLabel: '缠枝花纹', patternId: 'interlocking_floral', themeId: 'floral' },
+  { id: 'interlocking_floral_4', scene: '家居装饰', keywords: ['家居', '装饰', '壁纸', '布艺'], meaning: '缠枝连贯流畅，是家居布艺的经典连续纹样', patternLabel: '缠枝花纹', patternId: 'interlocking_floral', themeId: 'floral' },
+  { id: 'interlocking_floral_5', scene: '瓷器/青花', keywords: ['瓷器', '青花', '陶瓷', '瓶'], meaning: '青花缠枝，中国瓷器上最经典的吉祥纹样', patternLabel: '缠枝花纹', patternId: 'interlocking_floral', themeId: 'floral' },
+  { id: 'interlocking_floral_6', scene: '织锦/刺绣', keywords: ['织锦', '刺绣', '布艺', '面料'], meaning: '缠枝纹样连绵，适合织锦刺绣的连续构图', patternLabel: '缠枝花纹', patternId: 'interlocking_floral', themeId: 'floral' },
+  { id: 'interlocking_floral_7', scene: '传统服饰', keywords: ['汉服', '服饰', '衣饰', '绣品'], meaning: '缠枝华美，点缀服饰寓意绵延富贵', patternLabel: '缠枝花纹', patternId: 'interlocking_floral', themeId: 'floral' },
+  { id: 'interlocking_floral_8', scene: '新年/春节', keywords: ['新年', '春节', '过年', '吉庆'], meaning: '万代长春，寓意新年福运绵延不断', patternLabel: '缠枝花纹', patternId: 'interlocking_floral', themeId: 'floral' },
+  { id: 'interlocking_floral_9', scene: '文化礼品', keywords: ['礼品', '送礼', '伴手礼'], meaning: '缠枝寓意长久，是祝福绵延的雅致之礼', patternLabel: '缠枝花纹', patternId: 'interlocking_floral', themeId: 'floral' },
+  { id: 'interlocking_floral_10', scene: '祈福/平安', keywords: ['祈福', '平安', '顺遂', '康宁'], meaning: '枝蔓延绵，寓意福气源源不断、岁岁平安', patternLabel: '缠枝花纹', patternId: 'interlocking_floral', themeId: 'floral' },
+
+  // ==================== 葫芦纹 ====================
+  { id: 'gourd_1', scene: '福禄/吉祥', keywords: ['福禄', '福气', '吉祥', '纳福'], meaning: '葫芦谐音福禄，寓意福禄双全、吉祥如意', patternLabel: '葫芦纹', patternId: 'gourd', themeId: 'floral' },
+  { id: 'gourd_2', scene: '辟邪/保平安', keywords: ['辟邪', '保平安', '护身', '镇宅'], meaning: '葫芦能收邪祟，寓意驱邪纳福、平安顺遂', patternLabel: '葫芦纹', patternId: 'gourd', themeId: 'floral' },
+  { id: 'gourd_3', scene: '多子/繁衍', keywords: ['多子', '繁衍', '子孙', '葫芦娃'], meaning: '葫芦藤蔓多籽，寓意多子多福、家族繁衍', patternLabel: '葫芦纹', patternId: 'gourd', themeId: 'floral' },
+  { id: 'gourd_4', scene: '升官/禄位', keywords: ['升官', '禄位', '仕途', '功名'], meaning: '葫芦寓禄，祝愿仕途亨通、加官进爵', patternLabel: '葫芦纹', patternId: 'gourd', themeId: 'floral' },
+  { id: 'gourd_5', scene: '婚嫁/传家', keywords: ['婚嫁', '传家', '子孙后代', '香火'], meaning: '葫芦连枝，寓意子孙昌盛、代代相传', patternLabel: '葫芦纹', patternId: 'gourd', themeId: 'floral' },
+  { id: 'gourd_6', scene: '居家/纳福', keywords: ['居家', '纳福', '挂饰', '摆设'], meaning: '葫芦挂福，是居家纳福的常见吉祥挂饰', patternLabel: '葫芦纹', patternId: 'gourd', themeId: 'floral' },
+  { id: 'gourd_7', scene: '传统服饰', keywords: ['汉服', '服饰', '衣饰', '绣品'], meaning: '葫芦纹样圆润饱满，点缀服饰寓意福禄', patternLabel: '葫芦纹', patternId: 'gourd', themeId: 'floral' },
+  { id: 'gourd_8', scene: '文化礼品', keywords: ['礼品', '送礼', '伴手礼'], meaning: '福禄葫芦，寓意福禄双全，是讨喜的赠礼', patternLabel: '葫芦纹', patternId: 'gourd', themeId: 'floral' },
+  { id: 'gourd_9', scene: '新年/春节', keywords: ['新年', '春节', '过年', '迎春'], meaning: '福禄临门，寓意新年福运亨通、喜气盈门', patternLabel: '葫芦纹', patternId: 'gourd', themeId: 'floral' },
+  { id: 'gourd_10', scene: '乔迁/新居', keywords: ['乔迁', '新居', '搬家', '入宅'], meaning: '福禄入宅，寓意新居平安富贵、福气满堂', patternLabel: '葫芦纹', patternId: 'gourd', themeId: 'floral' },
 ]
 
 /** 根据关键词做包含匹配，返回命中的语义记录（按场景分组去重） */
@@ -270,6 +294,7 @@ export const SCENE_ALIAS: Record<string, string> = {
   '婚礼/成双': 'wedding',
   '新婚/婚庆': 'wedding',
   '新婚/婚后': 'wedding',
+  '婚礼/爱情': 'wedding',
   '新婚/美满': 'wedding',
   '订婚/良缘': 'wedding',
   '婚礼请柬': 'wedding',
@@ -278,6 +303,7 @@ export const SCENE_ALIAS: Record<string, string> = {
   '婚礼回礼': 'wedding',
   '新婚/早生贵子': 'wedding',
   '姻缘/情缘': 'wedding',
+  '婚嫁/传家': 'wedding',
   // 寿辰 / 生辰
   '寿辰/祝寿': 'longevity',
   '长辈寿辰': 'longevity',
@@ -294,9 +320,11 @@ export const SCENE_ALIAS: Record<string, string> = {
   '仕途/功名': 'career',
   '升职/高升': 'career',
   '功名利禄': 'career',
+  '升官/禄位': 'career',
   '太狮少狮': 'career',
   // 乔迁 / 新居
   '乔迁/新居': 'housewarming',
+  '居家/纳福': 'housewarming',
   // 新春 / 庆典
   '新年/春节': 'newyear',
   '春季节庆': 'newyear',
@@ -316,12 +344,15 @@ export const SCENE_ALIAS: Record<string, string> = {
   '镇宅/祈福': 'protection',
   '护佑/辟邪': 'protection',
   '辟邪/镇宅': 'protection',
+  '辟邪/保平安': 'protection',
+  '祈福/平安': 'protection',
   '中元/祈福': 'protection',
   // 富贵 / 繁荣
   '富贵/繁荣': 'prosperity',
   '富贵/荣华': 'prosperity',
   '荣华/富贵': 'prosperity',
   '福禄双全': 'prosperity',
+  '福禄/吉祥': 'prosperity',
   '锦上添花': 'prosperity',
   '红火/喜庆': 'prosperity',
   // 文人雅趣 / 雅集
@@ -363,7 +394,10 @@ export const SCENE_ALIAS: Record<string, string> = {
   '冬日/雪景': 'nature',
   // 家业 / 传承
   '多子/人丁': 'family',
+  '多子/繁衍': 'family',
   '家业/传承': 'family',
+  '家族/传承': 'family',
+  '绵延/长久': 'family',
   // 静心 / 禅意
   '宁静养生': 'zen',
   '静心/禅意': 'zen',
@@ -378,6 +412,8 @@ export const SCENE_ALIAS: Record<string, string> = {
   '母亲/感恩': 'gratitude',
   '喜事/报喜': 'joy',
   '生机/和谐': 'joy',
+  '瓷器/青花': 'craft',
+  '织锦/刺绣': 'craft',
   '建筑/雕梁': 'craft',
   '建筑/石雕': 'craft',
 }
@@ -391,13 +427,13 @@ const SCENE_META: Record<string, { label: string; hint?: string }> = {
   opening: { label: '开业', hint: '寓意开业兴隆；宜用凤鸟、狮子、牡丹；红金配色显热闹。' },
   venture: { label: '创业', hint: '寓意事业腾飞；宜用龙、虎、鹿；气势昂扬。' },
   career: { label: '仕途', hint: '寓意功名亨通；宜用鹿、孔雀、鹤；端庄贵气。' },
-  housewarming: { label: '乔迁', hint: '寓意新居纳福；宜用凤鸟、鹿、牡丹；温馨吉庆。' },
+  housewarming: { label: '乔迁', hint: '寓意新居纳福；宜用凤鸟、鹿、葫芦、缠枝；温馨吉庆。' },
   newyear: { label: '新春', hint: '寓意新春吉庆；宜用龙、凤、梅、虎；红金喜庆。' },
   festival: { label: '庆典', hint: '寓意隆重热闹；宜用龙凤、狮子、孔雀；华美大气。' },
   cultural: { label: '文创周边', hint: '适合手机壳、帆布包、礼盒等；主体清晰、背景干净。' },
   apparel: { label: '服饰', hint: '适合面料与绣片；注意边缘完整与对称。' },
-  home: { label: '家居', hint: '装饰性强、可连续铺陈；宜团花、花鸟；色调和谐。' },
-  protection: { label: '护佑', hint: '寓意镇宅护佑；宜用虎、龙、狮子；稳重有威。' },
+  home: { label: '家居', hint: '装饰性强、可连续铺陈；宜团花、缠枝；色调和谐。' },
+  protection: { label: '护佑', hint: '寓意镇宅护佑；宜用虎、龙、狮子、葫芦；稳重有威。' },
   prosperity: { label: '富贵', hint: '寓意富贵繁荣；宜用牡丹、孔雀、石榴；华丽丰盛。' },
   elegance: { label: '雅集', hint: '寓意文人雅趣；宜用梅兰竹菊、鹤、莲；清雅含蓄。' },
   daughter: { label: '少女礼', hint: '寓意少女美好；宜用蝴蝶、芙蓉、石榴花；柔美灵动。' },
@@ -407,13 +443,13 @@ const SCENE_META: Record<string, { label: string; hint?: string }> = {
   valor: { label: '勇武', hint: '寓意勇武气魄；宜用虎、狮、龙；刚健有力。' },
   noble: { label: '尊贵', hint: '寓意尊贵权威；宜用龙、凤、孔雀；雍容华贵。' },
   nature: { label: '自然四季', hint: '寓意自然生机；宜用花鸟、蝴蝶、菊梅；清新明快。' },
-  family: { label: '家业传承', hint: '寓意子孙绵延、家业兴旺；宜用石榴、莲花、牡丹。' },
+  family: { label: '家业传承', hint: '寓意子孙绵延、家业兴旺；宜用石榴、葫芦、缠枝。' },
   zen: { label: '静心禅意', hint: '寓意宁静祥和；宜用莲、鹤、兰；素雅沉静。' },
   integrity: { label: '清廉高洁', hint: '寓意清正高洁；宜用莲、兰、梅；淡雅端正。' },
   friendship: { label: '友谊金兰', hint: '寓意情谊相投；宜用兰、鹤、梅；清雅隽永。' },
   gratitude: { label: '感恩', hint: '寓意感恩敬重；宜用牡丹、鹤、兰；温暖真诚。' },
   joy: { label: '喜事报喜', hint: '寓意喜事临门；宜用花鸟、喜鹊、牡丹；欢快明亮。' },
-  craft: { label: '工艺雅器', hint: '适用于瓷器、织绣、建筑装饰；宜花鸟、龙凤、牡丹。' },
+  craft: { label: '工艺雅器', hint: '适用于瓷器、织绣、建筑装饰；宜缠枝、花鸟、龙凤。' },
 }
 
 /** 语义表 scene 原始值 → 标准场景 id（未归并的值原样返回） */

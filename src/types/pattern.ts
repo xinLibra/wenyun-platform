@@ -73,6 +73,7 @@ export const ETHNIC_OPTIONS = [
 export const THEME_OPTIONS = [
   { id: 'animal', label: '动物纹', children: ['龙凤', '瑞兽', '鱼虫'] },
   { id: 'human', label: '人物纹' },
+  { id: 'plant', label: '植物纹', children: ['缠枝', '折枝', '团花'] },
   { id: 'geometric', label: '几何纹', children: ['回纹', '冰裂纹', '锁子纹'] },
   { id: 'composite', label: '组合纹' },
 ]
@@ -123,21 +124,21 @@ export const OLD_STYLE_MIGRATION: Record<string, PatternDimension> = {
   papercut: {
     craft: ['carving'],
     ethnic: ['han'],
-    theme: ['animal', 'floral'],
+    theme: ['animal', 'plant'],
     application: ['cultural'],
     style: { figurative: 50, traditional: 95, simplicity: 60, handmade: 90 },
   },
   embroidery: {
     craft: ['embroidery'],
     ethnic: ['han'],
-    theme: ['floral', 'animal'],
+    theme: ['plant', 'animal'],
     application: ['clothing'],
     style: { figurative: 70, traditional: 85, simplicity: 40, handmade: 95 },
   },
   ink: {
     craft: [],
     ethnic: ['han'],
-    theme: ['floral', 'geometric'],
+    theme: ['plant', 'geometric'],
     application: ['home'],
     style: { figurative: 40, traditional: 70, simplicity: 80, handmade: 70 },
   },
@@ -151,14 +152,14 @@ export const OLD_STYLE_MIGRATION: Record<string, PatternDimension> = {
   porcelain: {
     craft: ['ceramic'],
     ethnic: ['han'],
-    theme: ['floral', 'geometric'],
+    theme: ['plant', 'geometric'],
     application: ['home'],
     style: { figurative: 60, traditional: 85, simplicity: 70, handmade: 80 },
   },
   fashion: {
     craft: ['dye', 'embroidery'],
     ethnic: ['han'],
-    theme: ['floral', 'geometric'],
+    theme: ['plant', 'geometric'],
     application: ['clothing'],
     style: { figurative: 55, traditional: 80, simplicity: 60, handmade: 75 },
   },

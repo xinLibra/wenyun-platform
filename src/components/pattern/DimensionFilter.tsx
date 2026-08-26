@@ -68,7 +68,7 @@ export function DimensionFilter({ value, onChange }: DimensionFilterProps) {
                   ...value,
                   mainTheme: t.id,
                   subcategory: '',
-                  theme: t.id === 'floral' ? ['floral'] : ['animal'],
+                  theme: t.id === 'floral' ? ['plant'] : ['animal'],
                 })
               }
             >

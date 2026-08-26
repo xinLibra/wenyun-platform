@@ -1,4 +1,4 @@
-import { generatePreviewDataUrl } from '../utils/exportImage'
+import { generatePreviewDataUrl, generateProductPreviewDataUrl } from '../utils/exportImage'
 import { ensurePublicImageUrl } from '../lib/storage'
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -982,10 +982,27 @@ export default function CustomizeProduct() {
     setShowQuantityModal(false)
     
     if (quantityAction === 'cart') {
-      // 3D 产品：用 3D 预览截图作为购物车图，避免购物车用 2D 合成图
+      // 3D 产品：优先用 3D 预览截图作为购物车图
       let previewImage: string | undefined
       if (is3DProduct && viewerCaptureRef.current) {
         previewImage = viewerCaptureRef.current() || undefined
+      }
+      // 3D 截图不可用：用「产品轮廓 + 纹样」的本地合成图（书签/手提袋/手机壳等），
+      // 不依赖远程产品图，绝不把纯纹样方块当缩略图
+      if (!previewImage && selectedPatternImage) {
+        try {
+          previewImage = await generateProductPreviewDataUrl({
+            productId: selectedProduct,
+            patternImage: selectedPatternImage,
+            layoutMode,
+            scale,
+            rotation,
+            positionX,
+            positionY,
+          }, 384)
+        } catch (e) {
+          console.warn('[Cart] composite preview failed:', e)
+        }
       }
       // 截图是 data: base64：已登录则先转 Storage 短链再入库；未登录保持原样，结算时再转
       if (previewImage && /^data:/i.test(previewImage)) {
@@ -1030,25 +1047,27 @@ export default function CustomizeProduct() {
       try {
         const captured = await tryCapture3D()
         if (!captured) {
-          const url = await generatePreviewDataUrl({
-            productImage: currentProduct?.image || '',
-            patternImage: selectedPatternImage,
-            layoutMode,
-            scale,
-            rotation,
-            positionX,
-            positionY,
-            blendMode,
-            textOverlay,
-            textFont,
-            textSize,
-            textPositionX,
-            textPositionY,
-            textRotation,
-            canvasWidth: 256,
-            canvasHeight: 256,
-          }, 256)
-          setOrderPreviewImg(url)
+          // 3D 截图不可用：用「产品轮廓 + 纹样」的本地合成图（书签/手提袋/手机壳等），
+          // 不依赖远程产品图（避免 CORS/失效/白底相乘变成纹样块），保证订单缩略图看得出是产品
+          if (selectedPatternImage) {
+            try {
+              const url = await generateProductPreviewDataUrl({
+                productId: selectedProduct,
+                patternImage: selectedPatternImage,
+                layoutMode,
+                scale,
+                rotation,
+                positionX,
+                positionY,
+              }, 384)
+              setOrderPreviewImg(url)
+            } catch (e) {
+              console.warn('[Order] composite preview failed, fallback to product image:', e)
+              setOrderPreviewImg(currentProduct?.image || '')
+            }
+          } else {
+            setOrderPreviewImg(currentProduct?.image || '')
+          }
         }
       } catch {
         setOrderPreviewImg(currentProduct?.image || '')

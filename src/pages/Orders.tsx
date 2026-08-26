@@ -7,7 +7,6 @@ import { supabase } from '../lib/supabase'
 import { classifyError, logSupabaseConfig, sleep, withTimeout } from '../lib/async'
 import { useNavigate } from 'react-router-dom'
 import { products } from '../lib/products'
-import PatternPreview from '../components/PatternPreview'
 
 interface Order {
   id: string
@@ -83,10 +82,10 @@ function SafeImg({ src, alt, className }: { src: string; alt?: string; className
 }
 
 /**
- * 订单定制预览图（3D 截图 / 2D 合成图）：
+ * 订单定制预览图（3D 截图 / 产品轮廓合成图）：
  * 优先 previewImageUrl（新订单写入的 Storage 短链，列表可安全投影），
  * 其次 previewImage（仅接受 http(s) 短链，data: base64 一律不用），
- * 都没有时返回 ''，上层回退 2D 合成 / 产品默认图。
+ * 都没有时返回 ''，上层回退产品默认图。
  */
 function getOrderPreviewUrl(order: Order): string {
   const c = order.customization
@@ -94,6 +93,24 @@ function getOrderPreviewUrl(order: Order): string {
   if (typeof c.previewImageUrl === 'string' && /^https?:\/\//i.test(c.previewImageUrl)) return c.previewImageUrl
   if (typeof c.previewImage === 'string' && /^https?:\/\//i.test(c.previewImage)) return c.previewImage
   return ''
+}
+
+/**
+ * 订单缩略图：优先订单 preview 短链（3D 截图 / 产品轮廓+纹样合成图），
+ * 无 preview 时回退产品默认图（书签默认图等），绝不把纯纹样 image_url 当缩略图。
+ */
+function OrderThumb({ order, size = 'md' }: { order: Order; size?: 'sm' | 'md' }) {
+  const product = products[order.product_id]
+  const box = size === 'sm' ? 'w-16 h-16' : 'w-24 h-24'
+  return (
+    <div className={`${box} bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0`}>
+      <SafeImg
+        src={getOrderPreviewUrl(order) || product?.image || order.product_image || ''}
+        alt={product?.name}
+        className="w-full h-full object-cover"
+      />
+    </div>
+  )
 }
 
 export default function Orders() {
@@ -512,41 +529,7 @@ export default function Orders() {
                     onClick={() => setSelectedOrder(order)}
                   >
                     <div className="flex-shrink-0">
-                      {getOrderPreviewUrl(order) ? (
-                        <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                          <SafeImg
-                            src={getOrderPreviewUrl(order)}
-                            alt={product?.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : order.image_url && order.product_image ? (
-                        <PatternPreview
-                          productImage={order.product_image}
-                          patternImage={order.image_url}
-                          scale={order.customization.scale || 100}
-                          rotation={order.customization.rotation || 0}
-                          positionX={order.customization.positionX || 50}
-                          positionY={order.customization.positionY || 50}
-                          blendMode={order.customization.blendMode || 'normal'}
-                          size="small"
-                          showFrame={false}
-                          layoutMode={order.customization.layoutMode}
-                          textOverlay={order.customization.textOverlay}
-                          textFont={order.customization.textFont}
-                          textSize={order.customization.textSize || 16}
-                          textPositionX={order.customization.textPositionX || 50}
-                          textPositionY={order.customization.textPositionY || 85}
-                        />
-                      ) : (
-                        <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                          <SafeImg
-                            src={product?.image}
-                            alt={product?.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      )}
+                      <OrderThumb order={order} />
                     </div>
                     <div className="flex-1">
                       <h3 className="font-shufa text-lg text-deep-blue mb-1">{product?.name}</h3>
@@ -621,41 +604,7 @@ export default function Orders() {
                   <>
                     <div className="flex gap-4 mb-4">
                       <div className="flex-shrink-0">
-                        {getOrderPreviewUrl(selectedOrder) ? (
-                          <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                            <SafeImg
-                              src={getOrderPreviewUrl(selectedOrder)}
-                              alt={products[selectedOrder.product_id]?.name}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        ) : selectedOrder.image_url && selectedOrder.product_image ? (
-                          <PatternPreview
-                            productImage={selectedOrder.product_image}
-                            patternImage={selectedOrder.image_url}
-                            scale={selectedOrder.customization.scale || 100}
-                            rotation={selectedOrder.customization.rotation || 0}
-                            positionX={selectedOrder.customization.positionX || 50}
-                            positionY={selectedOrder.customization.positionY || 50}
-                            blendMode={selectedOrder.customization.blendMode || 'normal'}
-                            size="small"
-                            showFrame={false}
-                            layoutMode={selectedOrder.customization.layoutMode}
-                            textOverlay={selectedOrder.customization.textOverlay}
-                            textFont={selectedOrder.customization.textFont}
-                            textSize={selectedOrder.customization.textSize || 16}
-                            textPositionX={selectedOrder.customization.textPositionX || 50}
-                            textPositionY={selectedOrder.customization.textPositionY || 85}
-                          />
-                        ) : (
-                          <div className="w-24 h-24 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                            <SafeImg
-                              src={products[selectedOrder.product_id]?.image}
-                              alt={products[selectedOrder.product_id]?.name}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        )}
+                        <OrderThumb order={selectedOrder} />
                       </div>
                       <div className="flex-1">
                         <h3 className="font-shufa text-deep-blue">
@@ -842,42 +791,8 @@ export default function Orders() {
                 <div className="border-t border-deep-blue-100 pt-4 mb-4">
                   <div className="flex items-center gap-4 mb-3">
                     <div className="flex-shrink-0">
-                      {getOrderPreviewUrl(selectedOrder) ? (
-                        <div className="w-16 h-16 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                          <img
-                            src={getOrderPreviewUrl(selectedOrder)}
-                            alt={products[selectedOrder.product_id]?.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : selectedOrder.image_url && selectedOrder.product_image ? (
-                          <PatternPreview
-                            productImage={selectedOrder.product_image}
-                            patternImage={selectedOrder.image_url}
-                            scale={selectedOrder.customization.scale || 100}
-                            rotation={selectedOrder.customization.rotation || 0}
-                            positionX={selectedOrder.customization.positionX || 50}
-                            positionY={selectedOrder.customization.positionY || 50}
-                            blendMode={selectedOrder.customization.blendMode || 'normal'}
-                            size="small"
-                            showFrame={false}
-                            layoutMode={selectedOrder.customization.layoutMode}
-                            textOverlay={selectedOrder.customization.textOverlay}
-                            textFont={selectedOrder.customization.textFont}
-                            textSize={selectedOrder.customization.textSize || 16}
-                            textPositionX={selectedOrder.customization.textPositionX || 50}
-                            textPositionY={selectedOrder.customization.textPositionY || 85}
-                          />
-                        ) : (
-                          <div className="w-16 h-16 bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0">
-                            <SafeImg
-                              src={products[selectedOrder.product_id]?.image}
-                              alt={products[selectedOrder.product_id]?.name}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        )}
-                      </div>
+                      <OrderThumb order={selectedOrder} size="sm" />
+                    </div>
                       <div className="flex-1">
                         <h3 className="font-shufa text-deep-blue">{products[selectedOrder.product_id]?.name}</h3>
                         <p className="font-song text-xs text-deep-blue-light">

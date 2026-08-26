@@ -7,7 +7,6 @@ import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { supabase } from '../lib/supabase'
 import { classifyError, logSupabaseConfig, withTimeout } from '../lib/async'
 import { products } from '../lib/products'
-import PatternPreview from '../components/PatternPreview'
 
 export default function OrderConfirmPage() {
   const { id: orderId } = useParams<{ id?: string }>()
@@ -116,7 +115,7 @@ export default function OrderConfirmPage() {
 
   const product = products[order.product_id] || { name: '未知产品', price: '0', image: '' }
 
-  // 定制预览图（3D 截图 / 合成图短链）：优先 previewImageUrl，其次 previewImage（仅 http 短链），不用 data: base64
+  // 定制预览图（3D 截图 / 产品轮廓合成图短链）：优先 previewImageUrl，其次 previewImage（仅 http 短链），不用 data: base64
   const c = order.customization || {}
   const previewUrl =
     (typeof c.previewImageUrl === 'string' && /^https?:\/\//i.test(c.previewImageUrl) ? c.previewImageUrl : '') ||
@@ -149,29 +148,9 @@ export default function OrderConfirmPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="md:col-span-1">
                 <div className="aspect-square bg-rice-paper-dark rounded-sm overflow-hidden">
-                  {previewUrl ? (
+                  {previewUrl || product.image ? (
                     <img
-                      src={previewUrl}
-                      alt={product.name}
-                      loading="lazy"
-                      decoding="async"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/placeholder-pattern-a.png' }}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : order.image_url && order.product_image ? (
-                    <PatternPreview
-                      productImage={order.product_image}
-                      patternImage={order.image_url}
-                      scale={c.scale || 100}
-                      rotation={c.rotation || 0}
-                      positionX={c.positionX || 50}
-                      positionY={c.positionY || 50}
-                      blendMode={c.blendMode || 'normal'}
-                      size="medium"
-                    />
-                  ) : product.image ? (
-                    <img
-                      src={product.image}
+                      src={previewUrl || product.image}
                       alt={product.name}
                       loading="lazy"
                       decoding="async"

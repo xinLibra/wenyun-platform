@@ -293,3 +293,434 @@ export async function generatePreviewDataUrl(
   })
   return canvas.toDataURL('image/png')
 }
+
+// ==================== 产品轮廓合成（订单 / 购物车缩略图专用）====================
+// 目的：订单列表 / 详情的缩略图必须是「能看出是产品 + 带当前纹样」的效果图，
+// 而不是平面纹样方块。该函数不依赖远程产品照片（避免 CORS / 图片失效 / 白底相乘变纹样块），
+// 直接本地绘制产品轮廓（书签+流苏 / 手提袋 / 手机壳 / 笔记本 / 明信片 / 抱枕 / 手帕 / 围巾 / T恤等），
+// 用当前纹样填充轮廓，输出方形 PNG。任何产品在任何网络环境下都能生成产品级预览。
+
+export interface ProductPreviewParams {
+  productId: string
+  patternImage?: string | null
+  layoutMode?: LayoutMode
+  scale?: number
+  rotation?: number
+  positionX?: number
+  positionY?: number
+}
+
+interface ShapeSpec {
+  /** 绘制产品主轮廓路径（会被用于 clip 与描边） */
+  path: (ctx: CanvasRenderingContext2D, S: number) => void
+  /** 纹样填充区域（平铺范围 / 居中定位的基准矩形） */
+  patternRect: (S: number) => { x: number; y: number; w: number; h: number }
+  /** 产品细节：流苏 / 提手 / 相机开孔 / 线圈 / 折角等 */
+  detail?: (ctx: CanvasRenderingContext2D, S: number) => void
+}
+
+function roundedRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2))
+  ctx.beginPath()
+  ctx.moveTo(x + rr, y)
+  ctx.arcTo(x + w, y, x + w, y + h, rr)
+  ctx.arcTo(x + w, y + h, x, y + h, rr)
+  ctx.arcTo(x, y + h, x, y, rr)
+  ctx.arcTo(x, y, x + w, y, rr)
+  ctx.closePath()
+}
+
+function shapeFor(productId: string): ShapeSpec {
+  switch (productId) {
+    case 'bookmark': {
+      // 竖条书签 + 挂孔 + 流苏
+      return {
+        path: (ctx, S) => roundedRectPath(ctx, 0.32 * S, 0.08 * S, 0.36 * S, 0.66 * S, 0.025 * S),
+        patternRect: (S) => ({ x: 0.32 * S, y: 0.08 * S, w: 0.36 * S, h: 0.66 * S }),
+        detail: (ctx, S) => {
+          // 顶部挂孔 + 黄铜圈
+          ctx.beginPath()
+          ctx.arc(0.5 * S, 0.15 * S, 0.028 * S, 0, Math.PI * 2)
+          ctx.fillStyle = '#F5F0E6'
+          ctx.fill()
+          ctx.strokeStyle = '#B08D57'
+          ctx.lineWidth = Math.max(1.5, S * 0.006)
+          ctx.stroke()
+          // 底部连接扣
+          ctx.fillStyle = '#A03A3A'
+          ctx.fillRect(0.415 * S, 0.736 * S, 0.17 * S, 0.014 * S)
+          // 流苏线
+          ctx.strokeStyle = '#A03A3A'
+          ctx.lineWidth = Math.max(1.5, S * 0.009)
+          ctx.beginPath()
+          ctx.moveTo(0.425 * S, 0.75 * S)
+          ctx.lineTo(0.435 * S, 0.84 * S)
+          ctx.moveTo(0.5 * S, 0.75 * S)
+          ctx.lineTo(0.5 * S, 0.85 * S)
+          ctx.moveTo(0.575 * S, 0.75 * S)
+          ctx.lineTo(0.565 * S, 0.84 * S)
+          ctx.stroke()
+          // 流苏穗
+          ctx.fillStyle = '#A03A3A'
+          for (const [cx, cy] of [
+            [0.435, 0.85],
+            [0.5, 0.862],
+            [0.565, 0.85],
+          ]) {
+            ctx.beginPath()
+            ctx.ellipse(cx * S, cy * S, 0.02 * S, 0.035 * S, 0, 0, Math.PI * 2)
+            ctx.fill()
+          }
+        },
+      }
+    }
+    case 'tote':
+    case 'paper_bag': {
+      // 手提袋 / 纸袋：袋身 + 提手
+      return {
+        path: (ctx, S) => roundedRectPath(ctx, 0.24 * S, 0.44 * S, 0.52 * S, 0.42 * S, 0.015 * S),
+        patternRect: (S) => ({ x: 0.24 * S, y: 0.44 * S, w: 0.52 * S, h: 0.42 * S }),
+        detail: (ctx, S) => {
+          const handleColor = productId === 'paper_bag' ? '#6B5B45' : '#8A2F2F'
+          ctx.strokeStyle = handleColor
+          ctx.lineCap = 'round'
+          ctx.lineWidth = Math.max(2, S * 0.018)
+          // 左提手
+          ctx.beginPath()
+          ctx.moveTo(0.32 * S, 0.44 * S)
+          ctx.quadraticCurveTo(0.35 * S, 0.18 * S, 0.44 * S, 0.44 * S)
+          ctx.stroke()
+          // 右提手
+          ctx.beginPath()
+          ctx.moveTo(0.56 * S, 0.44 * S)
+          ctx.quadraticCurveTo(0.65 * S, 0.18 * S, 0.68 * S, 0.44 * S)
+          ctx.stroke()
+          // 袋口折边
+          ctx.lineWidth = Math.max(1.5, S * 0.006)
+          ctx.beginPath()
+          ctx.moveTo(0.24 * S, 0.47 * S)
+          ctx.lineTo(0.76 * S, 0.47 * S)
+          ctx.stroke()
+          // 袋身底部弧线（立体感）
+          ctx.globalAlpha = 0.25
+          ctx.beginPath()
+          ctx.moveTo(0.26 * S, 0.82 * S)
+          ctx.quadraticCurveTo(0.5 * S, 0.87 * S, 0.74 * S, 0.82 * S)
+          ctx.stroke()
+        },
+      }
+    }
+    case 'phonecase': {
+      return {
+        path: (ctx, S) => roundedRectPath(ctx, 0.25 * S, 0.12 * S, 0.5 * S, 0.74 * S, 0.06 * S),
+        patternRect: (S) => ({ x: 0.265 * S, y: 0.135 * S, w: 0.47 * S, h: 0.71 * S }),
+        detail: (ctx, S) => {
+          // 相机开孔
+          roundedRectPath(ctx, 0.295 * S, 0.175 * S, 0.1 * S, 0.1 * S, 0.02 * S)
+          ctx.fillStyle = '#F5F0E6'
+          ctx.fill()
+          ctx.strokeStyle = 'rgba(91, 74, 58, 0.5)'
+          ctx.lineWidth = Math.max(1.5, S * 0.005)
+          ctx.stroke()
+          // 机身边缘
+          ctx.globalAlpha = 0.4
+          roundedRectPath(ctx, 0.27 * S, 0.14 * S, 0.46 * S, 0.7 * S, 0.05 * S)
+          ctx.stroke()
+        },
+      }
+    }
+    case 'notebook': {
+      return {
+        path: (ctx, S) => roundedRectPath(ctx, 0.24 * S, 0.1 * S, 0.52 * S, 0.78 * S, 0.012 * S),
+        patternRect: (S) => ({ x: 0.27 * S, y: 0.12 * S, w: 0.47 * S, h: 0.74 * S }),
+        detail: (ctx, S) => {
+          // 左侧线圈
+          ctx.strokeStyle = 'rgba(91, 74, 58, 0.8)'
+          ctx.fillStyle = '#F5F0E6'
+          ctx.lineWidth = Math.max(1.5, S * 0.006)
+          for (let i = 0; i < 9; i++) {
+            const cy = (0.16 + i * 0.077) * S
+            ctx.beginPath()
+            ctx.arc(0.252 * S, cy, 0.016 * S, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.stroke()
+          }
+          // 书脊阴影
+          ctx.globalAlpha = 0.15
+          ctx.fillRect(0.24 * S, 0.1 * S, 0.028 * S, 0.78 * S)
+        },
+      }
+    }
+    case 'postcard': {
+      return {
+        path: (ctx, S) => roundedRectPath(ctx, 0.12 * S, 0.26 * S, 0.76 * S, 0.48 * S, 0.01 * S),
+        patternRect: (S) => ({ x: 0.12 * S, y: 0.26 * S, w: 0.76 * S, h: 0.48 * S }),
+        detail: (ctx, S) => {
+          // 明信片留白边
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)'
+          ctx.lineWidth = Math.max(2, S * 0.008)
+          roundedRectPath(ctx, 0.15 * S, 0.29 * S, 0.7 * S, 0.42 * S, 0.006 * S)
+          ctx.stroke()
+        },
+      }
+    }
+    case 'cushion': {
+      return {
+        path: (ctx, S) => roundedRectPath(ctx, 0.15 * S, 0.15 * S, 0.7 * S, 0.7 * S, 0.1 * S),
+        patternRect: (S) => ({ x: 0.17 * S, y: 0.17 * S, w: 0.66 * S, h: 0.66 * S }),
+        detail: (ctx, S) => {
+          // 缝边
+          ctx.strokeStyle = 'rgba(91, 74, 58, 0.55)'
+          ctx.lineWidth = Math.max(1.5, S * 0.006)
+          roundedRectPath(ctx, 0.185 * S, 0.185 * S, 0.63 * S, 0.63 * S, 0.09 * S)
+          ctx.stroke()
+          // 装饰针脚
+          ctx.setLineDash([S * 0.015, S * 0.012])
+          roundedRectPath(ctx, 0.23 * S, 0.23 * S, 0.54 * S, 0.54 * S, 0.07 * S)
+          ctx.stroke()
+        },
+      }
+    }
+    case 'handkerchief': {
+      const diamondPath = (ctx: CanvasRenderingContext2D, S: number) => {
+        ctx.beginPath()
+        ctx.moveTo(0.5 * S, 0.1 * S)
+        ctx.lineTo(0.88 * S, 0.5 * S)
+        ctx.lineTo(0.5 * S, 0.9 * S)
+        ctx.lineTo(0.12 * S, 0.5 * S)
+        ctx.closePath()
+      }
+      return {
+        path: diamondPath,
+        patternRect: (S) => ({ x: 0.12 * S, y: 0.1 * S, w: 0.76 * S, h: 0.8 * S }),
+        detail: (ctx, S) => {
+          // 折叠线
+          ctx.strokeStyle = 'rgba(91, 74, 58, 0.4)'
+          ctx.lineWidth = Math.max(1.5, S * 0.006)
+          ctx.beginPath()
+          ctx.moveTo(0.5 * S, 0.1 * S)
+          ctx.lineTo(0.5 * S, 0.9 * S)
+          ctx.moveTo(0.12 * S, 0.5 * S)
+          ctx.lineTo(0.88 * S, 0.5 * S)
+          ctx.stroke()
+          // 布边
+          ctx.globalAlpha = 0.3
+          diamondPath(ctx, S)
+          ctx.lineWidth = Math.max(2, S * 0.008)
+          ctx.stroke()
+        },
+      }
+    }
+    case 'scarf': {
+      return {
+        path: (ctx, S) => roundedRectPath(ctx, 0.1 * S, 0.44 * S, 0.8 * S, 0.14 * S, 0.02 * S),
+        patternRect: (S) => ({ x: 0.1 * S, y: 0.44 * S, w: 0.8 * S, h: 0.14 * S }),
+        detail: (ctx, S) => {
+          // 折叠阴影
+          ctx.fillStyle = 'rgba(91, 74, 58, 0.12)'
+          ctx.fillRect(0.12 * S, 0.5 * S, 0.76 * S, 0.03 * S)
+          // 两端流苏
+          ctx.strokeStyle = 'rgba(91, 74, 58, 0.7)'
+          ctx.lineWidth = Math.max(1.5, S * 0.006)
+          ctx.beginPath()
+          for (let i = 0; i < 6; i++) {
+            const xl = (0.11 + i * 0.016) * S
+            ctx.moveTo(xl, 0.57 * S)
+            ctx.lineTo(xl, 0.64 * S)
+            const xr = (0.89 - i * 0.016) * S
+            ctx.moveTo(xr, 0.57 * S)
+            ctx.lineTo(xr, 0.64 * S)
+          }
+          ctx.stroke()
+        },
+      }
+    }
+    case 'silkscarf':
+    case 'square_scarf': {
+      const diamondPath = (ctx: CanvasRenderingContext2D, S: number) => {
+        ctx.beginPath()
+        ctx.moveTo(0.5 * S, 0.08 * S)
+        ctx.lineTo(0.9 * S, 0.5 * S)
+        ctx.lineTo(0.5 * S, 0.92 * S)
+        ctx.lineTo(0.1 * S, 0.5 * S)
+        ctx.closePath()
+      }
+      return {
+        path: diamondPath,
+        patternRect: (S) => ({ x: 0.1 * S, y: 0.08 * S, w: 0.8 * S, h: 0.84 * S }),
+        detail: (ctx, S) => {
+          // 四角折角
+          ctx.fillStyle = 'rgba(91, 74, 58, 0.18)'
+          for (const pts of [
+            [0.5, 0.08, 0.42, 0.19, 0.58, 0.19],
+            [0.9, 0.5, 0.81, 0.42, 0.81, 0.58],
+            [0.5, 0.92, 0.42, 0.81, 0.58, 0.81],
+            [0.1, 0.5, 0.19, 0.42, 0.19, 0.58],
+          ] as const) {
+            ctx.beginPath()
+            ctx.moveTo(pts[0] * S, pts[1] * S)
+            ctx.lineTo(pts[2] * S, pts[3] * S)
+            ctx.lineTo(pts[4] * S, pts[5] * S)
+            ctx.closePath()
+            ctx.fill()
+          }
+          // 内折线
+          ctx.strokeStyle = 'rgba(91, 74, 58, 0.35)'
+          ctx.lineWidth = Math.max(1.5, S * 0.005)
+          ctx.beginPath()
+          ctx.moveTo(0.42 * S, 0.19 * S)
+          ctx.lineTo(0.58 * S, 0.19 * S)
+          ctx.moveTo(0.81 * S, 0.42 * S)
+          ctx.lineTo(0.81 * S, 0.58 * S)
+          ctx.moveTo(0.42 * S, 0.81 * S)
+          ctx.lineTo(0.58 * S, 0.81 * S)
+          ctx.moveTo(0.19 * S, 0.42 * S)
+          ctx.lineTo(0.19 * S, 0.58 * S)
+          ctx.stroke()
+        },
+      }
+    }
+    case 'tshirt': {
+      const tshirtPath = (ctx: CanvasRenderingContext2D, S: number) => {
+        ctx.beginPath()
+        ctx.moveTo(0.42 * S, 0.22 * S)
+        ctx.quadraticCurveTo(0.5 * S, 0.15 * S, 0.58 * S, 0.22 * S)
+        ctx.lineTo(0.7 * S, 0.27 * S)
+        ctx.lineTo(0.84 * S, 0.47 * S)
+        ctx.lineTo(0.71 * S, 0.48 * S)
+        ctx.lineTo(0.75 * S, 0.88 * S)
+        ctx.lineTo(0.25 * S, 0.88 * S)
+        ctx.lineTo(0.29 * S, 0.48 * S)
+        ctx.lineTo(0.16 * S, 0.47 * S)
+        ctx.lineTo(0.3 * S, 0.27 * S)
+        ctx.closePath()
+      }
+      return {
+        path: tshirtPath,
+        patternRect: (S) => ({ x: 0.16 * S, y: 0.16 * S, w: 0.68 * S, h: 0.73 * S }),
+        detail: (ctx, S) => {
+          // 领口
+          ctx.strokeStyle = 'rgba(91, 74, 58, 0.6)'
+          ctx.lineWidth = Math.max(2, S * 0.009)
+          ctx.beginPath()
+          ctx.moveTo(0.42 * S, 0.22 * S)
+          ctx.quadraticCurveTo(0.5 * S, 0.15 * S, 0.58 * S, 0.22 * S)
+          ctx.stroke()
+          // 下摆
+          ctx.lineWidth = Math.max(1.5, S * 0.006)
+          ctx.beginPath()
+          ctx.moveTo(0.25 * S, 0.88 * S)
+          ctx.lineTo(0.75 * S, 0.88 * S)
+          ctx.stroke()
+        },
+      }
+    }
+    default: {
+      return {
+        path: (ctx, S) => roundedRectPath(ctx, 0.24 * S, 0.22 * S, 0.52 * S, 0.56 * S, 0.03 * S),
+        patternRect: (S) => ({ x: 0.24 * S, y: 0.22 * S, w: 0.52 * S, h: 0.56 * S }),
+      }
+    }
+  }
+}
+
+// 在产品轮廓内按排版模式填充纹样（tile/band 平铺，其余居中单图）
+function fillPatternClipped(
+  ctx: CanvasRenderingContext2D,
+  patternImg: HTMLImageElement,
+  rect: { x: number; y: number; w: number; h: number },
+  params: ProductPreviewParams
+) {
+  const { layoutMode = 'center', scale = 100, rotation = 0, positionX = 50, positionY = 50 } = params
+  ctx.save()
+  ctx.globalAlpha = 0.95
+  const cx = rect.x + rect.w / 2
+  const cy = rect.y + rect.h / 2
+
+  if (layoutMode === 'tile' || layoutMode === 'band') {
+    const tileSize = Math.max(rect.w * (scale / 2 / 100), 10)
+    if (tileSize > 0) {
+      ctx.translate(cx, cy)
+      ctx.rotate((rotation * Math.PI) / 180)
+      ctx.translate(-cx, -cy)
+      for (let y = rect.y - tileSize; y < rect.y + rect.h + tileSize; y += tileSize) {
+        for (let x = rect.x - tileSize; x < rect.x + rect.w + tileSize; x += tileSize) {
+          ctx.drawImage(patternImg, x, y, tileSize, tileSize)
+        }
+      }
+    }
+  } else {
+    const drawSize = Math.min(rect.w, rect.h) * 0.55 * (scale / 100)
+    if (drawSize > 0) {
+      const centerX = cx + ((positionX - 50) / 100) * rect.w
+      const centerY = cy + ((positionY - 50) / 100) * rect.h
+      ctx.translate(centerX, centerY)
+      ctx.rotate((rotation * Math.PI) / 180)
+      ctx.drawImage(patternImg, -drawSize / 2, -drawSize / 2, drawSize, drawSize)
+    }
+  }
+  ctx.restore()
+}
+
+// 主函数：生成「产品轮廓 + 纹样」的方形缩略图（data URL）
+// 不依赖远程产品照片，只在无纹样时退回纯底色轮廓，绝不产生「平面纹样方块」
+export async function generateProductPreviewDataUrl(
+  params: ProductPreviewParams,
+  size = 384
+): Promise<string> {
+  const S = size
+  const patternImg = params.patternImage ? await loadImage(params.patternImage).catch(() => null) : null
+
+  const canvas = document.createElement('canvas')
+  canvas.width = S
+  canvas.height = S
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('无法获取 canvas 2D 上下文')
+
+  // 宣纸底色
+  ctx.fillStyle = '#F5F0E6'
+  ctx.fillRect(0, 0, S, S)
+
+  const shape = shapeFor(params.productId || 'default')
+
+  // 1) 投影（形状压暗偏移一层，形成立体感）
+  ctx.save()
+  ctx.shadowColor = 'rgba(91, 74, 58, 0.28)'
+  ctx.shadowBlur = S * 0.03
+  ctx.shadowOffsetY = S * 0.018
+  ctx.fillStyle = 'rgba(91, 74, 58, 0.06)'
+  shape.path(ctx, S)
+  ctx.fill()
+  ctx.restore()
+
+  // 2) 纹样填充（裁剪到产品轮廓内，杜绝平面纹样块）
+  const rect = shape.patternRect(S)
+  ctx.save()
+  shape.path(ctx, S)
+  ctx.clip()
+  if (patternImg) {
+    fillPatternClipped(ctx, patternImg, rect, params)
+  } else {
+    ctx.fillStyle = '#E8DFC9'
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h)
+  }
+  ctx.restore()
+
+  // 3) 轮廓描边
+  ctx.save()
+  shape.path(ctx, S)
+  ctx.strokeStyle = 'rgba(91, 74, 58, 0.75)'
+  ctx.lineWidth = Math.max(2, S * 0.006)
+  ctx.lineJoin = 'round'
+  ctx.stroke()
+  ctx.restore()
+
+  // 4) 产品细节（流苏 / 提手 / 相机开孔等）
+  if (shape.detail) {
+    ctx.save()
+    shape.detail(ctx, S)
+    ctx.restore()
+  }
+
+  return canvas.toDataURL('image/png')
+}
