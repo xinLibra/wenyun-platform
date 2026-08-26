@@ -245,6 +245,22 @@ function Model({
       return new THREE.Color('#f5f5f5')
     }
 
+    // ===== 换色诊断：colorMap 非空时打印场景真实材质名 + 换色目标映射，便于核对 GLB 材质名 =====
+    if (Object.keys(colorMap).length > 0) {
+      const sceneMats = new Set<string>()
+      clonedScene.traverse((child) => {
+        if (!(child as THREE.Mesh).isMesh) return
+        const mesh = child as THREE.Mesh
+        const ms = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+        ms.forEach((m) => {
+          if (m?.name) sceneMats.add(m.name)
+        })
+      })
+      console.log(
+        `[3D Viewer recolor-diag] colorMap={${Object.entries(colorMap).map(([k, v]) => `${k}:${v}`).join(', ')}} colorMaterials=${JSON.stringify(colorMaterials.map((cm) => `${cm.name}->${cm.materialName}`))} targets=${JSON.stringify(targets)} sceneMaterials=[${[...sceneMats].join(', ')}]`
+      )
+    }
+
     clonedScene.traverse((child) => {
       if (!(child as THREE.Mesh).isMesh) return
       const mesh = child as THREE.Mesh
@@ -360,16 +376,20 @@ function Model({
           if (!hex) return
           userColored = true
           const targetColor = hexToColor(hex)
+          const mode = mat.map ? 'emissive' : 'color'
           if (mat.map) {
-            // 有贴图：不要把 color 乘脏贴图，用 emissive 轻微着色
+            // 有贴图：不要把 color 乘脏贴图，用 emissive 着色（强度提高让部件底色可见，但不破坏纹样）
             mat.emissive.copy(targetColor)
-            mat.emissiveIntensity = 0.2
+            mat.emissiveIntensity = 0.45
           } else {
             mat.color.copy(targetColor)
             mat.emissive.set(0x000000)
             mat.emissiveIntensity = 0
           }
           mat.needsUpdate = true
+          console.log(
+            `[3D Viewer recolor] part=${cm.name}(${cm.label || ''}) hex=${hex} materialName="${mat.name}" mesh="${mesh.name}" node="${child.name}" mode=${mode}`
+          )
         })
 
         // 未被用户换色：确保 emissive 干净，无贴图时保持 initialColor
