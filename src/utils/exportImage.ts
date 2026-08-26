@@ -777,6 +777,8 @@ export async function buildProductPreviewDataUrl(opts: {
   rotation?: number
   positionX?: number
   positionY?: number
+  /** 生成完成后回调实际来源：'capture3d'（3D 截图）| 'composite'（产品轮廓+纹样合成）| ''（失败） */
+  onSource?: (source: 'capture3d' | 'composite') => void
 }): Promise<string> {
   // 1) 3D 截图优先
   if (opts.tryCapture3D) {
@@ -786,6 +788,7 @@ export async function buildProductPreviewDataUrl(opts: {
         if (/^data:/i.test(shot) && (await isUniformPreviewImage(shot))) {
           console.warn('[Preview] 3D 截图空白/未贴纹样，改用产品轮廓合成图')
         } else {
+          opts.onSource?.('capture3d')
           return shot
         }
       }
@@ -805,7 +808,10 @@ export async function buildProductPreviewDataUrl(opts: {
         positionX: opts.positionX,
         positionY: opts.positionY,
       }, 384)
-      if (url) return url
+      if (url) {
+        opts.onSource?.('composite')
+        return url
+      }
     } catch (e) {
       console.warn('[Preview] 产品轮廓合成失败:', e)
     }

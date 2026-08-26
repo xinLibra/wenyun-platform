@@ -116,20 +116,19 @@ export default function Cart() {
         const product = products[item.productId]
         // 旧购物车项可能带 data: base64 预览/纹样图：统一转 Storage 短链，订单只存短 URL 不存大 base64
         const customization = { ...(item.customization || {}) }
+        // 统一产出「定制预览短链」：复用已有预览（加购时生成的 3D 截图/合成图），
+        // 旧购物车项无预览则现场生成产品轮廓+纹样合成图。image_url 只写这个预览短链，
+        // 绝不写纹样原图（禁止纯纹样 tile 当订单主图）。
+        let previewShort: string | undefined
         const previewRaw = customization.previewImageUrl || customization.previewImage
         if (previewRaw && /^data:/i.test(previewRaw)) {
           try {
-            const short = await ensurePublicImageUrl(session.user.id, previewRaw, 384)
-            customization.previewImage = short || undefined
-            customization.previewImageUrl = short || undefined
+            previewShort = (await ensurePublicImageUrl(session.user.id, previewRaw, 384)) || undefined
           } catch (e) {
             console.warn('[Cart] preview upload failed, skip preview:', e)
-            customization.previewImage = undefined
-            customization.previewImageUrl = undefined
           }
         } else if (previewRaw && /^https?:\/\//i.test(previewRaw)) {
-          customization.previewImage = previewRaw
-          customization.previewImageUrl = previewRaw
+          previewShort = previewRaw
         } else {
           // 旧购物车项无 preview：下单时现场生成「产品轮廓 + 纹样」合成图（书签/手提袋/手机壳等），
           // 保证订单与购物车一致（袋子上有纹样、书签上有纹样），绝不写纯纹样或产品默认图
@@ -144,16 +143,15 @@ export default function Cart() {
               positionY: customization.positionY || 50,
             }, 384)
             if (generated) {
-              const short = await ensurePublicImageUrl(session.user.id, generated, 384)
-              customization.previewImage = short || undefined
-              customization.previewImageUrl = short || undefined
+              console.log('[OrderPreview] source= composite')
+              previewShort = (await ensurePublicImageUrl(session.user.id, generated, 384)) || undefined
             }
           } catch (e) {
             console.warn('[Cart] preview regenerate failed:', e)
-            customization.previewImage = undefined
-            customization.previewImageUrl = undefined
           }
         }
+        customization.previewImage = previewShort
+        customization.previewImageUrl = previewShort
         let pattern = customization.patternImage
         if (pattern && /^data:/i.test(pattern)) {
           try {
@@ -163,12 +161,17 @@ export default function Cart() {
           }
           customization.patternImage = pattern
         }
+        console.log(
+          `[OrderInsert] image_url=${previewShort ? previewShort.slice(0, 60) + (previewShort.length > 60 ? '…' : '') : '(none)'} ` +
+          `| 含产品合成=${previewShort ? 'yes' : 'no'}`
+        )
         const order = {
           id: crypto.randomUUID(),
           user_id: session.user.id,
           product_id: item.productId,
           generation_id: item.generationId,
-          image_url: pattern,
+          // image_url = 定制效果预览短链（产品轮廓+纹样合成图），纹样原图只放 customization.patternImage
+          image_url: previewShort || undefined,
           product_image: product?.image || item.image,
           customization,
           quantity: item.quantity,

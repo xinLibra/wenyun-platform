@@ -526,6 +526,7 @@ export default function CustomizeProduct() {
   // 提交订单时一定能拿到已生成（或生成失败）的最终值
   const orderPreviewRef = useRef<string>('')
   const orderPreviewPromiseRef = useRef<Promise<string> | null>(null)
+  const orderPreviewSourceRef = useRef<'capture3d' | 'composite' | ''>('')
   const [quantity, setQuantity] = useState(1)
   const [showQuantityModal, setShowQuantityModal] = useState(false)
   const [quantityAction, setQuantityAction] = useState<'cart' | 'buy' | null>(null)
@@ -998,6 +999,7 @@ export default function CustomizeProduct() {
         rotation,
         positionX,
         positionY,
+        onSource: (s) => console.log(`[OrderPreview] source= ${s}`),
       })
       if (url) previewImage = url
       // 截图是 data: base64：已登录则先转 Storage 短链再入库；未登录保持原样，结算时再转
@@ -1032,6 +1034,7 @@ export default function CustomizeProduct() {
       // 否则用产品轮廓 + 纹样的本地合成图（书签/手提袋/手机壳等）。
       // 生成失败返回 ''（绝不写产品默认图），由订单页回退默认图并在 Console 打 warn。
       // 用 Promise + ref 存储，保证用户点「确认提交」时一定等到最终值，杜绝竞态。
+      orderPreviewSourceRef.current = ''
       orderPreviewPromiseRef.current = buildProductPreviewDataUrl({
         productId: selectedProduct,
         tryCapture3D: product3DConfig?.modelUrl && viewerCaptureRef.current ? viewerCaptureRef.current : null,
@@ -1041,6 +1044,10 @@ export default function CustomizeProduct() {
         rotation,
         positionX,
         positionY,
+        onSource: (s) => {
+          orderPreviewSourceRef.current = s
+          console.log(`[OrderPreview] source= ${s}`)
+        },
       })
         .then((url) => {
           orderPreviewRef.current = url
@@ -1121,15 +1128,21 @@ export default function CustomizeProduct() {
         user_id: session.user.id,
         product_id: selectedProduct,
         generation_id: null,
-        image_url: patternShort,
+        // image_url = 定制效果预览短链（3D 截图或产品轮廓+纹样合成图），禁止写纹样原图/平面纹样
+        image_url: previewShort || undefined,
         product_image: currentProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, previewImage: previewShort || undefined, previewImageUrl: previewShort || undefined },
+        customization: { scale, rotation, positionX, positionY, blendMode, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, patternImage: patternShort || undefined, previewImage: previewShort || undefined, previewImageUrl: previewShort || undefined },
         quantity: quantity,
         status: 'demo',
         created_at: new Date().toISOString(),
         shipping_info: { name: orderFormData.name, phone: orderFormData.phone, address: orderFormData.address }
       }
 
+      // 记录主图来源：image_url 前缀（Storage 域名 + 桶）与是否含产品合成（预览短链必然含产品形态）
+      console.log(
+        `[OrderInsert] image_url=${previewShort ? previewShort.slice(0, 60) + (previewShort.length > 60 ? '…' : '') : '(none)'} ` +
+        `| source=${orderPreviewSourceRef.current || 'none'} | 含产品合成=${previewShort ? 'yes' : 'no'}`
+      )
       console.log('[Order] Inserting order:', order)
       const insertResult = await supabase.from('orders').insert(order).select()
       console.log('[Order] Insert result:', insertResult)
