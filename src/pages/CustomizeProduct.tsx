@@ -1,4 +1,4 @@
-import { generatePreviewDataUrl, generateProductPreviewDataUrl } from '../utils/exportImage'
+import { generatePreviewDataUrl, buildProductPreviewDataUrl } from '../utils/exportImage'
 import { ensurePublicImageUrl } from '../lib/storage'
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -522,6 +522,10 @@ export default function CustomizeProduct() {
   const [orderPreviewImg, setOrderPreviewImg] = useState<string>('')
   const [orderPreviewLoading, setOrderPreviewLoading] = useState(false)
   const viewerCaptureRef = useRef<(() => string | null) | null>(null)
+  // 订单预览：用 ref + Promise 避免「弹窗内异步生成」与「用户提交」之间的竞态，
+  // 提交订单时一定能拿到已生成（或生成失败）的最终值
+  const orderPreviewRef = useRef<string>('')
+  const orderPreviewPromiseRef = useRef<Promise<string> | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [showQuantityModal, setShowQuantityModal] = useState(false)
   const [quantityAction, setQuantityAction] = useState<'cart' | 'buy' | null>(null)
@@ -982,28 +986,20 @@ export default function CustomizeProduct() {
     setShowQuantityModal(false)
     
     if (quantityAction === 'cart') {
-      // 3D 产品：优先用 3D 预览截图作为购物车图
+      // 生成「当前定制效果图」：优先 3D 预览截图（含纹样，空白截图自动跳过），
+      // 否则用产品轮廓 + 纹样的本地合成图（书签/手提袋/手机壳等），绝不存纯纹样/产品默认图
       let previewImage: string | undefined
-      if (is3DProduct && viewerCaptureRef.current) {
-        previewImage = viewerCaptureRef.current() || undefined
-      }
-      // 3D 截图不可用：用「产品轮廓 + 纹样」的本地合成图（书签/手提袋/手机壳等），
-      // 不依赖远程产品图，绝不把纯纹样方块当缩略图
-      if (!previewImage && selectedPatternImage) {
-        try {
-          previewImage = await generateProductPreviewDataUrl({
-            productId: selectedProduct,
-            patternImage: selectedPatternImage,
-            layoutMode,
-            scale,
-            rotation,
-            positionX,
-            positionY,
-          }, 384)
-        } catch (e) {
-          console.warn('[Cart] composite preview failed:', e)
-        }
-      }
+      const url = await buildProductPreviewDataUrl({
+        productId: selectedProduct,
+        tryCapture3D: is3DProduct && viewerCaptureRef.current ? viewerCaptureRef.current : null,
+        patternImage: selectedPatternImage,
+        layoutMode,
+        scale,
+        rotation,
+        positionX,
+        positionY,
+      })
+      if (url) previewImage = url
       // 截图是 data: base64：已登录则先转 Storage 短链再入库；未登录保持原样，结算时再转
       if (previewImage && /^data:/i.test(previewImage)) {
         try {
@@ -1031,49 +1027,34 @@ export default function CustomizeProduct() {
       setShowOrderModal(true)
       setOrderPreviewLoading(true)
       setOrderPreviewImg('')
-
-      const tryCapture3D = async () => {
-        if (product3DConfig?.modelUrl && viewerCaptureRef.current) {
-          const dataUrl = viewerCaptureRef.current()
-          if (dataUrl) {
-            setOrderPreviewImg(dataUrl)
-            setOrderPreviewLoading(false)
-            return true
-          }
-        }
-        return false
-      }
-
-      try {
-        const captured = await tryCapture3D()
-        if (!captured) {
-          // 3D 截图不可用：用「产品轮廓 + 纹样」的本地合成图（书签/手提袋/手机壳等），
-          // 不依赖远程产品图（避免 CORS/失效/白底相乘变成纹样块），保证订单缩略图看得出是产品
-          if (selectedPatternImage) {
-            try {
-              const url = await generateProductPreviewDataUrl({
-                productId: selectedProduct,
-                patternImage: selectedPatternImage,
-                layoutMode,
-                scale,
-                rotation,
-                positionX,
-                positionY,
-              }, 384)
-              setOrderPreviewImg(url)
-            } catch (e) {
-              console.warn('[Order] composite preview failed, fallback to product image:', e)
-              setOrderPreviewImg(currentProduct?.image || '')
-            }
-          } else {
-            setOrderPreviewImg(currentProduct?.image || '')
-          }
-        }
-      } catch {
-        setOrderPreviewImg(currentProduct?.image || '')
-      } finally {
-        setOrderPreviewLoading(false)
-      }
+      orderPreviewRef.current = ''
+      // 生成「当前定制效果图」：优先 3D 预览截图（含纹样、配色；空白截图自动跳过），
+      // 否则用产品轮廓 + 纹样的本地合成图（书签/手提袋/手机壳等）。
+      // 生成失败返回 ''（绝不写产品默认图），由订单页回退默认图并在 Console 打 warn。
+      // 用 Promise + ref 存储，保证用户点「确认提交」时一定等到最终值，杜绝竞态。
+      orderPreviewPromiseRef.current = buildProductPreviewDataUrl({
+        productId: selectedProduct,
+        tryCapture3D: product3DConfig?.modelUrl && viewerCaptureRef.current ? viewerCaptureRef.current : null,
+        patternImage: selectedPatternImage,
+        layoutMode,
+        scale,
+        rotation,
+        positionX,
+        positionY,
+      })
+        .then((url) => {
+          orderPreviewRef.current = url
+          setOrderPreviewImg(url)
+          return url
+        })
+        .catch((e) => {
+          console.warn('[Order] preview generation failed:', e)
+          orderPreviewRef.current = ''
+          return ''
+        })
+        .finally(() => {
+          setOrderPreviewLoading(false)
+        })
     }
     
     setQuantityAction(null)
@@ -1107,9 +1088,14 @@ export default function CustomizeProduct() {
     setIsBuying(true)
 
     try {
-      // 定制预览图（3D 截图 / 2D 合成图）：data: 一律转 Storage 短链再入库，禁止订单写大 base64
+      // 定制预览图（3D 截图 / 产品轮廓合成图）：提交前一定等待生成完成，避免竞态丢预览。
+      // data: 一律转 Storage 短链再入库；生成失败时 previewRaw 为 ''，绝不会把产品默认图当预览写入
+      let previewRaw = orderPreviewRef.current
+      if (orderPreviewPromiseRef.current) {
+        previewRaw = await orderPreviewPromiseRef.current
+      }
+      if (!previewRaw) previewRaw = orderPreviewImg || ''
       let previewShort: string | undefined
-      const previewRaw = orderPreviewImg || ''
       if (/^data:/i.test(previewRaw)) {
         try {
           previewShort = await ensurePublicImageUrl(session.user.id, previewRaw, 384)
@@ -2093,7 +2079,7 @@ export default function CustomizeProduct() {
                         </div>
                       ) : (
                         <img
-                          src={orderPreviewImg || selectedPatternImage || currentProduct?.image}
+                          src={orderPreviewImg || currentProduct?.image}
                           alt={currentProduct?.name}
                           className="w-full h-full object-cover"
                         />
@@ -2117,8 +2103,8 @@ export default function CustomizeProduct() {
                   <Button variant="outline" className="flex-1" onClick={() => setShowOrderModal(false)}>
                     取消
                   </Button>
-                  <Button className="flex-1" onClick={handleConfirmOrder} disabled={isBuying}>
-                    {isBuying ? '处理中...' : '确认提交'}
+                  <Button className="flex-1" onClick={handleConfirmOrder} disabled={isBuying || orderPreviewLoading}>
+                    {isBuying ? '处理中...' : orderPreviewLoading ? '生成预览中...' : '确认提交'}
                   </Button>
                 </div>
 

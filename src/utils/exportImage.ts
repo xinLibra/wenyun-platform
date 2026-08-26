@@ -724,3 +724,91 @@ export async function generateProductPreviewDataUrl(
 
   return canvas.toDataURL('image/png')
 }
+
+// 检测 data: 图片是否「基本空白/单色」（用于判断 3D 截图是否真的贴上了纹样）。
+// 缩放到 64x64 后只统计非透明像素的亮度标准差，过小则视为空白/未贴纹样截图。
+function isUniformPreviewImage(dataUrl: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const size = 64
+        const canvas = document.createElement('canvas')
+        canvas.width = size
+        canvas.height = size
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return resolve(true)
+        ctx.drawImage(img, 0, 0, size, size)
+        const data = ctx.getImageData(0, 0, size, size).data
+        const lums: number[] = []
+        for (let i = 0; i < data.length; i += 4) {
+          const a = data[i + 3]
+          if (a < 16) continue // 跳过透明背景
+          lums.push(0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2])
+        }
+        if (lums.length < 8) return resolve(true) // 几乎全透明 → 空白
+        const mean = lums.reduce((s, v) => s + v, 0) / lums.length
+        let sq = 0
+        for (const l of lums) sq += (l - mean) * (l - mean)
+        const stddev = Math.sqrt(sq / lums.length)
+        resolve(stddev < 10)
+      } catch {
+        resolve(true) // 解码异常保守视为空白，走合成兜底
+      }
+    }
+    img.onerror = () => resolve(true)
+    img.src = dataUrl
+  })
+}
+
+/**
+ * 统一的「当前定制效果图」生成入口（订单 / 购物车共用）：
+ * 1) 优先 3D 预览 canvas 截图（含纹样、配色；截图空白/未贴纹样则跳过）
+ * 2) 否则用产品轮廓 + 纹样的本地合成图（书签/手提袋/手机壳等）
+ * 3) 都不可用返回 ''（由上层决定回退默认图并在 Console 打 warn），
+ *    绝不把「未贴纹样的产品默认/库存图」当作定制效果图返回。
+ */
+export async function buildProductPreviewDataUrl(opts: {
+  productId: string
+  tryCapture3D?: (() => string | null) | null
+  patternImage?: string | null
+  layoutMode?: LayoutMode
+  scale?: number
+  rotation?: number
+  positionX?: number
+  positionY?: number
+}): Promise<string> {
+  // 1) 3D 截图优先
+  if (opts.tryCapture3D) {
+    try {
+      const shot = opts.tryCapture3D()
+      if (shot) {
+        if (/^data:/i.test(shot) && (await isUniformPreviewImage(shot))) {
+          console.warn('[Preview] 3D 截图空白/未贴纹样，改用产品轮廓合成图')
+        } else {
+          return shot
+        }
+      }
+    } catch (e) {
+      console.warn('[Preview] 3D 截图失败，改用产品轮廓合成图:', e)
+    }
+  }
+  // 2) 产品轮廓 + 纹样合成
+  if (opts.patternImage) {
+    try {
+      const url = await generateProductPreviewDataUrl({
+        productId: opts.productId,
+        patternImage: opts.patternImage,
+        layoutMode: opts.layoutMode,
+        scale: opts.scale,
+        rotation: opts.rotation,
+        positionX: opts.positionX,
+        positionY: opts.positionY,
+      }, 384)
+      if (url) return url
+    } catch (e) {
+      console.warn('[Preview] 产品轮廓合成失败:', e)
+    }
+  }
+  return ''
+}

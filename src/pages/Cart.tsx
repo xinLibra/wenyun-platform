@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/async'
 import { products } from '../lib/products'
 import { ensurePublicImageUrl } from '../lib/storage'
+import { generateProductPreviewDataUrl } from '../utils/exportImage'
 import PatternPreview from '../components/PatternPreview'
 
 /** 兜底占位图（与 useCart 保持一致） */
@@ -130,8 +131,28 @@ export default function Cart() {
           customization.previewImage = previewRaw
           customization.previewImageUrl = previewRaw
         } else {
-          customization.previewImage = undefined
-          customization.previewImageUrl = undefined
+          // 旧购物车项无 preview：下单时现场生成「产品轮廓 + 纹样」合成图（书签/手提袋/手机壳等），
+          // 保证订单与购物车一致（袋子上有纹样、书签上有纹样），绝不写纯纹样或产品默认图
+          try {
+            const generated = await generateProductPreviewDataUrl({
+              productId: item.productId,
+              patternImage: customization.patternImage,
+              layoutMode: customization.layoutMode,
+              scale: customization.scale || 100,
+              rotation: customization.rotation || 0,
+              positionX: customization.positionX || 50,
+              positionY: customization.positionY || 50,
+            }, 384)
+            if (generated) {
+              const short = await ensurePublicImageUrl(session.user.id, generated, 384)
+              customization.previewImage = short || undefined
+              customization.previewImageUrl = short || undefined
+            }
+          } catch (e) {
+            console.warn('[Cart] preview regenerate failed:', e)
+            customization.previewImage = undefined
+            customization.previewImageUrl = undefined
+          }
         }
         let pattern = customization.patternImage
         if (pattern && /^data:/i.test(pattern)) {

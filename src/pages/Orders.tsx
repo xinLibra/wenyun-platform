@@ -99,13 +99,21 @@ function getOrderPreviewUrl(order: Order): string {
  * 订单缩略图：优先订单 preview 短链（3D 截图 / 产品轮廓+纹样合成图），
  * 无 preview 时回退产品默认图（书签默认图等），绝不把纯纹样 image_url 当缩略图。
  */
+/** 同一订单只 warn 一次，避免列表渲染刷屏 */
+const warnedPreviewMissing = new Set<string>()
+
 function OrderThumb({ order, size = 'md' }: { order: Order; size?: 'sm' | 'md' }) {
   const product = products[order.product_id]
+  const preview = getOrderPreviewUrl(order)
   const box = size === 'sm' ? 'w-16 h-16' : 'w-24 h-24'
+  if (!preview && !warnedPreviewMissing.has(order.id)) {
+    warnedPreviewMissing.add(order.id)
+    console.warn(`[Orders] 订单 ${order.id}（${order.product_id}）无 preview 短链，回退产品默认图`)
+  }
   return (
     <div className={`${box} bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0`}>
       <SafeImg
-        src={getOrderPreviewUrl(order) || product?.image || order.product_image || ''}
+        src={preview || product?.image || order.product_image || ''}
         alt={product?.name}
         className="w-full h-full object-cover"
       />
