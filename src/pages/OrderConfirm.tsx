@@ -7,6 +7,7 @@ import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { supabase } from '../lib/supabase'
 import { classifyError, logSupabaseConfig, withTimeout } from '../lib/async'
 import { products } from '../lib/products'
+import { getOrderPreviewUrl } from '../lib/orderPreview'
 
 export default function OrderConfirmPage() {
   const { id: orderId } = useParams<{ id?: string }>()
@@ -115,11 +116,9 @@ export default function OrderConfirmPage() {
 
   const product = products[order.product_id] || { name: '未知产品', price: '0', image: '' }
 
-  // 定制预览图（3D 截图 / 产品轮廓合成图短链）：优先 previewImageUrl，其次 previewImage（仅 http 短链），不用 data: base64
-  const c = order.customization || {}
-  const previewUrl =
-    (typeof c.previewImageUrl === 'string' && /^https?:\/\//i.test(c.previewImageUrl) ? c.previewImageUrl : '') ||
-    (typeof c.previewImage === 'string' && /^https?:\/\//i.test(c.previewImage) ? c.previewImage : '')
+  // 定制预览图（与列表一致）：image_url（Storage 短链）→ customization.previewImageUrl / preview_image_url / previewImage → 产品默认图
+  const { url: previewUrl, source: previewSource } = getOrderPreviewUrl(order)
+  console.log(`[Orders] thumb source= ${previewSource}（订单 ${order.id}）`)
 
   return (
     <div className="min-h-screen bg-rice-paper py-8 px-4">

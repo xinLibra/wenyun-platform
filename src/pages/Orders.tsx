@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { classifyError, logSupabaseConfig, sleep, withTimeout } from '../lib/async'
 import { useNavigate } from 'react-router-dom'
 import { products } from '../lib/products'
+import { getOrderPreviewUrl } from '../lib/orderPreview'
 
 interface Order {
   id: string
@@ -82,33 +83,21 @@ function SafeImg({ src, alt, className }: { src: string; alt?: string; className
 }
 
 /**
- * 订单定制预览图（3D 截图 / 产品轮廓合成图）：
- * 优先 previewImageUrl（新订单写入的 Storage 短链，列表可安全投影），
- * 其次 previewImage（仅接受 http(s) 短链，data: base64 一律不用），
- * 都没有时返回 ''，上层回退产品默认图。
+ * 订单缩略图：候选顺序（与详情页一致，见 lib/orderPreview.ts）——
+ * image_url（定制纹样/定制图 Storage 短链）→ customization 预览短链 → 产品默认图。
+ * 同一订单只打一次 Console（source= image_url | customization.preview | default），避免渲染刷屏。
  */
-function getOrderPreviewUrl(order: Order): string {
-  const c = order.customization
-  if (!c) return ''
-  if (typeof c.previewImageUrl === 'string' && /^https?:\/\//i.test(c.previewImageUrl)) return c.previewImageUrl
-  if (typeof c.previewImage === 'string' && /^https?:\/\//i.test(c.previewImage)) return c.previewImage
-  return ''
-}
-
-/**
- * 订单缩略图：优先订单 preview 短链（3D 截图 / 产品轮廓+纹样合成图），
- * 无 preview 时回退产品默认图（书签默认图等），绝不把纯纹样 image_url 当缩略图。
- */
-/** 同一订单只 warn 一次，避免列表渲染刷屏 */
-const warnedPreviewMissing = new Set<string>()
+const warnedThumbSource = new Set<string>()
 
 function OrderThumb({ order, size = 'md' }: { order: Order; size?: 'sm' | 'md' }) {
   const product = products[order.product_id]
-  const preview = getOrderPreviewUrl(order)
+  const { url: preview, source } = getOrderPreviewUrl(order)
   const box = size === 'sm' ? 'w-16 h-16' : 'w-24 h-24'
-  if (!preview && !warnedPreviewMissing.has(order.id)) {
-    warnedPreviewMissing.add(order.id)
-    console.warn(`[Orders] 订单 ${order.id}（${order.product_id}）无 preview 短链，回退产品默认图`)
+  if (!warnedThumbSource.has(order.id)) {
+    warnedThumbSource.add(order.id)
+    const msg = `[Orders] thumb source= ${source}（订单 ${order.id}，${order.product_id}）`
+    if (source === 'default') console.warn(`${msg}，回退产品默认图`)
+    else console.log(msg)
   }
   return (
     <div className={`${box} bg-rice-paper-dark rounded-sm overflow-hidden flex-shrink-0`}>
@@ -250,6 +239,7 @@ export default function Orders() {
                 c_textSize:customization->textSize, c_textPositionX:customization->textPositionX,
                 c_textPositionY:customization->textPositionY,
                 c_previewImageUrl:customization->>'previewImageUrl',
+                c_previewImageUrlUnder:customization->>'preview_image_url',
                 s_name:shipping_info->name, s_phone:shipping_info->phone, s_address:shipping_info->address`)
               .eq('user_id', userId)
               .order('created_at', { ascending: false })
@@ -310,6 +300,7 @@ export default function Orders() {
               textPositionX: r.c_textPositionX,
               textPositionY: r.c_textPositionY,
               previewImageUrl: r.c_previewImageUrl,
+              preview_image_url: r.c_previewImageUrlUnder,
             },
             shipping_info: {
               name: r.s_name,
