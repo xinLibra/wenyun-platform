@@ -8,7 +8,7 @@ const cultures = [
     origin: '唐宋时期',
     region: '江苏南通、浙江桐乡',
     description: '蓝印花布是中国传统的民间印染工艺，以靛蓝染料印花而成。其图案多取材于民间传说、吉祥寓意和自然风光，具有浓郁的乡土气息和民族特色。蓝印花布的制作工艺包括刻板、刮浆、染色等多道工序，每一步都需要匠人的精心操作。',
-    features: ['靛蓝色调', '植物纹样', '对称构图'],
+    features: ['靛蓝色调', '花卉纹样', '对称构图'],
     image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20blue%20calico%20fabric%20pattern%20floral%20elegant&image_size=square',
   },
   {

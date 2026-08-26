@@ -21,8 +21,6 @@ export const PATTERN_THEMES: PatternTheme[] = [
     id: 'floral',
     label: '花卉',
     subcategories: [
-      { id: 'interlocking_floral', label: '缠枝花纹', trigger: 'ichpattern_interlocking_floral' },
-      { id: 'gourd', label: '葫芦纹', trigger: 'ichpattern_gourd' },
       { id: 'flower_bird', label: '花鸟纹', trigger: 'ichpattern_flower_bird' },
       { id: 'chrysanthemum', label: '菊花纹', trigger: 'ichpattern_chrysanthemum' },
       { id: 'lotus', label: '莲花纹', trigger: 'ichpattern_lotus' },
@@ -31,7 +29,6 @@ export const PATTERN_THEMES: PatternTheme[] = [
       { id: 'orchid', label: '兰花纹', trigger: 'ichpattern_orchid' },
       { id: 'furong', label: '芙蓉花纹', trigger: 'ichpattern_hibiscus' },
       { id: 'pomegranate_flower', label: '石榴花纹', trigger: 'ichpattern_pomegranate_flower' },
-      { id: 'plant', label: '植物纹', trigger: 'ichpattern_plant' },
     ],
   },
   {
@@ -98,10 +95,7 @@ export function parsePromptToTags(text: string): {
       [/兰花|兰草/, 'orchid'],
       [/芙蓉/, 'furong'],
       [/石榴/, 'pomegranate_flower'],
-      [/缠枝/, 'interlocking_floral'],
-      [/葫芦/, 'gourd'],
       [/花鸟/, 'flower_bird'],
-      [/植物/, 'plant'],
     ]
     for (const [re, id] of floralMap) {
       if (re.test(t)) {
@@ -112,7 +106,7 @@ export function parsePromptToTags(text: string): {
     }
   }
   if (!themeId) {
-    if (/花|花卉|植物/.test(t)) themeId = 'floral'
+    if (/花|花卉/.test(t)) themeId = 'floral'
     else if (/兽|瑞兽|鸟/.test(t)) themeId = 'beast'
   }
   return { themeId, subcategoryId, sceneIds }

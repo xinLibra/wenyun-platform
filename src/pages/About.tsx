@@ -174,7 +174,7 @@ export default function About() {
               </li>
               <li className="flex items-start">
                 <span className="w-1.5 h-1.5 bg-palace-red rounded-full mt-2 mr-2 flex-shrink-0" />
-                <span><strong className="text-deep-blue">纹样题材控制：</strong>支持动物纹（龙凤、瑞兽、鱼虫）、植物纹（缠枝、折枝、团花）、几何纹（回纹、冰裂纹、锁子纹）、人物纹等多种题材的生成</span>
+                <span><strong className="text-deep-blue">纹样题材控制：</strong>支持动物纹（龙凤、瑞兽、鱼虫）、花卉纹（牡丹、莲花、兰花）、几何纹（回纹、冰裂纹、锁子纹）、人物纹等多种题材的生成</span>
               </li>
               <li className="flex items-start">
                 <span className="w-1.5 h-1.5 bg-palace-red rounded-full mt-2 mr-2 flex-shrink-0" />

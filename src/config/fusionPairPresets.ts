@@ -44,17 +44,14 @@ export const FUSION_PAIR_PRESETS: Record<string, FusionPairPreset> = {
   'dragon_phoenix__phoenix_bird': { arrangement: 'single', symmetry: 'mirror', complexity: 75, culturalIntensity: 85, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
   'dragon_phoenix__peony': { arrangement: 'single', symmetry: 'mirror', complexity: 72, culturalIntensity: 80, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
   'dragon__peony': { arrangement: 'single', symmetry: 'mirror', complexity: 70, culturalIntensity: 80, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 }, // 龙穿牡丹
-  'dragon__interlocking_floral': { arrangement: 'seamless', symmetry: 'mirror', complexity: 70, culturalIntensity: 75, textureDetail: 40, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
   'dragon__orchid': { arrangement: 'single', symmetry: 'mirror', complexity: 65, culturalIntensity: 75, textureDetail: 28, pantoneCode: '14-3904 TCX', lightness: 50, fusionRatio: 50 },
   'dragon__tiger': { arrangement: 'single', symmetry: 'mirror', complexity: 70, culturalIntensity: 85, textureDetail: 28, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 }, // 龙虎
   'dragon__pomegranate_flower': { arrangement: 'single', symmetry: 'mirror', complexity: 65, culturalIntensity: 80, textureDetail: 28, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
   // ===== 凤 × 花卉（宫墙红/金） =====
   'peony__phoenix_bird': { arrangement: 'single', symmetry: 'mirror', complexity: 70, culturalIntensity: 80, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 }, // 凤穿牡丹
-  'interlocking_floral__phoenix_bird': { arrangement: 'seamless', symmetry: 'mirror', complexity: 70, culturalIntensity: 75, textureDetail: 40, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
   'orchid__phoenix_bird': { arrangement: 'single', symmetry: 'mirror', complexity: 65, culturalIntensity: 75, textureDetail: 28, pantoneCode: '14-3904 TCX', lightness: 50, fusionRatio: 50 },
   // ===== 鹤 =====
   'crane__lotus': { arrangement: 'single', symmetry: 'mirror', complexity: 60, culturalIntensity: 75, textureDetail: 30, pantoneCode: '19-4052 TCX', lightness: 40, fusionRatio: 50 }, // 鹤莲
-  'crane__plant': { arrangement: 'single', symmetry: 'none', complexity: 60, culturalIntensity: 75, textureDetail: 30, pantoneCode: '19-4052 TCX', lightness: 40, fusionRatio: 50 },
   // ===== 蝶 =====
   'butterfly__flower_bird': { arrangement: 'seamless', symmetry: 'mirror', complexity: 65, culturalIntensity: 70, textureDetail: 35, pantoneCode: '18-1555 TCX', lightness: 50, fusionRatio: 50 },
   'butterfly__orchid': { arrangement: 'seamless', symmetry: 'mirror', complexity: 60, culturalIntensity: 70, textureDetail: 30, pantoneCode: '14-3904 TCX', lightness: 55, fusionRatio: 50 }, // 蝶恋花·兰
@@ -67,9 +64,6 @@ export const FUSION_PAIR_PRESETS: Record<string, FusionPairPreset> = {
   'peony__orchid': { arrangement: 'single', symmetry: 'mirror', complexity: 60, culturalIntensity: 75, textureDetail: 30, pantoneCode: '16-1450 TCX', lightness: 55, fusionRatio: 50 },
   // ===== 花鸟/孔雀/青绿系 =====
   'flower_bird__peacock': { arrangement: 'seamless', symmetry: 'mirror', complexity: 65, culturalIntensity: 75, textureDetail: 35, pantoneCode: '16-4725 TCX', lightness: 45, fusionRatio: 50 }, // 花鸟+孔雀 → 青绿/青花
-  'interlocking_floral__peony': { arrangement: 'seamless', symmetry: 'mirror', complexity: 68, culturalIntensity: 75, textureDetail: 38, pantoneCode: '16-0541 TCX', lightness: 50, fusionRatio: 50 },
-  'gourd__plant': { arrangement: 'seamless', symmetry: 'none', complexity: 60, culturalIntensity: 70, textureDetail: 32, pantoneCode: '15-1260 TCX', lightness: 50, fusionRatio: 50 },
-  'lotus__plant': { arrangement: 'single', symmetry: 'none', complexity: 55, culturalIntensity: 70, textureDetail: 30, pantoneCode: '15-1260 TCX', lightness: 50, fusionRatio: 50 },
   'peacock__orchid': { arrangement: 'seamless', symmetry: 'mirror', complexity: 60, culturalIntensity: 70, textureDetail: 30, pantoneCode: '16-4725 TCX', lightness: 45, fusionRatio: 50 },
 }
 
