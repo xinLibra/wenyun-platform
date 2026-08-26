@@ -33,8 +33,6 @@ const PATTERN_HUES: Record<string, number> = {
   chrysanthemum: 50, // 菊 · 黄
   plum: 15, // 梅 · 玫粉
   flower_bird: 255, // 花鸟 · 蓝紫
-  interlocking_floral: 130, // 缠枝 · 绿
-  gourd: 85, // 葫芦 · 青绿
 }
 
 /** 瑞兽主题子类集合（决定缩略图图形：菱形徽记 vs 四瓣花） */

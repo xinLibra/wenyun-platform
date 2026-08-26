@@ -108,14 +108,6 @@ const themeCategories = [
     meaning: '龙象征尊贵与权威，凤寓意吉祥与美好，麒麟代表祥瑞，鱼象征年年有余，蝙蝠寓意福气。'
   },
   {
-    id: 'plant',
-    name: '植物纹',
-    description: '以花卉草木为题材的纹样',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20peony%20flower%20pattern%20elegant%20pink%20and%20green%20classic%20style&image_size=square',
-    subcategories: ['缠枝', '折枝', '团花'],
-    meaning: '牡丹代表富贵吉祥，莲花象征清廉高洁，梅花寓意坚韧不拔，菊花代表高雅淡泊。'
-  },
-  {
     id: 'geometric',
     name: '几何纹',
     description: '以抽象几何图形构成的纹样',

@@ -32,8 +32,6 @@ export const PANTONE_TABLE: PantoneEntry[] = [
   { code: '17-1462 TCX', name: '橙红', englishName: 'orange red', hex: '#FF6F00' }, // tiger
   // ===== 花卉 =====
   { code: '18-1555 TCX', name: '朱红', englishName: 'vermillion', hex: '#E63946' }, // flower_bird
-  { code: '15-1260 TCX', name: '嫩绿', englishName: 'fresh green', hex: '#7CB342' }, // gourd / plant
-  { code: '16-0541 TCX', name: '松石绿', englishName: 'turquoise green', hex: '#5F9E6E' }, // interlocking_floral
   { code: '14-3904 TCX', name: '淡紫', englishName: 'soft lilac', hex: '#A78BBA' }, // orchid
   { code: '16-1720 TCX', name: '桃粉', englishName: 'peach pink', hex: '#F4A0B4' }, // furong
 ]

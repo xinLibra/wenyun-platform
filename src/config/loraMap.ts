@@ -60,7 +60,7 @@ export interface LoraMapEntry {
  *   - ICH_lion_pattern_lora_v1            ← outputs/lion_v1/
  *   - ICH_dragon_phoenix_pattern_lora_v7  ← outputs/dragon_phoenix_v7/
  *
- * ===== 花卉 9 个专属子类 + 通用花卉 fallback =====
+ * ===== 花卉 8 个专属子类（均已挂载专属 LoRA） =====
  * （2026-08-20 朋友按 DELIVERY.md 交付，已复制到 WebUI models/Lora；
  *   2026-08-26 追加 兰花/芙蓉花/石榴花 三个专属 LoRA，trigger 以 safetensors metadata 为准）
  *   - peony          → ICH_peony_pattern_lora_v7_clear    trigger: ich_flower_pattern + ich_peony_pattern
@@ -71,41 +71,12 @@ export interface LoraMapEntry {
  *   - orchid         → ICH_orchid_pattern_lora_v3          trigger: ichpattern_orchid
  *   - furong         → ICH_hibiscus_pattern_lora_v5        trigger: ichpattern_hibiscus（旧占位 ichpattern_furong 已废弃）
  *   - pomegranate_flower → ICH_pomegranate_flower_pattern_lora_v6  trigger: ichpattern_pomegranate_flower
- *   - gourd / interlocking_floral / plant                  → 无专属模型 → 通用花卉 ICH_flower_general_final
  *
  * 注：ICH_qilin_pattern_lora_v1（麒麟纹）源文件已训练，但 patternTaxonomy 中暂无 qilin 子类，
  *     此处不挂载。如需启用，需先在 patternTaxonomy.ts 增 qilin 子类。
  */
 export const LORA_MAP: LoraMapEntry[] = [
-  // ============ 花卉（专属 + 通用 fallback）============
-  // 通用花卉 fallback：无专属模型的花卉子类统一走 ICH_flower_general_final + ich_flower_pattern
-  {
-    subcategoryId: 'gourd',
-    themeId: 'floral',
-    subLabelZh: '葫芦纹',
-    subLabelEn: 'gourd',
-    trigger: 'ich_flower_pattern',
-    loraFile: 'ICH_flower_general_final',
-    loraWeight: FLOWER_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'interlocking_floral',
-    themeId: 'floral',
-    subLabelZh: '缠枝花纹',
-    subLabelEn: 'interlocking floral',
-    trigger: 'ich_flower_pattern',
-    loraFile: 'ICH_flower_general_final',
-    loraWeight: FLOWER_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'plant',
-    themeId: 'floral',
-    subLabelZh: '植物纹',
-    subLabelEn: 'plant',
-    trigger: 'ich_flower_pattern',
-    loraFile: 'ICH_flower_general_final',
-    loraWeight: FLOWER_LORA_WEIGHT,
-  },
+  // ============ 花卉（专属 LoRA） ============
   // 专属花卉 LoRA 1: 花鸟（双 trigger）
   {
     subcategoryId: 'flower_bird',

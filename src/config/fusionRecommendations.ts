@@ -6,10 +6,10 @@
  */
 
 const BASE_RECOMMENDATIONS: Record<string, string[]> = {
-  // 凤鸟 ↔ 牡丹 / 缠枝 / 龙纹
-  phoenix_bird: ['peony', 'interlocking_floral', 'dragon', 'flower_bird'],
-  // 鹤 ↔ 松（归入植物纹）/ 云 / 莲
-  crane: ['lotus', 'plant', 'deer'],
+  // 凤鸟 ↔ 牡丹 / 龙纹
+  phoenix_bird: ['peony', 'dragon', 'flower_bird'],
+  // 鹤 ↔ 云 / 莲
+  crane: ['lotus', 'deer'],
   // 蝴蝶 ↔ 花鸟 / 兰 / 牡丹
   butterfly: ['flower_bird', 'orchid', 'peony'],
   // 兰 ↔ 蝶 / 梅
@@ -18,32 +18,26 @@ const BASE_RECOMMENDATIONS: Record<string, string[]> = {
   dragon: ['phoenix_bird', 'dragon_phoenix', 'tiger'],
   // 龙凤纹
   dragon_phoenix: ['phoenix_bird', 'dragon'],
-  // 缠枝花纹：与花卉 / 瑞鸟百搭
-  interlocking_floral: ['peony', 'phoenix_bird', 'flower_bird', 'lotus'],
   // 牡丹：花中之王，百搭
   peony: ['butterfly', 'phoenix_bird', 'flower_bird', 'furong'],
-  // 莲花：鹤 / 花鸟 / 缠枝
-  lotus: ['crane', 'flower_bird', 'interlocking_floral'],
+  // 莲花：鹤 / 花鸟
+  lotus: ['crane', 'flower_bird'],
   // 梅花：兰 / 菊（梅兰竹菊文化组合）
-  plum: ['orchid', 'chrysanthemum', 'plant'],
+  plum: ['orchid', 'chrysanthemum'],
   // 菊花
-  chrysanthemum: ['plum', 'orchid', 'plant'],
+  chrysanthemum: ['plum', 'orchid'],
   // 花鸟：蝴蝶 / 凤鸟 / 牡丹 / 兰
   flower_bird: ['butterfly', 'phoenix_bird', 'peony', 'orchid'],
   // 芙蓉：牡丹 / 莲
   furong: ['peony', 'lotus'],
   // 石榴花：花鸟 / 牡丹
   pomegranate_flower: ['flower_bird', 'peony'],
-  // 植物纹（松竹等）：鹤 / 葫芦 / 梅 / 兰
-  plant: ['crane', 'gourd', 'plum', 'orchid'],
-  // 葫芦：植物 / 缠枝
-  gourd: ['plant', 'interlocking_floral'],
   // 虎：狮 / 龙（瑞兽组合）
   tiger: ['lion', 'dragon'],
   // 孔雀：凤鸟 / 牡丹 / 花鸟
   peacock: ['phoenix_bird', 'peony', 'flower_bird'],
-  // 鹿：鹤 / 植物 / 葫芦
-  deer: ['crane', 'plant', 'gourd'],
+  // 鹿：鹤（瑞兽组合）
+  deer: ['crane'],
   // 狮：虎 / 龙
   lion: ['tiger', 'dragon'],
 }
