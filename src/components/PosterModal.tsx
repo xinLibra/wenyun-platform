@@ -51,6 +51,9 @@ export function PosterModal({
   siteName = DEFAULT_SITE_NAME,
 }: PosterModalProps) {
   const [templateId, setTemplateId] = useState<PosterTemplateId>('mo_yun')
+  // 自定义上传背景（dataURL；有值时优先于模板渐变背景）
+  const [bgImage, setBgImage] = useState<string | null>(null)
+  const bgFileRef = useRef<HTMLInputElement | null>(null)
   const [title, setTitle] = useState('')
   const [subtitle, setSubtitle] = useState('')
   // 可拖拽文字元素：位置 / 字体 / 字号（日期自动取当天，不提供输入框）
@@ -70,6 +73,7 @@ export function PosterModal({
   useEffect(() => {
     if (!open) return
     setTemplateId('mo_yun')
+    setBgImage(null)
     setTitle(productName ? `${productName} · 定制` : '纹韵定制')
     setSubtitle('')
     setTitleEl(DEFAULT_TITLE_EL)
@@ -105,6 +109,7 @@ export function PosterModal({
           mainVisual,
           qrValue,
           siteName,
+          bgImage: bgImage || undefined,
           titleEl,
           subtitleEl,
           dateEl,
@@ -123,7 +128,7 @@ export function PosterModal({
       cancelled = true
       clearTimeout(timer)
     }
-  }, [open, mainVisual, templateId, title, subtitle, dateText, titleEl, subtitleEl, dateEl, productName, siteName, qrValue])
+  }, [open, mainVisual, templateId, bgImage, title, subtitle, dateText, titleEl, subtitleEl, dateEl, productName, siteName, qrValue])
 
   const handleDownload = (format: 'png' | 'jpg') => {
     if (!posterCanvasRef.current) {
@@ -131,6 +136,23 @@ export function PosterModal({
       return
     }
     downloadPoster(posterCanvasRef.current, format)
+  }
+
+  /** 上传自定义背景图（仅本地预览/导出，dataURL 即时合成） */
+  const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setRenderError('请选择图片文件作为海报背景')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setBgImage(reader.result)
+    }
+    reader.onerror = () => setRenderError('背景图读取失败，请重试')
+    reader.readAsDataURL(file)
   }
 
   // ---------- 预览拖拽 ----------
@@ -268,17 +290,20 @@ export function PosterModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
               {/* 左侧：表单 */}
               <div className="flex flex-col gap-5">
-                {/* 背景模板 */}
+                {/* 背景：模板 + 自定义上传 */}
                 <div>
-                  <label className="font-song text-sm text-deep-blue mb-2 block">背景模板</label>
-                  <div className="grid grid-cols-5 gap-2">
+                  <label className="font-song text-sm text-deep-blue mb-2 block">背景</label>
+                  <div className="grid grid-cols-3 gap-2">
                     {POSTER_TEMPLATES.map((t) => (
                       <button
                         key={t.id}
                         type="button"
-                        onClick={() => setTemplateId(t.id)}
+                        onClick={() => {
+                          setTemplateId(t.id)
+                          setBgImage(null)
+                        }}
                         className={`flex flex-col items-center gap-1.5 p-2 rounded-sm border-2 transition-all ${
-                          templateId === t.id
+                          templateId === t.id && !bgImage
                             ? 'border-palace-red shadow-md'
                             : 'border-deep-blue-100 hover:border-deep-blue-light'
                         }`}
@@ -290,7 +315,36 @@ export function PosterModal({
                         <span className="font-song text-xs text-deep-blue">{t.name}</span>
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => bgFileRef.current?.click()}
+                      className={`flex flex-col items-center gap-1.5 p-2 rounded-sm border-2 border-dashed transition-all ${
+                        bgImage
+                          ? 'border-palace-red bg-palace-red/5 shadow-md'
+                          : 'border-deep-blue-200 hover:border-palace-red'
+                      }`}
+                    >
+                      <span className="w-full h-10 rounded-sm border border-dashed border-deep-blue-300 bg-deep-blue/5 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-deep-blue-light" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </span>
+                      <span className="font-song text-xs text-deep-blue">上传背景</span>
+                    </button>
                   </div>
+                  <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
+                  {bgImage && (
+                    <button
+                      type="button"
+                      onClick={() => setBgImage(null)}
+                      className="mt-1.5 font-song text-xs text-palace-red hover:underline flex items-center gap-1"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      恢复默认模板
+                    </button>
+                  )}
                 </div>
 
                 {/* 文案 */}

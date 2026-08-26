@@ -138,6 +138,8 @@ export interface PosterOptions {
   qrValue: string
   /** 站点名 */
   siteName: string
+  /** 自定义背景图（dataURL）；存在时 cover 铺满海报背景，否则用模板渐变+装饰 */
+  bgImage?: string
   /** 标题元素（位置 / 字体 / 字号，缺省用默认） */
   titleEl?: Partial<PosterTextElement>
   /** 一句话元素 */
@@ -439,25 +441,35 @@ export async function renderPoster(
     /* 忽略：字体加载失败只影响观感 */
   }
 
-  // 1. 背景渐变
-  const grad = ctx.createLinearGradient(0, 0, 0, H)
-  grad.addColorStop(0, template.bgFrom)
-  grad.addColorStop(1, template.bgTo)
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, W, H)
+  // 1. 背景：自定义上传图优先（cover 居中裁切，避免拉伸变形），否则模板渐变+装饰
+  const bgImage = opts.bgImage ? await loadImageCached(opts.bgImage).catch(() => null) : null
+  if (bgImage) {
+    const iw = bgImage.naturalWidth || 1
+    const ih = bgImage.naturalHeight || 1
+    const bgScale = Math.max(W / iw, H / ih)
+    const bw = iw * bgScale
+    const bh = ih * bgScale
+    ctx.drawImage(bgImage, (W - bw) / 2, (H - bh) / 2, bw, bh)
+  } else {
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, template.bgFrom)
+    grad.addColorStop(1, template.bgTo)
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, W, H)
 
-  // 2. 装饰
-  drawDecorations(ctx, template, W, H)
+    // 2. 装饰
+    drawDecorations(ctx, template, W, H)
 
-  // 3. 双层内边框
-  ctx.save()
-  ctx.strokeStyle = template.accent
-  ctx.globalAlpha = 0.5
-  ctx.lineWidth = 2
-  ctx.strokeRect(42, 42, W - 84, H - 84)
-  ctx.globalAlpha = 0.25
-  ctx.strokeRect(56, 56, W - 112, H - 112)
-  ctx.restore()
+    // 3. 双层内边框
+    ctx.save()
+    ctx.strokeStyle = template.accent
+    ctx.globalAlpha = 0.5
+    ctx.lineWidth = 2
+    ctx.strokeRect(42, 42, W - 84, H - 84)
+    ctx.globalAlpha = 0.25
+    ctx.strokeRect(56, 56, W - 112, H - 112)
+    ctx.restore()
+  }
 
   // 4. Logo（顶部居中；深色模板反白着色保证可见；失败降级为文字）
   const logoH = 88

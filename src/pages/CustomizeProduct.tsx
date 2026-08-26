@@ -420,6 +420,17 @@ export default function CustomizeProduct() {
   }
 
   const handleProductChange = (productId: string) => {
+    // 3D 产品不支持文字：切换时立即清空文字状态，避免 2D→3D 残留串数据
+    const isNew3D = has3DConfig(productId)
+    if (isNew3D) {
+      setTextOverlay('')
+      setTextFont('shufa')
+      setTextSize(16)
+      setTextPositionX(50)
+      setTextPositionY(85)
+      setTextRotation(0)
+      setActiveTab('pattern')
+    }
     safeSetItem('selected_product_id', productId)
     pruneOldDrafts(productId)
 
@@ -603,7 +614,7 @@ export default function CustomizeProduct() {
         setPositionX(draft.params?.positionX || 50)
         setPositionY(draft.params?.positionY || 50)
         setBlendMode(draft.params?.blendMode || 'screen')
-        if (draft.text) {
+        if (draft.text && !has3DConfig(selectedProduct)) {
           setTextOverlay(draft.text.textOverlay || '')
           setTextFont(draft.text.textFont || 'shufa')
           setTextSize(draft.text.textSize || 16)
@@ -1370,28 +1381,44 @@ export default function CustomizeProduct() {
                 ))}
               </div>
 
-              <div className="mt-4 flex flex-col gap-2">
+              <div className="mt-4 flex flex-col gap-3">
+                {/* 纹样操作：选择（主）/ 清除（次） */}
+                <div className="bg-deep-blue/5 border border-deep-blue-100 rounded-sm p-3 flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <Button variant="primary" onClick={handleOpenPatternModal} className="flex-1">选择纹样</Button>
+                    <Button variant="outline" onClick={handleClearPattern} className="flex-1">清除纹样</Button>
+                  </div>
+                  <p className="font-song text-xs text-deep-blue-light text-center">从作品库选择纹样贴到产品上</p>
+                </div>
+
+                {/* 配置操作 */}
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={handleReset} className="flex-1">重置</Button>
                   <Button variant="outline" onClick={handleSaveConfig} className="flex-1">保存配置</Button>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="primary" onClick={handleOpenPatternModal} className="flex-1">选择纹样</Button>
-                  <button
-                    type="button"
-                    onClick={handleClearPattern}
-                    className="px-3 py-2 border border-deep-blue-200 rounded-sm font-song text-sm text-deep-blue hover:bg-deep-blue-50 transition-colors"
-                  >
-                    清除纹样
-                  </button>
-                </div>
+
+                {/* 购买操作 */}
                 <div className="flex gap-2">
                   <Button variant="secondary" onClick={handleAddToCart} className="flex-1">加入购物车</Button>
                   <StampButton onClick={handleBuyNow} disabled={isBuying} className="flex-1">
                     {isBuying ? '处理中...' : '立即购买'}
                   </StampButton>
                 </div>
-                <Button variant="outline" onClick={handleOpenPoster} className="w-full">生成海报</Button>
+
+                {/* 生成海报：独立区块，最醒目 */}
+                <div className="border-t border-deep-blue-100 pt-3">
+                  <button
+                    type="button"
+                    onClick={handleOpenPoster}
+                    className="w-full py-3 px-4 rounded-sm border-2 border-palace-red text-palace-red font-shufa text-base hover:bg-palace-red hover:text-rice-paper transition-all flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 15l5-5 4 4 3-3 6 6" />
+                    </svg>
+                    生成海报
+                  </button>
+                </div>
               </div>
             </FrameDecorations>
 
@@ -1575,16 +1602,18 @@ export default function CustomizeProduct() {
                   >
                     图案设置
                   </button>
-                  <button
-                    onClick={() => setActiveTab('text')}
-                    className={`flex-1 py-2 px-4 rounded-sm font-shufa text-sm transition-all ${
-                      activeTab === 'text'
-                        ? 'bg-palace-red text-rice-paper shadow-md'
-                        : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red'
-                    }`}
-                  >
-                    文字设置
-                  </button>
+                  {!is3DProduct && (
+                    <button
+                      onClick={() => setActiveTab('text')}
+                      className={`flex-1 py-2 px-4 rounded-sm font-shufa text-sm transition-all ${
+                        activeTab === 'text'
+                          ? 'bg-palace-red text-rice-paper shadow-md'
+                          : 'bg-rice-paper border border-deep-blue-200 text-deep-blue hover:border-palace-red'
+                      }`}
+                    >
+                      文字设置
+                    </button>
+                  )}
                 </div>
 
                 {activeTab === 'pattern' && (
@@ -1910,7 +1939,7 @@ export default function CustomizeProduct() {
                   </div>
                 )}
 
-                {activeTab === 'text' && (
+                {activeTab === 'text' && !is3DProduct && (
                   <div className="space-y-4">
                     <div>
                       <label className="block font-song text-deep-blue text-xs mb-2">文字内容</label>
