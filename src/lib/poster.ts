@@ -107,12 +107,14 @@ export const FONT_FAMILY: Record<PosterFontKey, string> = POSTER_FONT_OPTIONS.re
   {} as Record<PosterFontKey, string>
 )
 
-/** 可拖拽文字元素：位置为中心点（1080×1440 坐标系），可调字体与字号 */
+/** 可拖拽文字元素：位置为中心点（1080×1440 坐标系），可调字体、字号与颜色 */
 export interface PosterTextElement {
   x: number
   y: number
   font: PosterFontKey
   size: number
+  /** 文字颜色（可空：标题沿用模板标题色，一句话/日期沿用模板副文字色） */
+  color?: string
 }
 
 export const DEFAULT_TITLE_EL: PosterTextElement = { x: 540, y: 284, font: 'shufa', size: 76 }
@@ -140,12 +142,16 @@ export interface PosterOptions {
   siteName: string
   /** 自定义背景图（dataURL）；存在时 cover 铺满海报背景，否则用模板渐变+装饰 */
   bgImage?: string
-  /** 标题元素（位置 / 字体 / 字号，缺省用默认） */
+  /** 标题元素（位置 / 字体 / 字号 / 颜色，缺省用默认） */
   titleEl?: Partial<PosterTextElement>
   /** 一句话元素 */
   subtitleEl?: Partial<PosterTextElement>
   /** 日期元素 */
   dateEl?: Partial<PosterTextElement>
+  /** Logo 重着色（可空：深色模板反白为白、浅色模板保留原色） */
+  logoColor?: string
+  /** 站点文字颜色（Logo 下方平台名 / 二维码下方「扫码体验纹韵」/ 页脚，三处同步；可空沿用模板副文字色） */
+  siteTextColor?: string
 }
 
 export const POSTER_WIDTH = 1080
@@ -356,7 +362,7 @@ function drawTitle(
 ): RenderedElementBox {
   const cleanTitle = opts.title.trim() || '纹韵定制'
   const font = FONT_FAMILY[t.font]
-  ctx.fillStyle = opts.template.titleColor
+  ctx.fillStyle = t.color ?? opts.template.titleColor
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   const lineHeight = t.size * 1.26
@@ -381,7 +387,7 @@ function drawSubtitle(
 ): RenderedElementBox | null {
   const cleanSubtitle = opts.subtitle.trim()
   if (!cleanSubtitle) return null
-  ctx.fillStyle = opts.template.subtitleColor
+  ctx.fillStyle = t.color ?? opts.template.subtitleColor
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.font = `${t.size}px ${FONT_FAMILY[t.font]}`
@@ -396,7 +402,7 @@ function drawDate(
   t: PosterTextElement
 ): RenderedElementBox {
   ctx.save()
-  ctx.fillStyle = opts.template.subtitleColor
+  ctx.fillStyle = t.color ?? opts.template.subtitleColor
   ctx.globalAlpha = 0.9
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -421,6 +427,8 @@ export async function renderPoster(
   const titleEl: PosterTextElement = { ...DEFAULT_TITLE_EL, ...opts.titleEl }
   const subtitleEl: PosterTextElement = { ...DEFAULT_SUBTITLE_EL, ...opts.subtitleEl }
   const dateEl: PosterTextElement = { ...DEFAULT_DATE_EL, ...opts.dateEl }
+  // 站点文字颜色（平台名 / 扫码提示 / 页脚三处同步）
+  const siteColor = opts.siteTextColor ?? template.subtitleColor
 
   const canvas = document.createElement('canvas')
   canvas.width = W
@@ -489,8 +497,10 @@ export async function renderPoster(
     const h = lh * scale
     const x = (W - w) / 2
     const y = 64
-    if (template.isDark) {
-      // 反白：离屏画布先画原图，再以 source-in 用白色重着色
+    // 重着色：用户指定 logoColor 优先；未指定时深色模板反白为白、浅色模板保留原色
+    const recolor = opts.logoColor ?? (template.isDark ? '#ffffff' : null)
+    if (recolor) {
+      // 离屏画布先画原图，再以 source-in 用目标色重着色
       const tmp = document.createElement('canvas')
       tmp.width = Math.max(1, Math.ceil(w))
       tmp.height = Math.max(1, Math.ceil(h))
@@ -499,7 +509,7 @@ export async function renderPoster(
         tctx.clearRect(0, 0, tmp.width, tmp.height)
         tctx.drawImage(logoImg, 0, 0, tmp.width, tmp.height)
         tctx.globalCompositeOperation = 'source-in'
-        tctx.fillStyle = '#ffffff'
+        tctx.fillStyle = recolor
         tctx.fillRect(0, 0, tmp.width, tmp.height)
         ctx.drawImage(tmp, x, y)
       } else {
@@ -509,7 +519,7 @@ export async function renderPoster(
       ctx.drawImage(logoImg, x, y, w, h)
     }
   } else {
-    ctx.fillStyle = template.titleColor
+    ctx.fillStyle = opts.logoColor ?? template.titleColor
     ctx.font = '46px "Ma Shan Zheng", "KaiTi", serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
@@ -517,7 +527,7 @@ export async function renderPoster(
   }
 
   // 5. 站点名
-  ctx.fillStyle = template.subtitleColor
+  ctx.fillStyle = siteColor
   ctx.globalAlpha = 0.85
   ctx.font = '26px "Noto Sans SC", sans-serif'
   ctx.textAlign = 'center'
@@ -598,7 +608,7 @@ export async function renderPoster(
         color: { dark: template.qrDark, light: '#ffffff' },
       })
       ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize)
-      ctx.fillStyle = template.subtitleColor
+      ctx.fillStyle = siteColor
       ctx.globalAlpha = 0.85
       ctx.font = '24px "Noto Serif SC", serif'
       ctx.textAlign = 'center'
@@ -606,7 +616,7 @@ export async function renderPoster(
       ctx.fillText('扫码体验纹韵', qrX + qrSize / 2, qrY + qrSize + 38)
       ctx.globalAlpha = 1
     } catch {
-      ctx.fillStyle = template.subtitleColor
+      ctx.fillStyle = siteColor
       ctx.font = '26px "Noto Sans SC", sans-serif'
       ctx.textAlign = 'center'
       ctx.fillText('二维码生成失败', qrX + qrSize / 2, qrY + qrSize / 2)
@@ -618,7 +628,7 @@ export async function renderPoster(
 
   // 12. 页脚
   ctx.save()
-  ctx.fillStyle = template.subtitleColor
+  ctx.fillStyle = siteColor
   ctx.globalAlpha = 0.5
   ctx.font = '22px "Noto Sans SC", sans-serif'
   ctx.textAlign = 'center'

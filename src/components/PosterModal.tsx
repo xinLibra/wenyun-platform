@@ -56,10 +56,13 @@ export function PosterModal({
   const bgFileRef = useRef<HTMLInputElement | null>(null)
   const [title, setTitle] = useState('')
   const [subtitle, setSubtitle] = useState('')
-  // 可拖拽文字元素：位置 / 字体 / 字号（日期自动取当天，不提供输入框）
+  // 可拖拽文字元素：位置 / 字体 / 字号 / 颜色（日期自动取当天，不提供输入框）
   const [titleEl, setTitleEl] = useState<PosterTextElement>(DEFAULT_TITLE_EL)
   const [subtitleEl, setSubtitleEl] = useState<PosterTextElement>(DEFAULT_SUBTITLE_EL)
   const [dateEl, setDateEl] = useState<PosterTextElement>(DEFAULT_DATE_EL)
+  // Logo 与站点文字自定义颜色（null = 沿用模板默认：深色模板 Logo 反白为白 / 其余用模板副文字色）
+  const [logoColor, setLogoColor] = useState<string | null>(null)
+  const [siteTextColor, setSiteTextColor] = useState<string | null>(null)
 
   const [previewUrl, setPreviewUrl] = useState('')
   const [renderError, setRenderError] = useState('')
@@ -79,6 +82,8 @@ export function PosterModal({
     setTitleEl(DEFAULT_TITLE_EL)
     setSubtitleEl(DEFAULT_SUBTITLE_EL)
     setDateEl(DEFAULT_DATE_EL)
+    setLogoColor(null)
+    setSiteTextColor(null)
     setPreviewUrl('')
     setRenderError('')
     dragRef.current = null
@@ -113,6 +118,8 @@ export function PosterModal({
           titleEl,
           subtitleEl,
           dateEl,
+          logoColor: logoColor || undefined,
+          siteTextColor: siteTextColor || undefined,
         })
         if (cancelled) return
         posterCanvasRef.current = canvas
@@ -128,7 +135,7 @@ export function PosterModal({
       cancelled = true
       clearTimeout(timer)
     }
-  }, [open, mainVisual, templateId, bgImage, title, subtitle, dateText, titleEl, subtitleEl, dateEl, productName, siteName, qrValue])
+  }, [open, mainVisual, templateId, bgImage, title, subtitle, dateText, titleEl, subtitleEl, dateEl, logoColor, siteTextColor, productName, siteName, qrValue])
 
   const handleDownload = (format: 'png' | 'jpg') => {
     if (!posterCanvasRef.current) {
@@ -219,12 +226,15 @@ export function PosterModal({
   }
 
   const ready = !!mainVisual && !!previewUrl && !renderError
+  // 当前模板（提供标题/副文字默认色；null 状态时颜色控件回退到模板默认值）
+  const template = POSTER_TEMPLATES.find((t) => t.id === templateId) ?? POSTER_TEMPLATES[0]
 
   const renderStyleRow = (
     label: string,
     value: PosterTextElement,
     onChange: (v: PosterTextElement) => void,
-    sizeRange: { min: number; max: number }
+    sizeRange: { min: number; max: number },
+    defaultColor: string
   ) => (
     <div className="flex items-center gap-2">
       <span className="font-song text-xs text-deep-blue w-14 shrink-0">{label}</span>
@@ -232,6 +242,7 @@ export function PosterModal({
         value={value.font}
         onChange={(e) => onChange({ ...value, font: e.target.value as PosterFontKey })}
         className="px-2 py-1.5 border border-deep-blue-200 rounded-sm font-song text-sm text-deep-blue bg-white focus:border-palace-red outline-none"
+        title="字体"
       >
         {POSTER_FONT_OPTIONS.map((o) => (
           <option key={o.key} value={o.key}>
@@ -253,6 +264,13 @@ export function PosterModal({
         }
         className="w-20 px-2 py-1.5 border border-deep-blue-200 rounded-sm font-song text-sm text-deep-blue focus:border-palace-red outline-none"
         title="字号"
+      />
+      <input
+        type="color"
+        value={value.color ?? defaultColor}
+        onChange={(e) => onChange({ ...value, color: e.target.value })}
+        className="w-9 h-9 p-0.5 border border-deep-blue-200 rounded-sm bg-white cursor-pointer shrink-0"
+        title="文字颜色"
       />
     </div>
   )
@@ -381,9 +399,9 @@ export function PosterModal({
                     <span className="text-deep-blue-light text-xs">（在右侧预览中可直接拖动标题 / 一句话 / 日期）</span>
                   </label>
                   <div className="flex flex-col gap-2">
-                    {renderStyleRow('标题', titleEl, setTitleEl, SIZE_RANGE.title)}
-                    {renderStyleRow('一句话', subtitleEl, setSubtitleEl, SIZE_RANGE.subtitle)}
-                    {renderStyleRow('日期', dateEl, setDateEl, SIZE_RANGE.date)}
+                    {renderStyleRow('标题', titleEl, setTitleEl, SIZE_RANGE.title, template.titleColor)}
+                    {renderStyleRow('一句话', subtitleEl, setSubtitleEl, SIZE_RANGE.subtitle, template.subtitleColor)}
+                    {renderStyleRow('日期', dateEl, setDateEl, SIZE_RANGE.date, template.subtitleColor)}
                   </div>
                 </div>
 
@@ -399,7 +417,7 @@ export function PosterModal({
                   />
                 </div>
 
-                {/* Logo（统一站内默认 Logo） */}
+                {/* Logo（统一站内默认 Logo）+ Logo 颜色 */}
                 <div>
                   <label className="font-song text-sm text-deep-blue mb-2 block">
                     网站 Logo <span className="text-deep-blue-light">（统一使用站内默认）</span>
@@ -411,6 +429,51 @@ export function PosterModal({
                       className="h-9 w-auto object-contain text-palace-red"
                     />
                     <span className="font-song text-sm text-deep-blue-light">纹韵 · AI非遗纹样设计平台</span>
+                  </div>
+                </div>
+
+                {/* Logo 与站点文字颜色（站点文字：Logo 下方平台名 / 二维码下方「扫码体验纹韵」/ 页脚，三处同步） */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-song text-xs text-deep-blue shrink-0">Logo 颜色</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={logoColor ?? (template.isDark ? '#ffffff' : '#000000')}
+                        onChange={(e) => setLogoColor(e.target.value)}
+                        className="w-9 h-9 p-0.5 border border-deep-blue-200 rounded-sm bg-white cursor-pointer"
+                        title="Logo 颜色"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setLogoColor(null)}
+                        className="font-song text-xs text-deep-blue-light hover:text-palace-red shrink-0"
+                      >
+                        恢复默认
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-song text-xs text-deep-blue shrink-0">
+                      站点文字
+                      <span className="text-deep-blue-light">（平台名 / 扫码提示 / 页脚同步）</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={siteTextColor ?? template.subtitleColor}
+                        onChange={(e) => setSiteTextColor(e.target.value)}
+                        className="w-9 h-9 p-0.5 border border-deep-blue-200 rounded-sm bg-white cursor-pointer"
+                        title="站点文字颜色"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setSiteTextColor(null)}
+                        className="font-song text-xs text-deep-blue-light hover:text-palace-red shrink-0"
+                      >
+                        恢复默认
+                      </button>
+                    </div>
                   </div>
                 </div>
 
