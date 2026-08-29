@@ -544,21 +544,22 @@ export default function Home() {
         <div className="max-w-4xl mx-auto">
           <FrameDecorations className="bg-rice-paper-light p-8 md:p-12">
             <div className="text-center">
-              <h2 className="font-shufa text-3xl md:text-4xl text-deep-blue mb-6">平台特色</h2>
+              <h2 className="font-shufa text-3xl md:text-4xl text-deep-blue mb-4">平台特色</h2>
+              <p className="font-song text-deep-blue-light mb-6">AI 赋能非遗纹样，一站式完成生成、融合与产品定制</p>
               <WaveDivider />
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mt-8">
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   whileHover={{ scale: 1.02 }}
                   transition={{ delay: 0.1 }}
                   className="text-center"
                 >
-                  <InkIcon variant="ink" size="lg" delay={0}>
-                    智
+                  <InkIcon variant="seal" size="lg" delay={0}>
+                    生
                   </InkIcon>
-                  <h3 className="font-shufa text-xl text-deep-blue mb-2 mt-4">智能生成</h3>
-                  <p className="font-song text-deep-blue-light">基于先进AI技术，一键生成精美非遗纹样</p>
+                  <h3 className="font-shufa text-xl text-deep-blue mb-2 mt-4">主题化智能生成</h3>
+                  <p className="font-song text-deep-blue-light">覆盖花卉、瑞兽、几何纹等主题，支持牡丹、鹤、龙凤、回纹、方胜、盘长等子类。结合颜色、文化符号强度等预设参数，生成可直接用于设计的传统纹样。</p>
                 </motion.div>
                 
                 <motion.div
@@ -567,11 +568,11 @@ export default function Home() {
                   transition={{ delay: 0.2 }}
                   className="text-center"
                 >
-                  <InkIcon variant="brush" size="lg" delay={0.1}>
-                    创
+                  <InkIcon variant="ink" size="lg" delay={0.1}>
+                    荐
                   </InkIcon>
-                  <h3 className="font-shufa text-xl text-deep-blue mb-2 mt-4">创意定制</h3>
-                  <p className="font-song text-deep-blue-light">支持多种参数调节，打造独一无二的设计</p>
+                  <h3 className="font-shufa text-xl text-deep-blue mb-2 mt-4">场景智能推荐</h3>
+                  <p className="font-song text-deep-blue-light">输入「毕业」「新婚」等使用场景，系统自动推荐匹配的纹样子类并勾选相关参数，降低专业门槛，一句话即可得到方案。</p>
                 </motion.div>
                 
                 <motion.div
@@ -580,13 +581,28 @@ export default function Home() {
                   transition={{ delay: 0.3 }}
                   className="text-center"
                 >
-                  <InkIcon variant="scroll" size="lg" delay={0.2}>
-                    承
+                  <InkIcon variant="brush" size="lg" delay={0.2}>
+                    融
                   </InkIcon>
-                  <h3 className="font-shufa text-xl text-deep-blue mb-2 mt-4">文化传承</h3>
-                  <p className="font-song text-deep-blue-light">深入挖掘非遗文化，赋予传统纹样新生命</p>
+                  <h3 className="font-shufa text-xl text-deep-blue mb-2 mt-4">纹样融合与定制</h3>
+                  <p className="font-song text-deep-blue-light">支持两个子类按比例融合，并可指定主题色。生成结果可一键应用到手机壳、书签、托特包、抱枕等产品，支持 2D/3D 预览、部件换色与贴图区域控制。</p>
+                </motion.div>
+                
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ delay: 0.4 }}
+                  className="text-center"
+                >
+                  <InkIcon variant="scroll" size="lg" delay={0.3}>
+                    享
+                  </InkIcon>
+                  <h3 className="font-shufa text-xl text-deep-blue mb-2 mt-4">衍生与分享</h3>
+                  <p className="font-song text-deep-blue-light">支持作品保存与展示、海报生成（含二维码、Logo、模板背景），以及 DNA 雷达图从文化强度、传统度等维度解读纹样，方便分享与二次创作。</p>
                 </motion.div>
               </div>
+
+              <p className="font-song text-sm text-deep-blue-light mt-8">完整演示加购、购物车与订单流程（演示环境，不含真实支付）</p>
             </div>
           </FrameDecorations>
         </div>

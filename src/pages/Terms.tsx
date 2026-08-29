@@ -90,7 +90,7 @@ export default function Terms() {
                 本平台有权根据实际情况修改服务条款和隐私政策，修改后的条款将在平台公告。
               </p>
               <p>
-                如有任何疑问或建议，欢迎联系我们：2710004138@qq.com
+                如有任何疑问或建议，欢迎联系我们：3684553782@qq.com
               </p>
             </div>
           </FrameDecorations>

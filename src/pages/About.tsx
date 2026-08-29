@@ -56,12 +56,12 @@ const advisors = [
 ]
 
 const techStack = [
-  { name: '深度学习框架', description: 'PyTorch / TensorFlow' },
-  { name: '图像生成模型', description: 'Stable Diffusion / ControlNet' },
+  { name: '深度学习框架', description: 'PyTorch' },
+  { name: '图像生成模型', description: 'Stable Diffusion + LoRA（可选 ControlNet）' },
   { name: '前端技术', description: 'React + TypeScript + Tailwind CSS' },
   { name: '状态管理', description: 'Zustand' },
   { name: '动画效果', description: 'Framer Motion' },
-  { name: '数据库', description: 'Supabase (PostgreSQL)' },
+  { name: '数据库/认证', description: 'Supabase (PostgreSQL)' },
 ]
 
 export default function About() {
@@ -161,28 +161,28 @@ export default function About() {
           <FrameDecorations className="bg-rice-paper-light p-6 mt-8">
             <h3 className="font-shufa text-xl text-deep-blue mb-4">核心算法</h3>
             <p className="font-song text-deep-blue-light leading-relaxed mb-4">
-              我们的纹样生成算法基于扩散模型（Diffusion Model），结合ControlNet技术实现对纹样风格、复杂度、色彩等参数的精确控制。通过对大量非遗纹样数据的学习，模型能够生成既符合传统美学规范，又具有创新性的纹样作品。
+              我们的纹样生成基于扩散模型（Stable Diffusion），结合主题化 LoRA 与可控参数，实现对纹样题材、文化符号强度、配色等的调节。通过对传统纹样数据的学习，模型能够生成符合传统美学、又适合现代设计使用的纹样。
             </p>
             <ul className="space-y-3 font-song text-deep-blue-light">
               <li className="flex items-start">
                 <span className="w-1.5 h-1.5 bg-palace-red rounded-full mt-2 mr-2 flex-shrink-0" />
-                <span><strong className="text-deep-blue">工艺风格迁移：</strong>支持染织（蓝印花布、扎染、蜡染）、刺绣（苏绣、湘绣、蜀绣、粤绣）、织锦（云锦、蜀锦、壮锦）、雕刻（剪纸、木雕、砖雕、石雕）、陶瓷（青花瓷、粉彩、钧瓷）、金属工艺（青铜纹饰、花丝镶嵌）等多种非遗工艺风格的生成</span>
+                <span><strong className="text-deep-blue">主题与子类控制：</strong>支持花卉（牡丹等）、瑞兽（鹤、虎、龙凤等）、几何纹（回纹、方胜、盘长等）等题材的生成</span>
               </li>
               <li className="flex items-start">
                 <span className="w-1.5 h-1.5 bg-palace-red rounded-full mt-2 mr-2 flex-shrink-0" />
-                <span><strong className="text-deep-blue">族群风格迁移：</strong>支持汉族、苗族、藏族、蒙古族等不同族群的纹样风格生成，每种风格都体现了独特的文化特征</span>
+                <span><strong className="text-deep-blue">参数可控：</strong>支持颜色、文化符号强度、对称性等预设参数调节，便于快速得到可用结果</span>
               </li>
               <li className="flex items-start">
                 <span className="w-1.5 h-1.5 bg-palace-red rounded-full mt-2 mr-2 flex-shrink-0" />
-                <span><strong className="text-deep-blue">纹样题材控制：</strong>支持动物纹（龙凤、瑞兽、鱼虫）、花卉纹（牡丹、莲花、兰花等）、几何纹（回纹、冰裂纹、锁子纹）、人物纹等多种题材的生成</span>
+                <span><strong className="text-deep-blue">场景推荐：</strong>根据使用场景（如毕业、新婚）自动推荐纹样子类与参数</span>
               </li>
               <li className="flex items-start">
                 <span className="w-1.5 h-1.5 bg-palace-red rounded-full mt-2 mr-2 flex-shrink-0" />
-                <span><strong className="text-deep-blue">风格倾向调节：</strong>支持具象/抽象、传统/现代、繁复/简约、手作感/数字科技感等多维度的风格调节</span>
+                <span><strong className="text-deep-blue">纹样融合：</strong>支持两个子类按比例融合，并继承主题色与参数</span>
               </li>
               <li className="flex items-start">
                 <span className="w-1.5 h-1.5 bg-palace-red rounded-full mt-2 mr-2 flex-shrink-0" />
-                <span><strong className="text-deep-blue">参数精细控制：</strong>支持纹样繁复度、肌理还原度、文化符号强度等多种参数的实时调节，以及多种配色方案的切换</span>
+                <span><strong className="text-deep-blue">产品落地：</strong>生成纹样可应用到手机壳、书签、托特包、抱枕等，支持 2D/3D 预览与部件换色</span>
               </li>
             </ul>
           </FrameDecorations>
@@ -304,7 +304,7 @@ export default function About() {
           <div className="inline-block">
             <div className="bg-rice-paper-light px-8 py-6 rounded-sm border border-deep-blue-100">
               <p className="font-shufa text-lg text-deep-blue mb-2">联系方式</p>
-              <p className="font-song text-deep-blue-light">邮箱：2710004138@qq.com</p>
+              <p className="font-song text-deep-blue-light">邮箱：3684553782@qq.com</p>
               <p className="font-song text-deep-blue-light">地址：江苏省无锡市滨湖区江南大学蠡湖校区</p>
             </div>
           </div>
