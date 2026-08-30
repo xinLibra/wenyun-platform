@@ -18,6 +18,8 @@ interface GalleryWork {
   likes: number
   image: string
   created_at: string
+  /** 作者最近一次公开时间（DB 字段 published_at），缺失回落 created_at */
+  published_at?: string | null
   tags: string[]
   favoriteCount: number
   /** 主题：floral | beast；旧数据无此字段（只出现在「全部」） */
@@ -68,9 +70,11 @@ export default function Gallery() {
       // 缩略图先占位，渲染后由 loadImagesConcurrently 按 id 批量补图
       const { data: generationsData } = await supabase
         .from('generations')
-        .select('id, user_id, style_id, author_nickname, is_public, created_at, title:params->>title, tags:params->tags, theme:params->>theme, subcategory:params->>subcategory, source:params->>source, fusion:params->fusion')
+        .select('id, user_id, style_id, author_nickname, is_public, created_at, published_at, title:params->>title, tags:params->tags, theme:params->>theme, subcategory:params->>subcategory, source:params->>source, fusion:params->fusion')
         .eq('is_public', true)
         .eq('is_deleted', false)
+        // 最新发布：按「作者选择公开的时间」排序，null 兜底用 created_at（覆盖未回填的旧公开作品）
+        .order('published_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
 
       if (generationsData) {
@@ -123,6 +127,7 @@ export default function Gallery() {
             likes: Math.floor(Math.random() * 300) + 50,
             image: '', // 列表不拉 image_url，渲染后按 id 补图
             created_at: gen.created_at,
+            published_at: gen.published_at || null,
             tags: gen.tags || [],
             favoriteCount: favoriteCounts[gen.id] || 0,
             // 主题/子类/来源从保存时的 params 元数据投影读取
@@ -200,7 +205,12 @@ export default function Gallery() {
   }
 
   const sortedWorks = [...filteredWorks()].sort((a, b) => {
-    if (sortBy === 'latest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    if (sortBy === 'latest') {
+      // 「最新发布」按作者最近一次选择公开的时间排序；published_at 缺失时回落 created_at
+      const aTime = new Date(a.published_at || a.created_at).getTime()
+      const bTime = new Date(b.published_at || b.created_at).getTime()
+      return bTime - aTime
+    }
     if (sortBy === 'popular') return b.favoriteCount - a.favoriteCount
     return 0
   })

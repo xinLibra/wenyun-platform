@@ -642,7 +642,7 @@ export default function CreatePattern() {
         } else {
           const { error } = await supabase
             .from('generations')
-            .update({ is_public: true })
+            .update({ is_public: true, published_at: new Date().toISOString() })
             .eq('id', workId)
           if (error) {
             console.error('Update public error:', error)
@@ -1041,7 +1041,7 @@ export default function CreatePattern() {
         } else {
           const { error } = await supabase
             .from('generations')
-            .update({ is_public: true })
+            .update({ is_public: true, published_at: new Date().toISOString() })
             .eq('id', workId)
           if (error) {
             console.error('Update public error:', error)

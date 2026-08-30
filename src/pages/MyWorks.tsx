@@ -330,9 +330,16 @@ export default function MyWorksPage() {
       prev.map((g) => (g.id === generationId ? { ...g, is_public: newValue } : g))
     )
 
+    // 设公开时同步「最近一次公开时间」，供 Gallery「最新发布」排序；
+    // 取消公开时不动 published_at（保留最后一次公开的时间戳，避免老公开作品沉底）
+    const updatePayload: { is_public: boolean; published_at?: string } = { is_public: newValue }
+    if (newValue) {
+      updatePayload.published_at = new Date().toISOString()
+    }
+
     const { error } = await supabase
       .from('generations')
-      .update({ is_public: newValue })
+      .update(updatePayload)
       .eq('id', generationId)
 
     if (error) {
