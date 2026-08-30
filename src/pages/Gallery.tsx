@@ -22,7 +22,7 @@ interface GalleryWork {
   published_at?: string | null
   tags: string[]
   favoriteCount: number
-  /** 主题：floral | beast；旧数据无此字段（只出现在「全部」） */
+  /** 主题：floral | geometric；旧数据无此字段（只出现在「全部」） */
   theme?: string
   /** 子类 id，与 patternTaxonomy 的 subcategories.id 一致 */
   subcategory?: string
@@ -32,7 +32,7 @@ interface GalleryWork {
 
 /**
  * 旧数据兼容：无 theme/subcategory 字段时，从 tags 反查子类中文名（与 PATTERN_THEMES label 一致），
- * 映射回主题 + 子类 id，使旧作品也能被花卉/瑞兽子类筛选命中；匹配不到则归入「全部」。
+ * 映射回主题 + 子类 id，使旧作品也能被花卉/几何子类筛选命中；匹配不到则归入「全部」。
  */
 function resolveWorkMeta(work: GalleryWork): { theme?: string; subcategory?: string } {
   if (work.theme) {
@@ -53,7 +53,7 @@ export default function Gallery() {
   const location = useLocation()
   const navigate = useNavigate()
   const { favoriteIds, toggleFavorite } = useFavorites()
-  /** 筛选：all | floral | beast | fusion；activeSubcategory 为空 = 该主题下全部子类 */
+  /** 筛选：all | floral | geometric | fusion；activeSubcategory 为空 = 该主题下全部子类 */
   const [activeFilter, setActiveFilter] = useState<'all' | PatternThemeId | 'fusion'>('all')
   const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null)
   const [selectedWork, setSelectedWork] = useState<GalleryWork | null>(null)
@@ -193,7 +193,7 @@ export default function Gallery() {
     if (activeFilter === 'fusion') {
       return works.filter(w => w.source === 'fusion')
     }
-    if (activeFilter === 'floral' || activeFilter === 'beast') {
+    if (activeFilter === 'floral' || activeFilter === 'geometric') {
       return works.filter(w => {
         const meta = resolveWorkMeta(w)
         if (meta.theme !== activeFilter) return false
@@ -220,7 +220,7 @@ export default function Gallery() {
 
   /** 当前选中的主题（决定子类横排 chip 行是否显示及其内容） */
   const activeTheme =
-    activeFilter === 'floral' || activeFilter === 'beast'
+    activeFilter === 'floral' || activeFilter === 'geometric'
       ? PATTERN_THEMES.find(t => t.id === activeFilter)
       : null
 
@@ -278,7 +278,7 @@ export default function Gallery() {
               全部
             </button>
 
-            {/* 主题：花卉 / 瑞兽（点主题名按主题筛，子类走下方横排 chip） */}
+            {/* 主题：花卉 / 几何（点主题名按主题筛，子类走下方横排 chip） */}
             {PATTERN_THEMES.map((theme) => {
               const isActive = activeFilter === theme.id
               return (
@@ -317,7 +317,7 @@ export default function Gallery() {
             </button>
           </div>
 
-          {/* 主题子类横排 chip 行（可左右滑动）：选中花卉/瑞兽后出现在按钮下方 */}
+          {/* 主题子类横排 chip 行（可左右滑动）：选中花卉/几何后出现在按钮下方 */}
           {activeTheme && (
             <motion.div
               initial={{ opacity: 0, y: -4 }}

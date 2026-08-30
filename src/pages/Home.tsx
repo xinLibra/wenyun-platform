@@ -72,8 +72,8 @@ const ethnicCategories = [
     id: 'han',
     name: '汉族',
     description: '华夏文明的主体民族，纹样风格多样且体系完整',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20Han%20ethnic%20pattern%20elegant%20cloud%20and%20dragon%20design%20red%20and%20gold&image_size=square',
-    features: '汉族纹样注重对称和谐，题材广泛，包括龙凤、花鸟、山水、吉祥图案等，体现了"天人合一"的哲学思想。'
+    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20Han%20ethnic%20pattern%20elegant%20cloud%20and%20flower%20design%20red%20and%20gold&image_size=square',
+    features: '汉族纹样注重对称和谐，题材广泛，包括云纹、花鸟、山水、吉祥图案等，体现了"天人合一"的哲学思想。'
   },
   {
     id: 'miao',
@@ -100,20 +100,12 @@ const ethnicCategories = [
 
 const themeCategories = [
   {
-    id: 'animal',
-    name: '动物纹',
-    description: '以动物为题材的纹样，包括神话传说中的神兽',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20dragon%20pattern%20majestic%20gold%20and%20red%20ancient%20style&image_size=square',
-    subcategories: ['龙凤', '瑞兽', '鱼虫'],
-    meaning: '龙象征尊贵与权威，凤寓意吉祥与美好，麒麟代表祥瑞，鱼象征年年有余，蝙蝠寓意福气。'
-  },
-  {
     id: 'geometric',
     name: '几何纹',
-    description: '以抽象几何图形构成的纹样',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20geometric%20pattern%20meander%20and%20swastika%20design%20black%20and%20white&image_size=square',
-    subcategories: ['回纹', '冰裂纹', '锁子纹'],
-    meaning: '回纹寓意连绵不断，万字纹象征吉祥万福，冰裂纹代表自然之美，体现了古人对秩序与和谐的追求。'
+    description: '以线条与几何形构成的纹样，规整有序、秩序感强',
+    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20geometric%20pattern%20huiwen%20meander%20gold%20and%20red%20ancient%20style&image_size=square',
+    subcategories: ['回纹', '盘长纹', '锦地纹', '方胜纹'],
+    meaning: '回纹回环往复，盘长寓意连绵不绝，锦地锦绣满铺，方胜方正得胜。'
   },
   {
     id: 'figure',
@@ -165,7 +157,7 @@ const works = [
   { id: 2, title: '年年有余', author: '非遗传承人', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20fish%20pattern%20papercut%20style%20red%20and%20gold%20festive&image_size=square' },
   { id: 3, title: '山水之间', author: '艺术爱好者', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20landscape%20pattern%20ink%20wash%20style%20minimal%20elegant&image_size=square' },
   { id: 4, title: '吉祥如意', author: '文创设计师', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20auspicious%20cloud%20pattern%20embroidery%20style%20colorful&image_size=square' },
-  { id: 5, title: '龙腾四海', author: '设计师小李', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20dragon%20pattern%20gold%20and%20red%20majestic%20elegant&image_size=square' },
+  { id: 5, title: '回纹四方', author: '设计师小李', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20huiwen%20meander%20geometric%20pattern%20gold%20and%20red%20elegant&image_size=square' },
   { id: 6, title: '凤舞九天', author: '艺术工作室', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20phoenix%20pattern%20embroidery%20style%20colorful%20elegant&image_size=square' },
 ]
 
@@ -559,7 +551,7 @@ export default function Home() {
                     生
                   </InkIcon>
                   <h3 className="font-shufa text-xl text-deep-blue mb-2 mt-4">主题化智能生成</h3>
-                  <p className="font-song text-deep-blue-light">覆盖花卉、瑞兽、几何纹等主题，支持牡丹、鹤、龙凤、回纹、方胜、盘长等子类。结合颜色、文化符号强度等预设参数，生成可直接用于设计的传统纹样。</p>
+                  <p className="font-song text-deep-blue-light">覆盖花卉、几何纹等主题，支持牡丹、莲花、梅花、回纹、盘长纹、锦地纹、方胜纹等子类。结合颜色、文化符号强度等预设参数，生成可直接用于设计的传统纹样。</p>
                 </motion.div>
                 
                 <motion.div

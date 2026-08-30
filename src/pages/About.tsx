@@ -166,7 +166,7 @@ export default function About() {
             <ul className="space-y-3 font-song text-deep-blue-light">
               <li className="flex items-start">
                 <span className="w-1.5 h-1.5 bg-palace-red rounded-full mt-2 mr-2 flex-shrink-0" />
-                <span><strong className="text-deep-blue">主题与子类控制：</strong>支持花卉（牡丹等）、瑞兽（鹤、虎、龙凤等）、几何纹（回纹、方胜、盘长等）等题材的生成</span>
+                <span><strong className="text-deep-blue">主题与子类控制：</strong>支持花卉（牡丹、莲花、梅花等）、几何纹（回纹、盘长纹、锦地纹、方胜纹等）等题材的生成</span>
               </li>
               <li className="flex items-start">
                 <span className="w-1.5 h-1.5 bg-palace-red rounded-full mt-2 mr-2 flex-shrink-0" />

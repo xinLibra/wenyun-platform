@@ -4,7 +4,7 @@ export interface PatternDimension {
   theme: string[]
   application: string[]
   // ===== 新增 =====
-  mainTheme?: 'floral' | 'beast' | ''
+  mainTheme?: 'floral' | 'geometric' | ''
   subcategory?: string
   scenes?: string[]
   // ===== 新增结束 =====
@@ -71,9 +71,9 @@ export const ETHNIC_OPTIONS = [
 ]
 
 export const THEME_OPTIONS = [
-  { id: 'animal', label: '动物纹', children: ['龙凤', '瑞兽', '鱼虫'] },
+  { id: 'animal', label: '动物纹', children: ['鱼虫'] },
   { id: 'human', label: '人物纹' },
-  { id: 'geometric', label: '几何纹', children: ['回纹', '冰裂纹', '锁子纹'] },
+  { id: 'geometric', label: '几何纹', children: ['回纹', '盘长纹', '锦地纹', '方胜纹'] },
   { id: 'composite', label: '组合纹' },
 ]
 

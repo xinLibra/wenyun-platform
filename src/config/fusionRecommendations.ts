@@ -3,43 +3,37 @@
  * key = pattern 子类 id（与 patternTaxonomy 中的 subcategory id 一致），
  * value = 视觉/语义上常与第一槽一起融合的子类 id（按相关性从高到低排序）。
  * 仅需维护单向，导出时会自动镜像成对称表。
+ *
+ * 主题：几何（回纹/盘长纹/锦地纹/方胜纹）+ 花卉。瑞兽相关已全部移除。
  */
 
 const BASE_RECOMMENDATIONS: Record<string, string[]> = {
-  // 凤鸟 ↔ 牡丹 / 龙纹
-  phoenix_bird: ['peony', 'dragon', 'flower_bird'],
-  // 鹤 ↔ 云 / 莲
-  crane: ['lotus', 'deer'],
-  // 蝴蝶 ↔ 花鸟 / 兰 / 牡丹
-  butterfly: ['flower_bird', 'orchid', 'peony'],
+  // ===== 几何 =====
+  // 回纹 ↔ 锦地 / 方胜 / 盘长（几何互融），再叠花卉点缀
+  huiwen: ['jindi', 'fangsheng', 'panchang', 'plum', 'lotus'],
+  // 盘长 ↔ 方胜 / 回纹 / 锦地（单纹样与连续均适配）
+  panchang: ['fangsheng', 'huiwen', 'jindi', 'peony'],
+  // 锦地 ↔ 回纹 / 盘长 / 花鸟（满铺底纹百搭）
+  jindi: ['huiwen', 'panchang', 'fangsheng', 'flower_bird', 'chrysanthemum'],
+  // 方胜 ↔ 回纹 / 盘长 / 牡丹（方正吉祥）
+  fangsheng: ['huiwen', 'panchang', 'jindi', 'peony'],
+  // ===== 花卉 =====
   // 兰 ↔ 蝶 / 梅
-  orchid: ['butterfly', 'plum', 'furong'],
-  // 龙 ↔ 凤
-  dragon: ['phoenix_bird', 'dragon_phoenix', 'tiger'],
-  // 龙凤纹
-  dragon_phoenix: ['phoenix_bird', 'dragon'],
+  orchid: ['plum', 'furong'],
   // 牡丹：花中之王，百搭
-  peony: ['butterfly', 'phoenix_bird', 'flower_bird', 'furong'],
-  // 莲花：鹤 / 花鸟
-  lotus: ['crane', 'flower_bird'],
-  // 梅花：兰 / 菊（梅兰竹菊文化组合）
-  plum: ['orchid', 'chrysanthemum'],
+  peony: ['flower_bird', 'furong', 'panchang', 'fangsheng'],
+  // 莲花：花鸟 / 回纹
+  lotus: ['flower_bird', 'huiwen'],
+  // 梅花：兰 / 菊 / 回纹（梅兰竹菊 + 几何组合）
+  plum: ['orchid', 'chrysanthemum', 'huiwen'],
   // 菊花
-  chrysanthemum: ['plum', 'orchid'],
-  // 花鸟：蝴蝶 / 凤鸟 / 牡丹 / 兰
-  flower_bird: ['butterfly', 'phoenix_bird', 'peony', 'orchid'],
+  chrysanthemum: ['plum', 'orchid', 'jindi'],
+  // 花鸟：牡丹 / 兰 / 锦地
+  flower_bird: ['peony', 'orchid', 'jindi'],
   // 芙蓉：牡丹 / 莲
   furong: ['peony', 'lotus'],
   // 石榴花：花鸟 / 牡丹
   pomegranate_flower: ['flower_bird', 'peony'],
-  // 虎：狮 / 龙（瑞兽组合）
-  tiger: ['lion', 'dragon'],
-  // 孔雀：凤鸟 / 牡丹 / 花鸟
-  peacock: ['phoenix_bird', 'peony', 'flower_bird'],
-  // 鹿：鹤（瑞兽组合）
-  deer: ['crane'],
-  // 狮：虎 / 龙
-  lion: ['tiger', 'dragon'],
 }
 
 function mirror(record: Record<string, string[]>): Record<string, string[]> {

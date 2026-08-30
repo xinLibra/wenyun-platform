@@ -1,7 +1,7 @@
 /** 纹样主题 / 子类 / 场景 — 与 LoRA 训练目录对齐 */
 import { SCENE_KEYWORDS } from '../config/culturalSemantics'
 
-export type PatternThemeId = 'floral' | 'beast'
+export type PatternThemeId = 'floral' | 'geometric'
 
 export interface PatternSubcategory {
   id: string
@@ -32,18 +32,13 @@ export const PATTERN_THEMES: PatternTheme[] = [
     ],
   },
   {
-    id: 'beast',
-    label: '瑞兽',
+    id: 'geometric',
+    label: '几何',
     subcategories: [
-      { id: 'phoenix_bird', label: '凤鸟纹', trigger: 'ichpattern_phoenix' },
-      { id: 'crane', label: '鹤纹', trigger: 'ichpattern_crane' },
-      { id: 'butterfly', label: '蝴蝶纹', trigger: 'ichpattern_butterfly' },
-      { id: 'tiger', label: '虎纹', trigger: 'ichpattern_tiger' },
-      { id: 'peacock', label: '孔雀纹', trigger: 'ichpattern_peacock' },
-      { id: 'dragon_phoenix', label: '龙凤纹', trigger: 'ichpattern_dragon_phoenix' },
-      { id: 'dragon', label: '龙纹', trigger: 'ichpattern_dragon' },
-      { id: 'deer', label: '鹿纹', trigger: 'ichpattern_deer' },
-      { id: 'lion', label: '狮纹', trigger: 'ichpattern_lion' },
+      { id: 'huiwen', label: '回纹', trigger: 'ichpattern_huiwen' },
+      { id: 'panchang', label: '盘长纹', trigger: 'ichpattern_panchang' },
+      { id: 'jindi', label: '锦地纹', trigger: 'ichpattern_jindi' },
+      { id: 'fangsheng', label: '方胜纹', trigger: 'ichpattern_fangsheng' },
     ],
   },
 ]
@@ -68,20 +63,15 @@ export function parsePromptToTags(text: string): {
   let themeId: PatternThemeId | undefined
   let subcategoryId: string | undefined
 
-  const beastMap: [RegExp, string][] = [
-    [/鹤/, 'crane'],
-    [/虎|老虎/, 'tiger'],
-    [/龙凤/, 'dragon_phoenix'],
-    [/龙/, 'dragon'],
-    [/凤鸟|凤凰|凤/, 'phoenix_bird'],
-    [/孔雀/, 'peacock'],
-    [/狮/, 'lion'],
-    [/鹿/, 'deer'],
-    [/蝴蝶|蝶/, 'butterfly'],
+  const geometricMap: [RegExp, string][] = [
+    [/回纹|回字纹/, 'huiwen'],
+    [/盘长|盘肠纹/, 'panchang'],
+    [/锦地/, 'jindi'],
+    [/方胜/, 'fangsheng'],
   ]
-  for (const [re, id] of beastMap) {
+  for (const [re, id] of geometricMap) {
     if (re.test(t)) {
-      themeId = 'beast'
+      themeId = 'geometric'
       subcategoryId = id
       break
     }
@@ -107,7 +97,7 @@ export function parsePromptToTags(text: string): {
   }
   if (!themeId) {
     if (/花|花卉|植物/.test(t)) themeId = 'floral'
-    else if (/兽|瑞兽|鸟/.test(t)) themeId = 'beast'
+    else if (/几何|回纹|盘长|锦地|方胜/.test(t)) themeId = 'geometric'
   }
   return { themeId, subcategoryId, sceneIds }
 }

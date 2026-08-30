@@ -8,8 +8,8 @@ export interface PatternRecommendation {
   meaning: string
   region: string
   matchScore: number
-  /** 纹样所属主题（floral/beast），用于自动勾选主题 */
-  themeId?: 'floral' | 'beast'
+  /** 纹样所属主题（floral/geometric），用于自动勾选主题 */
+  themeId?: 'floral' | 'geometric'
   /** 场景标准 id（由语义表 scene 归并而来），用于自动勾选「使用场景」 */
   sceneId?: string
 }

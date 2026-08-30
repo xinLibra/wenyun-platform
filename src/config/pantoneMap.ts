@@ -20,18 +20,15 @@ export interface PantoneEntry {
   hex: string
 }
 
-/** 本表收录 SUBCATEGORY_PANTONE_MAP 用到的全部真实色号（瑞兽 + 花卉） */
+/** 本表收录 SUBCATEGORY_PANTONE_MAP 用到的全部真实色号（几何 + 花卉） */
 export const PANTONE_TABLE: PantoneEntry[] = [
-  // ===== 瑞兽 =====
-  { code: '18-1662 TCX', name: '宫墙红', englishName: 'palace red', hex: '#C3423F' }, // dragon / phoenix_bird / dragon_phoenix
-  { code: '19-4052 TCX', name: '深藏青', englishName: 'dark navy blue', hex: '#26364B' }, // crane
-  { code: '16-1450 TCX', name: '藕粉', englishName: 'light pink', hex: '#E8B4B8' }, // butterfly
-  { code: '16-4725 TCX', name: '钴蓝', englishName: 'cobalt blue', hex: '#1565C0' }, // peacock
-  { code: '18-1150 TCX', name: '栗棕', englishName: 'chestnut brown', hex: '#CD853F' }, // deer
-  { code: '12-0752 TCX', name: '金色', englishName: 'golden yellow', hex: '#D4AF37' }, // lion
-  { code: '17-1462 TCX', name: '橙红', englishName: 'orange red', hex: '#FF6F00' }, // tiger
+  // ===== 几何 =====
+  { code: '19-4052 TCX', name: '深藏青', englishName: 'dark navy blue', hex: '#26364B' }, // huiwen 回纹
+  { code: '18-1662 TCX', name: '宫墙红', englishName: 'palace red', hex: '#C3423F' }, // panchang 盘长纹
+  { code: '12-0752 TCX', name: '金色', englishName: 'golden yellow', hex: '#D4AF37' }, // jindi 锦地纹
+  { code: '18-1555 TCX', name: '朱红', englishName: 'vermillion', hex: '#E63946' }, // fangsheng 方胜纹
   // ===== 花卉 =====
-  { code: '18-1555 TCX', name: '朱红', englishName: 'vermillion', hex: '#E63946' }, // flower_bird
+  { code: '16-1450 TCX', name: '藕粉', englishName: 'light pink', hex: '#E8B4B8' }, // peony / lotus
   { code: '14-3904 TCX', name: '淡紫', englishName: 'soft lilac', hex: '#A78BBA' }, // orchid
   { code: '16-1720 TCX', name: '桃粉', englishName: 'peach pink', hex: '#F4A0B4' }, // furong
 ]

@@ -6,21 +6,21 @@
  *     支持多 trigger 逗号分隔（如牡丹 trigger = 'ich_flower_pattern, ich_peony_pattern'），
  *     buildPrompt 会逐项拼入 prompt 前部。
  *  2) loraFile 仅录入「最终应存在于本机 WebUI 的 models/Lora/ 目录」的文件名（不含路径、不含扩展名）
- *     这些文件由用户手动放置（瑞兽部分来自 C:\LoraTraining\outputs\<subdir>\，花卉部分来自朋友交付）
+ *     这些文件由用户手动放置（几何部分来自 C:\LoraTraining\outputs\<subdir>\，花卉部分来自朋友交付）
  *  3) 找不到 LoRA 的子类：loraFile 留空（null），prompt 仍然会带 trigger，只是不追加 <lora:...:w> 标签
  *
  * 默认权重：
- *   - 瑞兽 DEFAULT_LORA_WEIGHT = 0.7（与训练验证时一致，推荐 0.70–0.85，虎纹建议 0.65–0.80）
+ *   - 几何 DEFAULT_LORA_WEIGHT = 0.7（与训练验证时一致，推荐 0.70–0.85）
  *   - 花卉统一 0.8（按 DELIVERY.md 要求，显式覆盖，避免被 DEFAULT_LORA_WEIGHT=0.7 误压低）
  * 如需统一调整改 DEFAULT_LORA_WEIGHT / FLOWER_LORA_WEIGHT 即可。
  */
 
 import type { PatternThemeId } from '../data/patternTaxonomy'
 
-/** 瑞兽默认 LoRA 权重，方便全局调节 */
+/** 几何默认 LoRA 权重，方便全局调节 */
 export const DEFAULT_LORA_WEIGHT = 0.7
 
-/** 花卉默认 LoRA 权重（按 DELIVERY.md，瑞兽与花卉权重不同，所以独立常量） */
+/** 花卉默认 LoRA 权重（按 DELIVERY.md，几何与花卉权重不同，所以独立常量） */
 export const FLOWER_LORA_WEIGHT = 0.8
 
 /** 子类英文标签：用于拼 prompt 中的 "Chinese traditional {en} pattern" */
@@ -48,17 +48,15 @@ export interface LoraMapEntry {
 /**
  * 映射表
  *
- * ===== 瑞兽 10 个子类 =====
- * （2026-08-18 确认源文件存在于 C:\LoraTraining\outputs\<subdir>\）
- *   - ICH_crane_pattern_lora_v1           ← outputs/crane_v4/
- *   - ICH_butterfly_pattern_lora_v4       ← outputs/butterfly_v4/
- *   - ICH_peacock_pattern_lora_v6         ← outputs/peacock_v6/
- *   - ICH_tiger_pattern_lora_v5           ← outputs/tiger_v5/
- *   - ICH_deer_pattern_lora_v1            ← outputs/deer_v1/
- *   - ICH_dragon_pattern_lora_v1          ← outputs/dragon_v3/
- *   - ICH_phoenix_pattern_lora_v4         ← outputs/phoenix_v4/
- *   - ICH_lion_pattern_lora_v1            ← outputs/lion_v1/
- *   - ICH_dragon_phoenix_pattern_lora_v7  ← outputs/dragon_phoenix_v7/
+ * ===== 几何 4 个子类 =====
+ * （trigger 与训练 caption 对齐；LoRA 文件尚未部署时 loraFile=null，只写 trigger）
+ *   - huiwen    → trigger: ichpattern_huiwen
+ *   - panchang  → trigger: ichpattern_panchang
+ *   - jindi     → trigger: ichpattern_jindi（若有 hex/floral 等子触发，按现有 LoRA 映射追加）
+ *   - fangsheng → trigger: ichpattern_fangsheng
+ *     排布=单独/居中 → 追加 ichpattern_fangsheng_single（单独 LoRA）
+ *     排布=四方连续 → 追加 ichpattern_fangsheng_continuous（连续 LoRA）
+ *     （由 buildPrompt 按 arrangement 自动切换，见 patternGeneration.ts）
  *
  * ===== 花卉 8 个专属子类（均已挂载专属 LoRA） =====
  * （2026-08-20 朋友按 DELIVERY.md 交付，已复制到 WebUI models/Lora；
@@ -71,9 +69,6 @@ export interface LoraMapEntry {
  *   - orchid         → ICH_orchid_pattern_lora_v3          trigger: ichpattern_orchid
  *   - furong         → ICH_hibiscus_pattern_lora_v5        trigger: ichpattern_hibiscus（旧占位 ichpattern_furong 已废弃）
  *   - pomegranate_flower → ICH_pomegranate_flower_pattern_lora_v6  trigger: ichpattern_pomegranate_flower
- *
- * 注：ICH_qilin_pattern_lora_v1（麒麟纹）源文件已训练，但 patternTaxonomy 中暂无 qilin 子类，
- *     此处不挂载。如需启用，需先在 patternTaxonomy.ts 增 qilin 子类。
  */
 export const LORA_MAP: LoraMapEntry[] = [
   // ============ 花卉（专属 LoRA） ============
@@ -159,96 +154,45 @@ export const LORA_MAP: LoraMapEntry[] = [
     loraWeight: FLOWER_LORA_WEIGHT,
   },
 
-  // ============ 瑞兽（9 个子类挂载专属 LoRA） ============
+  // ============ 几何（4 个子类，trigger 对齐训练 caption） ============
   {
-    subcategoryId: 'phoenix_bird',
-    themeId: 'beast',
-    subLabelZh: '凤鸟纹',
-    subLabelEn: 'phoenix bird',
-    trigger: 'ichpattern_phoenix',
-    // v4 最新有报告版（源 outputs/phoenix_v4/）
-    loraFile: 'ICH_phoenix_pattern_lora_v4',
+    subcategoryId: 'huiwen',
+    themeId: 'geometric',
+    subLabelZh: '回纹',
+    subLabelEn: 'huiwen (meander)',
+    trigger: 'ichpattern_huiwen',
+    // 几何 LoRA 文件未部署时只写 trigger，不追加 <lora:...> 标签
+    loraFile: null,
     loraWeight: DEFAULT_LORA_WEIGHT,
   },
   {
-    subcategoryId: 'crane',
-    themeId: 'beast',
-    subLabelZh: '鹤纹',
-    subLabelEn: 'crane',
-    trigger: 'ichpattern_crane',
-    // v4 E5 loss 0.0867，重命名为 v1（源 outputs/crane_v4/）
-    loraFile: 'ICH_crane_pattern_lora_v1',
+    subcategoryId: 'panchang',
+    themeId: 'geometric',
+    subLabelZh: '盘长纹',
+    subLabelEn: 'panchang (endless knot)',
+    trigger: 'ichpattern_panchang',
+    loraFile: null,
     loraWeight: DEFAULT_LORA_WEIGHT,
   },
   {
-    subcategoryId: 'butterfly',
-    themeId: 'beast',
-    subLabelZh: '蝴蝶纹',
-    subLabelEn: 'butterfly',
-    trigger: 'ichpattern_butterfly',
-    // v4 E4 loss 0.0904，resume 后 optimizer 恢复显著（源 outputs/butterfly_v4/）
-    loraFile: 'ICH_butterfly_pattern_lora_v4',
+    subcategoryId: 'jindi',
+    themeId: 'geometric',
+    subLabelZh: '锦地纹',
+    subLabelEn: 'jindi (brocade ground)',
+    trigger: 'ichpattern_jindi',
+    loraFile: null,
     loraWeight: DEFAULT_LORA_WEIGHT,
   },
   {
-    subcategoryId: 'tiger',
-    themeId: 'beast',
-    subLabelZh: '虎纹',
-    subLabelEn: 'tiger',
-    trigger: 'ichpattern_tiger',
-    // v5 E5 loss 0.0867，形态相对最清晰；ControlNet 锁形仍不理想，建议配合底图换色（源 outputs/tiger_v5/）
-    // 推荐权重 0.65–0.80，如需更低可在此覆盖 loraWeight
-    loraFile: 'ICH_tiger_pattern_lora_v5',
-    loraWeight: DEFAULT_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'peacock',
-    themeId: 'beast',
-    subLabelZh: '孔雀纹',
-    subLabelEn: 'peacock',
-    trigger: 'ichpattern_peacock',
-    // v6 最新版（源 outputs/peacock_v6/）
-    loraFile: 'ICH_peacock_pattern_lora_v6',
-    loraWeight: DEFAULT_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'dragon_phoenix',
-    themeId: 'beast',
-    subLabelZh: '龙凤纹',
-    subLabelEn: 'dragon and phoenix',
-    trigger: 'ichpattern_dragon_phoenix',
-    // v7 最新有报告版（源 outputs/dragon_phoenix_v7/）
-    loraFile: 'ICH_dragon_phoenix_pattern_lora_v7',
-    loraWeight: DEFAULT_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'dragon',
-    themeId: 'beast',
-    subLabelZh: '龙纹',
-    subLabelEn: 'dragon',
-    trigger: 'ichpattern_dragon',
-    // v3 最新有报告版（源 outputs/dragon_v3/）
-    loraFile: 'ICH_dragon_pattern_lora_v1',
-    loraWeight: DEFAULT_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'deer',
-    themeId: 'beast',
-    subLabelZh: '鹿纹',
-    subLabelEn: 'deer',
-    trigger: 'ichpattern_deer',
-    // E6 最低 loss，kohya 末轮保存（源 outputs/deer_v1/）
-    loraFile: 'ICH_deer_pattern_lora_v1',
-    loraWeight: DEFAULT_LORA_WEIGHT,
-  },
-  {
-    subcategoryId: 'lion',
-    themeId: 'beast',
-    subLabelZh: '狮纹',
-    subLabelEn: 'lion',
-    trigger: 'ichpattern_lion',
-    // v1 有报告（源 outputs/lion_v1/）
-    loraFile: 'ICH_lion_pattern_lora_v1',
+    subcategoryId: 'fangsheng',
+    themeId: 'geometric',
+    subLabelZh: '方胜纹',
+    subLabelEn: 'fangsheng (overlapping diamond)',
+    trigger: 'ichpattern_fangsheng',
+    // 排布子触发由 buildPrompt 按 arrangement 追加：
+    //   single/居中 → ichpattern_fangsheng_single（单独 LoRA）
+    //   seamless     → ichpattern_fangsheng_continuous（连续 LoRA）
+    loraFile: null,
     loraWeight: DEFAULT_LORA_WEIGHT,
   },
 ]

@@ -486,23 +486,23 @@ export function ColorPicker({ value, onChange, subcategoryId, subcategoryIds }: 
             )
           })()}
 
-          {/* 全部子类默认色号快捷选择：按主题显示瑞兽色或花卉色；双子类显示并集 */}
+          {/* 全部子类默认色号快捷选择：按主题显示几何色或花卉色；双子类显示并集 */}
           <div className="mt-2">
             {(() => {
               const entryList = subIds.map((id) => getLoraEntry(id)).filter(Boolean)
               const isFloral = entryList.some((e) => e?.themeId === 'floral')
-              const isBeast = entryList.some((e) => e?.themeId === 'beast')
-              // 瑞兽色号集合
-              const beastCodes = new Set<string>(['19-4052 TCX', '16-1450 TCX', '16-4725 TCX', '18-1150 TCX', '18-1662 TCX', '12-0752 TCX', '17-1462 TCX'])
+              const isGeometric = entryList.some((e) => e?.themeId === 'geometric')
+              // 几何色号集合
+              const geometricCodes = new Set<string>(['19-4052 TCX', '18-1662 TCX', '12-0752 TCX', '18-1555 TCX'])
               // 花卉色号集合
-              const flowerCodes = new Set<string>(['16-1450 TCX', '12-0752 TCX', '18-1662 TCX', '18-1555 TCX', '15-1260 TCX', '16-0541 TCX'])
+              const flowerCodes = new Set<string>(['16-1450 TCX', '12-0752 TCX', '18-1662 TCX', '18-1555 TCX', '14-3904 TCX', '16-1720 TCX'])
 
               // 根据主题过滤：只显示当前主题的色号；无主题时全部显示
               const allCodes = Array.from(new Set(Object.values(SUBCATEGORY_PANTONE_MAP).map((p) => p.pantoneCode)))
               const filteredCodes = subIds.length > 1
-                ? allCodes.filter((c) => beastCodes.has(c) || flowerCodes.has(c))
-                : isBeast
-                  ? allCodes.filter((c) => beastCodes.has(c))
+                ? allCodes.filter((c) => geometricCodes.has(c) || flowerCodes.has(c))
+                : isGeometric
+                  ? allCodes.filter((c) => geometricCodes.has(c))
                   : isFloral
                     ? allCodes.filter((c) => flowerCodes.has(c))
                     : allCodes
@@ -511,8 +511,8 @@ export function ColorPicker({ value, onChange, subcategoryId, subcategoryIds }: 
                 ? '双纹样常用色'
                 : isFloral
                   ? '花卉纹样常用色'
-                  : isBeast
-                    ? '瑞兽纹样常用色'
+                  : isGeometric
+                    ? '几何纹样常用色'
                     : '纹样常用色'
 
               return (

@@ -8,7 +8,9 @@
  *   - meaning  该场景下选择该纹样的寓意
  *   - patternLabel 纹样中文名
  *   - patternId    对应 patternTaxonomy 的子类 id（必须严格对齐）
- *   - themeId      所属主题（floral / beast）
+ *   - themeId      所属主题（floral / geometric）
+ *
+ * 主题：花卉 + 几何（回纹 / 盘长纹 / 锦地纹 / 方胜纹）。瑞兽相关已全部移除。
  */
 export interface CulturalSemantic {
   id: string
@@ -17,121 +19,60 @@ export interface CulturalSemantic {
   meaning: string
   patternLabel: string
   patternId: string
-  themeId: 'floral' | 'beast'
+  themeId: 'floral' | 'geometric'
 }
 
 /** 匹配命中强度：关键词命中的权重 */
 export const SEMANTIC_MATCH_WEIGHT = 10
 
 export const CULTURAL_SEMANTICS: CulturalSemantic[] = [
-  // ==================== 凤鸟纹 ====================
-  { id: 'phoenix_bird_1', scene: '毕业/升学', keywords: ['毕业', '升学', '学业', '毕业典礼', '学有所成'], meaning: '凤凰涅槃、学成高飞，寓意前程似锦', patternLabel: '凤鸟纹', patternId: 'phoenix_bird', themeId: 'beast' },
-  { id: 'phoenix_bird_2', scene: '婚礼/新婚', keywords: ['婚礼', '新婚', '结婚', '喜事', '婚庆'], meaning: '凤为百鸟之王，象征尊贵吉祥，婚庆纳福', patternLabel: '凤鸟纹', patternId: 'phoenix_bird', themeId: 'beast' },
-  { id: 'phoenix_bird_3', scene: '乔迁/新居', keywords: ['乔迁', '新居', '搬家', '入宅', '新房'], meaning: '凤凰来仪，寓意新居兴旺、家宅安宁', patternLabel: '凤鸟纹', patternId: 'phoenix_bird', themeId: 'beast' },
-  { id: 'phoenix_bird_4', scene: '开业/升职', keywords: ['开业', '升职', '晋升', '高升', '事业'], meaning: '凤翔九天，寓意事业腾达、步步高升', patternLabel: '凤鸟纹', patternId: 'phoenix_bird', themeId: 'beast' },
-  { id: 'phoenix_bird_5', scene: '新年/春节', keywords: ['新年', '春节', '过年', '新春', '迎春'], meaning: '凤凰呈祥，寓意新春吉庆、万象更新', patternLabel: '凤鸟纹', patternId: 'phoenix_bird', themeId: 'beast' },
-  { id: 'phoenix_bird_6', scene: '生日/生辰', keywords: ['生日', '生辰', '庆生', '寿辰'], meaning: '凤鸣朝阳，寓意福寿绵长、朝气蓬勃', patternLabel: '凤鸟纹', patternId: 'phoenix_bird', themeId: 'beast' },
-  { id: 'phoenix_bird_7', scene: '文化礼品', keywords: ['礼品', '伴手礼', '文创', '纪念品', '送礼'], meaning: '凤凰文化底蕴深厚，是尊贵大气的赠礼之选', patternLabel: '凤鸟纹', patternId: 'phoenix_bird', themeId: 'beast' },
-  { id: 'phoenix_bird_8', scene: '节日庆典', keywords: ['庆典', '宴会', '节日', '仪式'], meaning: '凤凰仪态华美，契合喜庆庄重的典礼场合', patternLabel: '凤鸟纹', patternId: 'phoenix_bird', themeId: 'beast' },
-  { id: 'phoenix_bird_9', scene: '女儿/嫁娶', keywords: ['女儿', '出嫁', '嫁娶', '千金'], meaning: '凤为女性尊贵之象，寓意女儿幸福美满', patternLabel: '凤鸟纹', patternId: 'phoenix_bird', themeId: 'beast' },
-  { id: 'phoenix_bird_10', scene: '传统服饰', keywords: ['汉服', '旗袍', '礼服', '服饰', '衣饰'], meaning: '凤纹华美，为传统服饰点睛的经典纹样', patternLabel: '凤鸟纹', patternId: 'phoenix_bird', themeId: 'beast' },
-  { id: 'phoenix_bird_11', scene: '镇宅/祈福', keywords: ['镇宅', '祈福', '平安', '辟邪', '护佑'], meaning: '凤为瑞鸟，寓意护佑家宅、岁岁平安', patternLabel: '凤鸟纹', patternId: 'phoenix_bird', themeId: 'beast' },
+  // ==================== 回纹 ====================
+  { id: 'huiwen_1', scene: '毕业/升学', keywords: ['毕业', '升学', '学业', '成才', '学有所成'], meaning: '回环往复、学无止境，寓意学业连续进取', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_2', scene: '励志/求学', keywords: ['励志', '求学', '苦读', '寒窗'], meaning: '回纹循环往复，寓意持之以恒、终有所成', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_3', scene: '新年/春节', keywords: ['新年', '春节', '过年', '迎春'], meaning: '回纹连绵不断、周而复始，新春纳福', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_4', scene: '文化礼品', keywords: ['礼品', '伴手礼', '文创', '纪念品', '赠礼'], meaning: '回纹简洁耐看，书签、文创周边经典之选', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_5', scene: '国风/非遗', keywords: ['国风', '传统', '非遗', '文化', '展览'], meaning: '经典几何非遗感，寓意文化传承、源远流长', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_6', scene: '现代/极简', keywords: ['极简', '现代', '线条', '黑白', '冷淡', '简约'], meaning: '干净利落的几何美，回纹线描疏朗耐看', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_7', scene: '家居装饰', keywords: ['家居', '装饰', '布置', '挂画'], meaning: '回纹窗棂、几何装饰，为家居增添雅致', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_8', scene: '传统服饰', keywords: ['汉服', '服饰', '衣饰', '绣品'], meaning: '回纹织带、服饰缘边，传统服饰经典边饰', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_9', scene: '底纹/满铺', keywords: ['连续', '底纹', '纹理', '布料', '满铺'], meaning: '回纹四方连续，回环往复适合满铺底纹', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_10', scene: '友谊/金兰', keywords: ['友谊', '金兰', '知己', '情谊'], meaning: '回纹回环，寓意情谊绵长、往来不息', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
 
-  // ==================== 鹤纹 ====================
-  { id: 'crane_1', scene: '寿辰/祝寿', keywords: ['寿辰', '祝寿', '寿宴', '老人', '高寿'], meaning: '松鹤延年，寓意长寿安康、福寿双全', patternLabel: '鹤纹', patternId: 'crane', themeId: 'beast' },
-  { id: 'crane_2', scene: '毕业/升学', keywords: ['毕业', '升学', '学业', '高中', '学成'], meaning: '鹤鸣九皋、一飞冲天，寓意学业高远', patternLabel: '鹤纹', patternId: 'crane', themeId: 'beast' },
-  { id: 'crane_3', scene: '升职/高升', keywords: ['升职', '高升', '晋升', '官运', '事业'], meaning: '鹤立云表，寓意仕途通达、青云直上', patternLabel: '鹤纹', patternId: 'crane', themeId: 'beast' },
-  { id: 'crane_4', scene: '长辈馈赠', keywords: ['长辈', '父母', '老师', '敬赠', '感恩'], meaning: '仙鹤高洁，表达对长者的敬意与祝福', patternLabel: '鹤纹', patternId: 'crane', themeId: 'beast' },
-  { id: 'crane_5', scene: '文人雅趣', keywords: ['文人', '雅致', '清雅', '书斋', '文房'], meaning: '鹤格高雅，寄托文人高洁脱俗的志趣', patternLabel: '鹤纹', patternId: 'crane', themeId: 'beast' },
-  { id: 'crane_6', scene: '生日/生辰', keywords: ['生日', '生辰', '庆生'], meaning: '鹤龄延年，寓意健康长寿、福气绵长', patternLabel: '鹤纹', patternId: 'crane', themeId: 'beast' },
-  { id: 'crane_7', scene: '乔迁/新居', keywords: ['乔迁', '新居', '搬家', '入宅'], meaning: '鹤栖高枝，寓意新居吉祥、家业兴旺', patternLabel: '鹤纹', patternId: 'crane', themeId: 'beast' },
-  { id: 'crane_8', scene: '宁静养生', keywords: ['养生', '宁静', '安详', '闲适', '退休'], meaning: '仙鹤悠游，契合养生静养的悠然心境', patternLabel: '鹤纹', patternId: 'crane', themeId: 'beast' },
-  { id: 'crane_9', scene: '传统服饰', keywords: ['汉服', '服饰', '衣饰', '长袍'], meaning: '一品仙鹤，明清文官补子经典纹样', patternLabel: '鹤纹', patternId: 'crane', themeId: 'beast' },
-  { id: 'crane_10', scene: '文化礼品', keywords: ['礼品', '伴手礼', '送礼', '纪念品'], meaning: '仙鹤寓意健康长寿，送礼得体有心意', patternLabel: '鹤纹', patternId: 'crane', themeId: 'beast' },
+  // ==================== 盘长纹 ====================
+  { id: 'panchang_1', scene: '婚礼/新婚', keywords: ['婚礼', '新婚', '结婚', '喜事', '婚庆'], meaning: '盘长连绵不断，寓意长长久久、白头偕老', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_2', scene: '订婚/良缘', keywords: ['订婚', '良缘', '定亲', '求婚', '提亲'], meaning: '盘长无终无始，寓意缘分绵长、佳偶天成', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_3', scene: '新年/春节', keywords: ['新年', '春节', '年货', '礼盒', '过年'], meaning: '盘长吉庆、礼序井然，新春纳福长长久久', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_4', scene: '节日庆典', keywords: ['节庆', '庆典', '宴会', '吉庆', '盛典'], meaning: '盘长为八吉祥之一，寓意吉庆祥和、福缘绵长', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_5', scene: '婚礼请柬', keywords: ['请柬', '喜帖', '喜糖', '礼盒'], meaning: '盘长经典婚庆纹样，连绵寓意美好祝福', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_6', scene: '宗教/禅意', keywords: ['禅意', '佛系', '修行', '净心'], meaning: '盘长为八吉祥之一，寓意圆满智慧、清净庄严', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_7', scene: '文创周边', keywords: ['文创', '纪念品', '手机壳', '书签'], meaning: '盘长结构完整，适合居中单纹样与文创周边', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_8', scene: 'logo/徽章', keywords: ['徽章', '居中', 'logo', '图标', '单独'], meaning: '盘长对称完整，适合徽章、居中单纹样', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_9', scene: '寿辰/祝寿', keywords: ['寿辰', '祝寿', '寿宴', '延年'], meaning: '盘长福寿绵长，寓意福气连绵、长寿安康', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_10', scene: '生日/生辰', keywords: ['生日', '生辰', '庆生'], meaning: '盘长福缘绵长，寓意岁岁福气相连', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
 
-  // ==================== 蝴蝶纹 ====================
-  { id: 'butterfly_1', scene: '婚恋/爱情', keywords: ['爱情', '恋情', '恋爱', '成双', '比翼'], meaning: '蝶恋花、双蝶齐飞，寓意比翼双飞、爱情美满', patternLabel: '蝴蝶纹', patternId: 'butterfly', themeId: 'beast' },
-  { id: 'butterfly_2', scene: '婚礼/新婚', keywords: ['婚礼', '新婚', '结婚', '喜事'], meaning: '双蝶成双，祝福新人琴瑟和鸣、幸福一生', patternLabel: '蝴蝶纹', patternId: 'butterfly', themeId: 'beast' },
-  { id: 'butterfly_3', scene: '长寿/健康', keywords: ['长寿', '健康', '康宁', '平安'], meaning: '蝶与耄耋谐音，寓意福寿绵长、健康常伴', patternLabel: '蝴蝶纹', patternId: 'butterfly', themeId: 'beast' },
-  { id: 'butterfly_4', scene: '生日/生辰', keywords: ['生日', '生辰', '庆生'], meaning: '彩蝶翩翩，寓意生日喜庆、快乐美满', patternLabel: '蝴蝶纹', patternId: 'butterfly', themeId: 'beast' },
-  { id: 'butterfly_5', scene: '春天/踏青', keywords: ['春天', '春意', '踏青', '花开'], meaning: '蝶舞花间，寓意春意盎然、生机勃勃', patternLabel: '蝴蝶纹', patternId: 'butterfly', themeId: 'beast' },
-  { id: 'butterfly_6', scene: '少女/闺秀', keywords: ['少女', '女儿', '女孩', '闺秀'], meaning: '蝴蝶轻灵秀美，适合少女闺中雅物', patternLabel: '蝴蝶纹', patternId: 'butterfly', themeId: 'beast' },
-  { id: 'butterfly_7', scene: '文化礼品', keywords: ['礼品', '伴手礼', '送礼', '纪念品'], meaning: '蝴蝶寓意美满幸福，是灵动的赠礼之选', patternLabel: '蝴蝶纹', patternId: 'butterfly', themeId: 'beast' },
-  { id: 'butterfly_8', scene: '家居装饰', keywords: ['家居', '装饰', '挂画', '布置'], meaning: '蝶舞轻盈，为家居增添灵动雅趣', patternLabel: '蝴蝶纹', patternId: 'butterfly', themeId: 'beast' },
-  { id: 'butterfly_9', scene: '传统服饰', keywords: ['汉服', '旗袍', '服饰', '衣饰'], meaning: '蝴蝶灵动秀美，点缀服饰柔美出尘', patternLabel: '蝴蝶纹', patternId: 'butterfly', themeId: 'beast' },
-  { id: 'butterfly_10', scene: '涅槃/新生', keywords: ['新生', '蜕变', '重生', '成长'], meaning: '破茧成蝶，寓意蜕变重生、焕然一新', patternLabel: '蝴蝶纹', patternId: 'butterfly', themeId: 'beast' },
+  // ==================== 锦地纹 ====================
+  { id: 'jindi_1', scene: '乔迁/新居', keywords: ['乔迁', '新居', '搬家', '入宅', '新房'], meaning: '满铺底纹、典雅体面，寓意新居锦绣盈门', patternLabel: '锦地纹', patternId: 'jindi', themeId: 'geometric' },
+  { id: 'jindi_2', scene: '家居装饰', keywords: ['家居', '装修', '客厅', '装饰', '布置'], meaning: '锦地满铺、典雅体面，为客厅家居添锦绣', patternLabel: '锦地纹', patternId: 'jindi', themeId: 'geometric' },
+  { id: 'jindi_3', scene: '底纹/满铺', keywords: ['连续', '底纹', '纹理', '布料', '满铺'], meaning: '锦地最适合四方连续，满铺底纹优雅耐看', patternLabel: '锦地纹', patternId: 'jindi', themeId: 'geometric' },
+  { id: 'jindi_4', scene: '国风/非遗', keywords: ['国风', '传统', '非遗', '文化', '展览'], meaning: '经典几何非遗感，锦地典雅承载文化底蕴', patternLabel: '锦地纹', patternId: 'jindi', themeId: 'geometric' },
+  { id: 'jindi_5', scene: '文创周边', keywords: ['手机壳', '书签', '托特包', '抱枕', '文创'], meaning: '锦地是产品定制常用的几何底纹，百搭耐看', patternLabel: '锦地纹', patternId: 'jindi', themeId: 'geometric' },
+  { id: 'jindi_6', scene: '富贵/繁荣', keywords: ['富贵', '繁荣', '昌盛', '锦绣'], meaning: '锦上添花、锦绣前程，寓意繁荣昌盛', patternLabel: '锦地纹', patternId: 'jindi', themeId: 'geometric' },
+  { id: 'jindi_7', scene: '传统服饰', keywords: ['汉服', '服饰', '衣饰', '织锦'], meaning: '锦地满铺织锦，传统服饰经典底纹', patternLabel: '锦地纹', patternId: 'jindi', themeId: 'geometric' },
+  { id: 'jindi_8', scene: '现代/极简', keywords: ['极简', '现代', '线条', '黑白', '冷淡'], meaning: '几何疏朗，锦地极简风格同样出彩', patternLabel: '锦地纹', patternId: 'jindi', themeId: 'geometric' },
+  { id: 'jindi_9', scene: '新年/春节', keywords: ['新年', '春节', '年货', '迎春'], meaning: '锦绣盈门，寓意新春富丽吉祥', patternLabel: '锦地纹', patternId: 'jindi', themeId: 'geometric' },
+  { id: 'jindi_10', scene: '文化礼品', keywords: ['礼品', '赠礼', '伴手礼', '礼盒'], meaning: '锦地典雅体面，是寓意美好的赠礼之选', patternLabel: '锦地纹', patternId: 'jindi', themeId: 'geometric' },
 
-  // ==================== 虎纹 ====================
-  { id: 'tiger_1', scene: '护佑/辟邪', keywords: ['辟邪', '护佑', '镇宅', '驱邪', '保平安'], meaning: '虎为百兽之王，威猛辟邪，护佑平安', patternLabel: '虎纹', patternId: 'tiger', themeId: 'beast' },
-  { id: 'tiger_2', scene: '勇武/气魄', keywords: ['勇武', '威猛', '气魄', '胆识', '力量'], meaning: '虎虎生威，寓意刚健勇猛、气势非凡', patternLabel: '虎纹', patternId: 'tiger', themeId: 'beast' },
-  { id: 'tiger_3', scene: '生肖/本命年', keywords: ['虎年', '本命年', '生肖', '属虎'], meaning: '虎年生肖纹样，寓意本命年威风凛凛', patternLabel: '虎纹', patternId: 'tiger', themeId: 'beast' },
-  { id: 'tiger_4', scene: '成年礼/加冠', keywords: ['成年礼', '成人礼', '加冠', '十八岁'], meaning: '虎威加身，寓意长大成人、担当有为', patternLabel: '虎纹', patternId: 'tiger', themeId: 'beast' },
-  { id: 'tiger_5', scene: '军人/武职', keywords: ['军人', '武将', '武职', '刚毅'], meaning: '虎符虎将，寓意军威赫赫、勇冠三军', patternLabel: '虎纹', patternId: 'tiger', themeId: 'beast' },
-  { id: 'tiger_6', scene: '创业/开疆', keywords: ['创业', '开拓', '开疆', '打拼'], meaning: '如虎添翼，寓意事业开疆拓土、势不可挡', patternLabel: '虎纹', patternId: 'tiger', themeId: 'beast' },
-  { id: 'tiger_7', scene: '童趣/虎头', keywords: ['小孩', '虎头鞋', '童趣', '婴儿', '宝宝'], meaning: '虎头虎脑，传统童装护佑小儿平安长大', patternLabel: '虎纹', patternId: 'tiger', themeId: 'beast' },
-  { id: 'tiger_8', scene: '新年/春节', keywords: ['新年', '春节', '过年', '新春'], meaning: '虎年大吉，寓意新的一年虎气冲天', patternLabel: '虎纹', patternId: 'tiger', themeId: 'beast' },
-  { id: 'tiger_9', scene: '家居装饰', keywords: ['家居', '装饰', '挂画', '布置'], meaning: '虎纹威严大气，为家居增添阳刚之气', patternLabel: '虎纹', patternId: 'tiger', themeId: 'beast' },
-  { id: 'tiger_10', scene: '文化礼品', keywords: ['礼品', '送礼', '伴手礼'], meaning: '虎纹勇毅刚健，是阳刚大气的赠礼选择', patternLabel: '虎纹', patternId: 'tiger', themeId: 'beast' },
-
-  // ==================== 孔雀纹 ====================
-  { id: 'peacock_1', scene: '富贵/繁荣', keywords: ['富贵', '繁荣', '富丽', '昌盛'], meaning: '孔雀开屏，寓意富贵荣华、前程锦绣', patternLabel: '孔雀纹', patternId: 'peacock', themeId: 'beast' },
-  { id: 'peacock_2', scene: '婚礼/新婚', keywords: ['婚礼', '新婚', '结婚', '喜事'], meaning: '孔雀开屏呈祥，祝福新人富贵美满', patternLabel: '孔雀纹', patternId: 'peacock', themeId: 'beast' },
-  { id: 'peacock_3', scene: '仕途/功名', keywords: ['仕途', '功名', '科举', '及第', '功成名就'], meaning: '孔雀三品官补，寓意仕途得意、功名加身', patternLabel: '孔雀纹', patternId: 'peacock', themeId: 'beast' },
-  { id: 'peacock_4', scene: '开业/庆典', keywords: ['开业', '庆典', '盛典', '庆祝'], meaning: '孔雀华彩，寓意事业开张大吉、红红火火', patternLabel: '孔雀纹', patternId: 'peacock', themeId: 'beast' },
-  { id: 'peacock_5', scene: '尊贵/高雅', keywords: ['尊贵', '高雅', '华贵', '气质'], meaning: '孔雀仪态雍容，彰显华贵高雅的气质', patternLabel: '孔雀纹', patternId: 'peacock', themeId: 'beast' },
-  { id: 'peacock_6', scene: '家居装饰', keywords: ['家居', '装饰', '屏风', '挂画'], meaning: '孔雀屏开满堂彩，是华丽的装饰纹样', patternLabel: '孔雀纹', patternId: 'peacock', themeId: 'beast' },
-  { id: 'peacock_7', scene: '传统服饰', keywords: ['汉服', '礼服', '服饰', '衣饰'], meaning: '孔雀羽纹华丽，点亮华服之美', patternLabel: '孔雀纹', patternId: 'peacock', themeId: 'beast' },
-  { id: 'peacock_8', scene: '文化礼品', keywords: ['礼品', '送礼', '伴手礼', '纪念品'], meaning: '孔雀象征富贵吉祥，是华美大气的赠礼', patternLabel: '孔雀纹', patternId: 'peacock', themeId: 'beast' },
-  { id: 'peacock_9', scene: '爱情/伴侣', keywords: ['爱情', '伴侣', '求偶', '择偶'], meaning: '孔雀求偶开屏，寓意倾慕眷恋、情意绵长', patternLabel: '孔雀纹', patternId: 'peacock', themeId: 'beast' },
-  { id: 'peacock_10', scene: '节庆/盛宴', keywords: ['节庆', '宴会', '盛宴', '吉庆'], meaning: '孔雀华羽，为节庆盛宴增添雍容气象', patternLabel: '孔雀纹', patternId: 'peacock', themeId: 'beast' },
-
-  // ==================== 龙纹 ====================
-  { id: 'dragon_1', scene: '尊贵/权威', keywords: ['尊贵', '权威', '王者', '皇权', '大气'], meaning: '龙为九五之尊，寓意尊贵威严、气度非凡', patternLabel: '龙纹', patternId: 'dragon', themeId: 'beast' },
-  { id: 'dragon_2', scene: '事业/腾飞', keywords: ['事业', '腾飞', '飞黄腾达', '蒸蒸日上'], meaning: '飞龙在天，寓意事业腾达、大展宏图', patternLabel: '龙纹', patternId: 'dragon', themeId: 'beast' },
-  { id: 'dragon_3', scene: '新年/春节', keywords: ['新年', '春节', '过年', '新春', '龙年'], meaning: '龙腾盛世，寓意新的一年吉祥如意、福运亨通', patternLabel: '龙纹', patternId: 'dragon', themeId: 'beast' },
-  { id: 'dragon_4', scene: '端午/龙舟', keywords: ['端午', '龙舟', '赛龙舟', '粽子'], meaning: '龙舟竞渡，寓意奋发进取、同舟共济', patternLabel: '龙纹', patternId: 'dragon', themeId: 'beast' },
-  { id: 'dragon_5', scene: '开疆/创业', keywords: ['创业', '开疆', '宏图', '基业'], meaning: '潜龙出渊，寓意创业兴邦、基业长青', patternLabel: '龙纹', patternId: 'dragon', themeId: 'beast' },
-  { id: 'dragon_6', scene: '男子/顶梁', keywords: ['男儿', '顶梁', '栋梁', '担当'], meaning: '人中龙凤，寓意男儿志存高远、堪当大任', patternLabel: '龙纹', patternId: 'dragon', themeId: 'beast' },
-  { id: 'dragon_7', scene: '镇宅/祈福', keywords: ['镇宅', '祈福', '护佑', '辟邪'], meaning: '龙能兴云雨，寓意镇宅纳福、护佑家宅', patternLabel: '龙纹', patternId: 'dragon', themeId: 'beast' },
-  { id: 'dragon_8', scene: '传统服饰', keywords: ['汉服', '龙袍', '礼服', '服饰'], meaning: '龙袍加身，传统服饰中的至尊纹样', patternLabel: '龙纹', patternId: 'dragon', themeId: 'beast' },
-  { id: 'dragon_9', scene: '建筑/雕梁', keywords: ['建筑', '雕梁', '画栋', '宫阙'], meaning: '雕龙画栋，古建装饰中的大气纹样', patternLabel: '龙纹', patternId: 'dragon', themeId: 'beast' },
-  { id: 'dragon_10', scene: '文化礼品', keywords: ['礼品', '送礼', '伴手礼', '纪念品'], meaning: '龙纹气势磅礴，是寓意深远的大气赠礼', patternLabel: '龙纹', patternId: 'dragon', themeId: 'beast' },
-
-  // ==================== 龙凤纹 ====================
-  { id: 'dragon_phoenix_1', scene: '婚礼/新婚', keywords: ['婚礼', '新婚', '结婚', '喜事', '婚庆'], meaning: '龙凤呈祥，寓意新人百年好合、珠联璧合', patternLabel: '龙凤纹', patternId: 'dragon_phoenix', themeId: 'beast' },
-  { id: 'dragon_phoenix_2', scene: '订婚/良缘', keywords: ['订婚', '良缘', '定亲', '求婚', '提亲'], meaning: '龙凤相配，寓意天作之合、佳偶天成', patternLabel: '龙凤纹', patternId: 'dragon_phoenix', themeId: 'beast' },
-  { id: 'dragon_phoenix_3', scene: '婚礼请柬', keywords: ['请柬', '喜帖', '喜糖', '伴手礼'], meaning: '龙凤呈祥是婚庆喜品最经典的吉祥纹样', patternLabel: '龙凤纹', patternId: 'dragon_phoenix', themeId: 'beast' },
-  { id: 'dragon_phoenix_4', scene: '嫁妆/陪嫁', keywords: ['嫁妆', '陪嫁', '嫁衣', '喜被'], meaning: '龙凤被面，寓意新人鸾凤和鸣、白头偕老', patternLabel: '龙凤纹', patternId: 'dragon_phoenix', themeId: 'beast' },
-  { id: 'dragon_phoenix_5', scene: '婚房布置', keywords: ['婚房', '喜房', '布置', '装饰'], meaning: '龙凤呈祥装点婚房，寓意喜气盈门、和美圆满', patternLabel: '龙凤纹', patternId: 'dragon_phoenix', themeId: 'beast' },
-  { id: 'dragon_phoenix_6', scene: '纪念日', keywords: ['纪念日', '结婚周年', '金婚', '银婚'], meaning: '龙凤相伴一生，纪念伉俪情深、岁月同心', patternLabel: '龙凤纹', patternId: 'dragon_phoenix', themeId: 'beast' },
-  { id: 'dragon_phoenix_7', scene: '中和/平衡', keywords: ['阴阳', '和谐', '平衡', '圆满'], meaning: '龙阳凤阴、刚柔相济，寓意阴阳和合、圆满和谐', patternLabel: '龙凤纹', patternId: 'dragon_phoenix', themeId: 'beast' },
-  { id: 'dragon_phoenix_8', scene: '节日/庆典', keywords: ['节庆', '庆典', '盛典', '吉庆'], meaning: '龙凤呈祥，为庆典吉日增添隆重喜气', patternLabel: '龙凤纹', patternId: 'dragon_phoenix', themeId: 'beast' },
-  { id: 'dragon_phoenix_9', scene: '传统服饰', keywords: ['汉服', '婚服', '礼服', '服饰'], meaning: '龙凤婚服华丽庄重，是传统婚礼的至高纹样', patternLabel: '龙凤纹', patternId: 'dragon_phoenix', themeId: 'beast' },
-  { id: 'dragon_phoenix_10', scene: '文化礼品', keywords: ['礼品', '送礼', '伴手礼'], meaning: '龙凤呈祥寓意美好，是婚礼赠礼的上选', patternLabel: '龙凤纹', patternId: 'dragon_phoenix', themeId: 'beast' },
-
-  // ==================== 鹿纹 ====================
-  { id: 'deer_1', scene: '功名利禄', keywords: ['功名', '利禄', '升官', '仕途', '禄'], meaning: '鹿与禄谐音，寓意加官进爵、禄位亨通', patternLabel: '鹿纹', patternId: 'deer', themeId: 'beast' },
-  { id: 'deer_2', scene: '升职/高升', keywords: ['升职', '高升', '晋升', '事业'], meaning: '鹿逐青云，寓意事业顺遂、步步高升', patternLabel: '鹿纹', patternId: 'deer', themeId: 'beast' },
-  { id: 'deer_3', scene: '长寿/康宁', keywords: ['长寿', '康宁', '健康', '延年'], meaning: '鹿寿千年，寓意健康长寿、福寿安康', patternLabel: '鹿纹', patternId: 'deer', themeId: 'beast' },
-  { id: 'deer_4', scene: '山林/自然', keywords: ['山林', '自然', '隐逸', '田园'], meaning: '鹿栖林间，寓意返璞归真、悠然自得', patternLabel: '鹿纹', patternId: 'deer', themeId: 'beast' },
-  { id: 'deer_5', scene: '福禄双全', keywords: ['福禄', '福气', '纳福', '福运'], meaning: '福禄寿喜，鹿纹寓意福禄双全、喜气临门', patternLabel: '鹿纹', patternId: 'deer', themeId: 'beast' },
-  { id: 'deer_6', scene: '学业/中举', keywords: ['中举', '及第', '学业', '金榜题名'], meaning: '鹿鸣宴上，寓意金榜题名、蟾宫折桂', patternLabel: '鹿纹', patternId: 'deer', themeId: 'beast' },
-  { id: 'deer_7', scene: '乔迁/新居', keywords: ['乔迁', '新居', '搬家', '入宅'], meaning: '鹿临吉宅，寓意新居福禄齐来、安居乐业', patternLabel: '鹿纹', patternId: 'deer', themeId: 'beast' },
-  { id: 'deer_8', scene: '传统服饰', keywords: ['汉服', '补子', '服饰', '衣饰'], meaning: '鹿纹补子，明清文官显贵的身份纹样', patternLabel: '鹿纹', patternId: 'deer', themeId: 'beast' },
-  { id: 'deer_9', scene: '文化礼品', keywords: ['礼品', '送礼', '伴手礼', '纪念品'], meaning: '鹿兆祥瑞，寓意福禄绵长，是吉祥的赠礼', patternLabel: '鹿纹', patternId: 'deer', themeId: 'beast' },
-  { id: 'deer_10', scene: '镇宅/祈福', keywords: ['镇宅', '祈福', '平安', '祥瑞'], meaning: '瑞鹿呈祥，寓意家宅安宁、祥瑞护佑', patternLabel: '鹿纹', patternId: 'deer', themeId: 'beast' },
-
-  // ==================== 狮纹 ====================
-  { id: 'lion_1', scene: '辟邪/镇宅', keywords: ['辟邪', '镇宅', '石狮', '守门', '护佑'], meaning: '狮子守门，寓意镇宅辟邪、家宅平安', patternLabel: '狮纹', patternId: 'lion', themeId: 'beast' },
-  { id: 'lion_2', scene: '喜庆/热闹', keywords: ['舞狮', '喜庆', '热闹', '庆典', '节庆'], meaning: '瑞狮欢舞，寓意喜庆热闹、喜气盈门', patternLabel: '狮纹', patternId: 'lion', themeId: 'beast' },
-  { id: 'lion_3', scene: '开业/开张', keywords: ['开业', '开张', '舞狮', '生意'], meaning: '金狮点睛，寓意开业大吉、生意兴隆', patternLabel: '狮纹', patternId: 'lion', themeId: 'beast' },
-  { id: 'lion_4', scene: '勇猛/守护', keywords: ['勇猛', '守护', '忠诚', '威严'], meaning: '狮子威猛忠勇，寓意守护家人、威严有度', patternLabel: '狮纹', patternId: 'lion', themeId: 'beast' },
-  { id: 'lion_5', scene: '太狮少狮', keywords: ['太师', '少师', '高官', '爵位', '功名'], meaning: '太狮少狮谐音太师少师，寓意官高爵显、代代显贵', patternLabel: '狮纹', patternId: 'lion', themeId: 'beast' },
-  { id: 'lion_6', scene: '新年/春节', keywords: ['新年', '春节', '过年', '新春'], meaning: '新春舞狮，寓意驱邪纳福、岁岁平安', patternLabel: '狮纹', patternId: 'lion', themeId: 'beast' },
-  { id: 'lion_7', scene: '童趣/玩偶', keywords: ['小孩', '玩偶', '童趣', '宝宝'], meaning: '憨态可掬的瑞狮，守护孩童平安喜乐', patternLabel: '狮纹', patternId: 'lion', themeId: 'beast' },
-  { id: 'lion_8', scene: '建筑/石雕', keywords: ['建筑', '石雕', '门墩', '园林'], meaning: '石狮守门，古建园林中的经典守护纹样', patternLabel: '狮纹', patternId: 'lion', themeId: 'beast' },
-  { id: 'lion_9', scene: '文化礼品', keywords: ['礼品', '送礼', '伴手礼'], meaning: '瑞狮纳福，寓意平安吉祥，是喜庆的赠礼', patternLabel: '狮纹', patternId: 'lion', themeId: 'beast' },
-  { id: 'lion_10', scene: '传统服饰', keywords: ['汉服', '服饰', '衣饰', '绣品'], meaning: '狮子滚绣球，传统绣品上的经典吉祥纹样', patternLabel: '狮纹', patternId: 'lion', themeId: 'beast' },
+  // ==================== 方胜纹 ====================
+  { id: 'fangsheng_1', scene: '商务/会议', keywords: ['商务', '会议', '职场', '办公', '商谈'], meaning: '方正吉祥、得胜寓意，商务体面之选', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_2', scene: '文化礼品', keywords: ['礼品', '赠礼', '伴手礼', '礼盒', '送礼'], meaning: '方胜方正吉祥、得胜寓意，体面大气的赠礼', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_3', scene: '新年/春节', keywords: ['新年', '春节', '年货', '礼盒', '过年'], meaning: '方胜节庆礼序，寓意吉祥得胜、福运临门', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_4', scene: '开业/开张', keywords: ['开业', '开张', '生意', '兴隆'], meaning: '得胜寓意，祝开业大吉、旗开得胜', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_5', scene: '仕途/功名', keywords: ['仕途', '功名', '升职', '晋升', '事业'], meaning: '方胜得胜，寓意仕途顺遂、步步取胜', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_6', scene: '现代/极简', keywords: ['极简', '现代', '线条', '黑白', '冷淡'], meaning: '干净几何，方胜双菱叠合现代感强', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_7', scene: 'logo/徽章', keywords: ['徽章', '居中', 'logo', '图标', '单独'], meaning: '方胜单独/居中，适合单纹样与徽章标识', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_8', scene: '文创周边', keywords: ['手机壳', '托特包', '抱枕', '书签'], meaning: '方胜是产品定制常用几何，方正耐看', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_9', scene: '国风/非遗', keywords: ['国风', '传统', '非遗', '文化'], meaning: '经典几何，方胜承载传统吉祥寓意', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_10', scene: '乔迁/新居', keywords: ['乔迁', '新居', '搬家', '入宅'], meaning: '方胜纳福，寓意新居方正吉祥、得胜安居', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
 
   // ==================== 牡丹纹 ====================
   { id: 'peony_1', scene: '富贵/荣华', keywords: ['富贵', '荣华', '富贵花开', '富丽'], meaning: '花开富贵，牡丹为花中之王，寓意富贵荣华', patternLabel: '牡丹纹', patternId: 'peony', themeId: 'floral' },
@@ -228,7 +169,6 @@ export const CULTURAL_SEMANTICS: CulturalSemantic[] = [
   { id: 'flower_bird_8', scene: '新婚/美满', keywords: ['婚礼', '新婚', '成双', '美满'], meaning: '双鸟栖枝，寓意比翼双飞、恩爱美满', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
   { id: 'flower_bird_9', scene: '祝寿/延年', keywords: ['祝寿', '延年', '长寿', '寿辰'], meaning: '绶带鸟衔芝，寓意福寿绵长、健康延年', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
   { id: 'flower_bird_10', scene: '书房/文雅', keywords: ['书房', '文房', '文雅', '雅室'], meaning: '鸟语花韵，为书房增添闲雅意趣', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
-
 ]
 
 /** 根据关键词做包含匹配，返回命中的语义记录（按场景分组去重） */
@@ -296,7 +236,6 @@ export const SCENE_ALIAS: Record<string, string> = {
   '仕途/功名': 'career',
   '升职/高升': 'career',
   '功名利禄': 'career',
-  '太狮少狮': 'career',
   // 乔迁 / 新居
   '乔迁/新居': 'housewarming',
   // 新春 / 庆典
@@ -314,7 +253,7 @@ export const SCENE_ALIAS: Record<string, string> = {
   // 服饰 / 家居
   '传统服饰': 'apparel',
   '家居装饰': 'home',
-  // 护佑 / 辟邪
+  // 护佑 / 祈福
   '镇宅/祈福': 'protection',
   '护佑/辟邪': 'protection',
   '辟邪/镇宅': 'protection',
@@ -340,19 +279,10 @@ export const SCENE_ALIAS: Record<string, string> = {
   '少女/闺秀': 'daughter',
   '女儿/闺秀': 'daughter',
   '女儿/嫁娶': 'daughter',
-  // 童趣 / 成人礼 / 生肖
+  // 童趣 / 成人礼
   '童趣/虎头': 'children',
   '童趣/玩偶': 'children',
   '成年礼/加冠': 'coming_of_age',
-  '生肖/本命年': 'zodiac',
-  // 勇武 / 尊贵
-  '勇武/气魄': 'valor',
-  '军人/武职': 'valor',
-  '勇猛/守护': 'valor',
-  '尊贵/高雅': 'noble',
-  '尊贵/权威': 'noble',
-  '男子/顶梁': 'noble',
-  '中和/平衡': 'noble',
   // 自然 / 四季
   '山林/自然': 'nature',
   '春天/踏青': 'nature',
@@ -382,40 +312,51 @@ export const SCENE_ALIAS: Record<string, string> = {
   '生机/和谐': 'joy',
   '建筑/雕梁': 'craft',
   '建筑/石雕': 'craft',
+  // ===== 几何新增场景 =====
+  '国风/非遗': 'heritage',
+  '现代/极简': 'minimalist',
+  '底纹/满铺': 'textile',
+  'logo/徽章': 'emblem',
+  '商务/会议': 'business',
 }
 
 /** 标准场景 id → 展示名 + 场景提示文案（未列出的场景自动用语义表寓意兜底） */
 const SCENE_META: Record<string, { label: string; hint?: string }> = {
-  graduation: { label: '毕业', hint: '寓意成长与高升；宜用鹤、梅、牡丹等；色调明快，适合礼品与书签。' },
-  wedding: { label: '婚礼', hint: '寓意喜庆成双；宜用龙凤、牡丹、莲花；红金或柔和配色。' },
-  longevity: { label: '寿辰', hint: '寓意长寿康宁；宜用鹤、鹿、桃、松；沉稳雅致。' },
-  birthday: { label: '生辰', hint: '寓意庆生纳福；宜用牡丹、石榴、蝴蝶；明快喜庆。' },
-  opening: { label: '开业', hint: '寓意开业兴隆；宜用凤鸟、狮子、牡丹；红金配色显热闹。' },
-  venture: { label: '创业', hint: '寓意事业腾飞；宜用龙、虎、鹿；气势昂扬。' },
-  career: { label: '仕途', hint: '寓意功名亨通；宜用鹿、孔雀、鹤；端庄贵气。' },
-  housewarming: { label: '乔迁', hint: '寓意新居纳福；宜用凤鸟、鹿、牡丹、莲；温馨吉庆。' },
-  newyear: { label: '新春', hint: '寓意新春吉庆；宜用龙、凤、梅、虎；红金喜庆。' },
-  festival: { label: '庆典', hint: '寓意隆重热闹；宜用龙凤、狮子、孔雀；华美大气。' },
+  graduation: { label: '毕业', hint: '寓意成长与高升；宜用梅、牡丹、回纹等；色调明快，适合礼品与书签。' },
+  wedding: { label: '婚礼', hint: '寓意喜庆成双；宜用盘长、牡丹、莲花；红金或柔和配色。' },
+  longevity: { label: '寿辰', hint: '寓意长寿康宁；宜用盘长、菊、梅、松；沉稳雅致。' },
+  birthday: { label: '生辰', hint: '寓意庆生纳福；宜用牡丹、石榴、盘长；明快喜庆。' },
+  opening: { label: '开业', hint: '寓意开业兴隆；宜用方胜、牡丹；红金配色显热闹。' },
+  venture: { label: '创业', hint: '寓意事业腾飞；宜用方胜、回纹；气势昂扬。' },
+  career: { label: '仕途', hint: '寓意功名亨通；宜用方胜、兰；端庄贵气。' },
+  housewarming: { label: '乔迁', hint: '寓意新居纳福；宜用锦地、牡丹、莲；温馨吉庆。' },
+  newyear: { label: '新春', hint: '寓意新春吉庆；宜用盘长、方胜、梅；红金喜庆。' },
+  festival: { label: '庆典', hint: '寓意隆重热闹；宜用盘长、方胜、牡丹；华美大气。' },
   cultural: { label: '文创周边', hint: '适合手机壳、帆布包、礼盒等；主体清晰、背景干净。' },
   apparel: { label: '服饰', hint: '适合面料与绣片；注意边缘完整与对称。' },
-  home: { label: '家居', hint: '装饰性强、可连续铺陈；宜团花、牡丹、莲花；色调和谐。' },
-  protection: { label: '护佑', hint: '寓意镇宅护佑；宜用虎、龙、狮子、凤鸟；稳重有威。' },
-  prosperity: { label: '富贵', hint: '寓意富贵繁荣；宜用牡丹、孔雀、石榴；华丽丰盛。' },
-  elegance: { label: '雅集', hint: '寓意文人雅趣；宜用梅兰竹菊、鹤、莲；清雅含蓄。' },
-  daughter: { label: '少女礼', hint: '寓意少女美好；宜用蝴蝶、芙蓉、石榴花；柔美灵动。' },
-  children: { label: '童趣', hint: '寓意孩童守护；宜用虎头、狮、蝴蝶；可爱生动。' },
-  coming_of_age: { label: '成人礼', hint: '寓意长大成才；宜用虎、龙、凤；精神昂扬。' },
-  zodiac: { label: '生肖', hint: '寓意本命年护佑；宜用对应生肖纹样；生动有趣。' },
-  valor: { label: '勇武', hint: '寓意勇武气魄；宜用虎、狮、龙；刚健有力。' },
-  noble: { label: '尊贵', hint: '寓意尊贵权威；宜用龙、凤、孔雀；雍容华贵。' },
-  nature: { label: '自然四季', hint: '寓意自然生机；宜用花鸟、蝴蝶、菊梅；清新明快。' },
+  home: { label: '家居', hint: '装饰性强、可连续铺陈；宜锦地、回纹、牡丹、莲花；色调和谐。' },
+  protection: { label: '护佑', hint: '寓意镇宅护佑；宜用方胜、回纹；稳重有威。' },
+  prosperity: { label: '富贵', hint: '寓意富贵繁荣；宜用牡丹、锦地、石榴；华丽丰盛。' },
+  elegance: { label: '雅集', hint: '寓意文人雅趣；宜用梅兰竹菊、回纹、莲；清雅含蓄。' },
+  daughter: { label: '少女礼', hint: '寓意少女美好；宜用芙蓉、石榴花、盘长；柔美灵动。' },
+  children: { label: '童趣', hint: '寓意孩童守护；宜用回纹、蝴蝶；可爱生动。' },
+  coming_of_age: { label: '成人礼', hint: '寓意长大成才；宜用回纹、方胜；精神昂扬。' },
+  valor: { label: '勇武', hint: '寓意勇武气魄；宜用方胜、回纹；刚健有力。' },
+  noble: { label: '尊贵', hint: '寓意尊贵权威；宜用方胜、锦地；雍容华贵。' },
+  nature: { label: '自然四季', hint: '寓意自然生机；宜用花鸟、菊梅、莲花；清新明快。' },
   family: { label: '家业传承', hint: '寓意子孙绵延、家业兴旺；宜用石榴、牡丹、莲花。' },
-  zen: { label: '静心禅意', hint: '寓意宁静祥和；宜用莲、鹤、兰；素雅沉静。' },
+  zen: { label: '静心禅意', hint: '寓意宁静祥和；宜用莲、盘长、兰；素雅沉静。' },
   integrity: { label: '清廉高洁', hint: '寓意清正高洁；宜用莲、兰、梅；淡雅端正。' },
-  friendship: { label: '友谊金兰', hint: '寓意情谊相投；宜用兰、鹤、梅；清雅隽永。' },
-  gratitude: { label: '感恩', hint: '寓意感恩敬重；宜用牡丹、鹤、兰；温暖真诚。' },
+  friendship: { label: '友谊金兰', hint: '寓意情谊相投；宜用兰、回纹、梅；清雅隽永。' },
+  gratitude: { label: '感恩', hint: '寓意感恩敬重；宜用牡丹、兰；温暖真诚。' },
   joy: { label: '喜事报喜', hint: '寓意喜事临门；宜用花鸟、喜鹊、牡丹；欢快明亮。' },
-  craft: { label: '工艺雅器', hint: '适用于瓷器、织绣、建筑装饰；宜花鸟、龙凤、莲。' },
+  craft: { label: '工艺雅器', hint: '适用于瓷器、织绣、建筑装饰；宜花鸟、回纹、莲。' },
+  // ===== 几何新增场景 =====
+  heritage: { label: '国风非遗', hint: '寓意经典传承；宜用回纹、锦地、方胜；传统配色。' },
+  minimalist: { label: '极简几何', hint: '寓意干净现代；宜用回纹、方胜；黑白或单色。' },
+  textile: { label: '底纹满铺', hint: '适合连续底纹与布料；宜用锦地、回纹；连续排布。' },
+  emblem: { label: '徽章标识', hint: '适合居中单纹样；宜用方胜（单独）、盘长；对称完整。' },
+  business: { label: '商务', hint: '寓意得胜体面；宜用方胜；端庄方正。' },
 }
 
 /** 语义表 scene 原始值 → 标准场景 id（未归并的值原样返回） */

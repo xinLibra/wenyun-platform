@@ -7,6 +7,8 @@
  * 触发时机（见 CreatePattern.tsx）：
  * - 从「未满两槽」→「两槽都选好」时自动套用一次；
  * - 仅换融合比例不重刷；更换任一子类则重新套该对的默认预设。
+ *
+ * 主题：几何（回纹/盘长纹/锦地纹/方胜纹）+ 花卉。瑞兽相关已全部移除。
  */
 
 import type { GenerationParams } from '../types/pattern'
@@ -38,39 +40,40 @@ const round = (v: number) => Math.round(v)
 
 /** 精选组合表（key 已排序，与顺序无关） */
 export const FUSION_PAIR_PRESETS: Record<string, FusionPairPreset> = {
-  // ===== 龙凤/瑞兽 × 花卉（宫墙红系） =====
-  'dragon__phoenix_bird': { arrangement: 'single', symmetry: 'mirror', complexity: 75, culturalIntensity: 85, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 }, // 龙凤呈祥
-  'dragon__dragon_phoenix': { arrangement: 'single', symmetry: 'mirror', complexity: 75, culturalIntensity: 85, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
-  'dragon_phoenix__phoenix_bird': { arrangement: 'single', symmetry: 'mirror', complexity: 75, culturalIntensity: 85, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
-  'dragon_phoenix__peony': { arrangement: 'single', symmetry: 'mirror', complexity: 72, culturalIntensity: 80, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
-  'dragon__peony': { arrangement: 'single', symmetry: 'mirror', complexity: 70, culturalIntensity: 80, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 }, // 龙穿牡丹
-  'dragon__orchid': { arrangement: 'single', symmetry: 'mirror', complexity: 65, culturalIntensity: 75, textureDetail: 28, pantoneCode: '14-3904 TCX', lightness: 50, fusionRatio: 50 },
-  'dragon__tiger': { arrangement: 'single', symmetry: 'mirror', complexity: 70, culturalIntensity: 85, textureDetail: 28, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 }, // 龙虎
-  'dragon__pomegranate_flower': { arrangement: 'single', symmetry: 'mirror', complexity: 65, culturalIntensity: 80, textureDetail: 28, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
-  // ===== 凤 × 花卉（宫墙红/金） =====
-  'peony__phoenix_bird': { arrangement: 'single', symmetry: 'mirror', complexity: 70, culturalIntensity: 80, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 }, // 凤穿牡丹
-  'orchid__phoenix_bird': { arrangement: 'single', symmetry: 'mirror', complexity: 65, culturalIntensity: 75, textureDetail: 28, pantoneCode: '14-3904 TCX', lightness: 50, fusionRatio: 50 },
-  // ===== 鹤 =====
-  'crane__lotus': { arrangement: 'single', symmetry: 'mirror', complexity: 60, culturalIntensity: 75, textureDetail: 30, pantoneCode: '19-4052 TCX', lightness: 40, fusionRatio: 50 }, // 鹤莲
-  // ===== 蝶 =====
-  'butterfly__flower_bird': { arrangement: 'seamless', symmetry: 'mirror', complexity: 65, culturalIntensity: 70, textureDetail: 35, pantoneCode: '18-1555 TCX', lightness: 50, fusionRatio: 50 },
-  'butterfly__orchid': { arrangement: 'seamless', symmetry: 'mirror', complexity: 60, culturalIntensity: 70, textureDetail: 30, pantoneCode: '14-3904 TCX', lightness: 55, fusionRatio: 50 }, // 蝶恋花·兰
-  'butterfly__peony': { arrangement: 'seamless', symmetry: 'mirror', complexity: 65, culturalIntensity: 75, textureDetail: 35, pantoneCode: '16-1450 TCX', lightness: 55, fusionRatio: 50 }, // 蝶恋花·牡丹
-  'butterfly__peacock': { arrangement: 'seamless', symmetry: 'mirror', complexity: 65, culturalIntensity: 75, textureDetail: 35, pantoneCode: '16-4725 TCX', lightness: 45, fusionRatio: 50 },
-  // ===== 兰/梅/芙蓉 =====
+  // ===== 几何 × 几何（回纹/盘长/锦地/方胜） =====
+  // 回纹 + 锦地：连续底纹双拼
+  'huiwen__jindi': { arrangement: 'seamless', symmetry: 'mirror', complexity: 65, culturalIntensity: 80, textureDetail: 30, pantoneCode: '19-4052 TCX', lightness: 45, fusionRatio: 50 },
+  // 回纹 + 盘长：回环与连绵
+  'huiwen__panchang': { arrangement: 'single', symmetry: 'mirror', complexity: 65, culturalIntensity: 85, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
+  // 回纹 + 方胜：几何疏密对照
+  'huiwen__fangsheng': { arrangement: 'single', symmetry: 'mirror', complexity: 65, culturalIntensity: 85, textureDetail: 28, pantoneCode: '19-4052 TCX', lightness: 45, fusionRatio: 50 },
+  // 盘长 + 方胜：吉庆方正双拼
+  'panchang__fangsheng': { arrangement: 'single', symmetry: 'mirror', complexity: 70, culturalIntensity: 85, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
+  // 盘长 + 锦地：吉庆满铺
+  'panchang__jindi': { arrangement: 'seamless', symmetry: 'mirror', complexity: 70, culturalIntensity: 85, textureDetail: 30, pantoneCode: '12-0752 TCX', lightness: 45, fusionRatio: 50 },
+  // 锦地 + 方胜：满铺金地衬方胜
+  'jindi__fangsheng': { arrangement: 'seamless', symmetry: 'mirror', complexity: 70, culturalIntensity: 85, textureDetail: 30, pantoneCode: '12-0752 TCX', lightness: 45, fusionRatio: 50 },
+  // ===== 几何 × 花卉 =====
+  // 牡丹 + 盘长：富贵连绵
+  'peony__panchang': { arrangement: 'single', symmetry: 'mirror', complexity: 70, culturalIntensity: 80, textureDetail: 30, pantoneCode: '18-1662 TCX', lightness: 45, fusionRatio: 50 },
+  // 牡丹 + 方胜：富贵方正
+  'peony__fangsheng': { arrangement: 'single', symmetry: 'mirror', complexity: 70, culturalIntensity: 80, textureDetail: 30, pantoneCode: '16-1450 TCX', lightness: 50, fusionRatio: 50 },
+  // 梅花 + 回纹：疏影与回环
+  'plum__huiwen': { arrangement: 'single', symmetry: 'none', complexity: 60, culturalIntensity: 75, textureDetail: 28, pantoneCode: '14-3904 TCX', lightness: 50, fusionRatio: 50 },
+  // 莲花 + 回纹：清莲与几何
+  'lotus__huiwen': { arrangement: 'single', symmetry: 'mirror', complexity: 60, culturalIntensity: 75, textureDetail: 28, pantoneCode: '19-4052 TCX', lightness: 45, fusionRatio: 50 },
+  // 花鸟 + 锦地：工笔满铺
+  'flower_bird__jindi': { arrangement: 'seamless', symmetry: 'mirror', complexity: 70, culturalIntensity: 75, textureDetail: 35, pantoneCode: '12-0752 TCX', lightness: 45, fusionRatio: 50 },
+  // 菊花 + 锦地：金秋满铺
+  'chrysanthemum__jindi': { arrangement: 'seamless', symmetry: 'mirror', complexity: 65, culturalIntensity: 75, textureDetail: 30, pantoneCode: '12-0752 TCX', lightness: 45, fusionRatio: 50 },
+  // ===== 花卉 × 花卉（保留经典组合） =====
   'orchid__plum': { arrangement: 'single', symmetry: 'none', complexity: 55, culturalIntensity: 70, textureDetail: 28, pantoneCode: '14-3904 TCX', lightness: 55, fusionRatio: 50 },
   'furong__plum': { arrangement: 'single', symmetry: 'mirror', complexity: 55, culturalIntensity: 75, textureDetail: 28, pantoneCode: '16-1720 TCX', lightness: 55, fusionRatio: 50 },
   'lotus__orchid': { arrangement: 'single', symmetry: 'mirror', complexity: 55, culturalIntensity: 70, textureDetail: 28, pantoneCode: '14-3904 TCX', lightness: 55, fusionRatio: 50 },
   'peony__orchid': { arrangement: 'single', symmetry: 'mirror', complexity: 60, culturalIntensity: 75, textureDetail: 30, pantoneCode: '16-1450 TCX', lightness: 55, fusionRatio: 50 },
-  // ===== 花鸟/孔雀/青绿系 =====
-  'flower_bird__peacock': { arrangement: 'seamless', symmetry: 'mirror', complexity: 65, culturalIntensity: 75, textureDetail: 35, pantoneCode: '16-4725 TCX', lightness: 45, fusionRatio: 50 }, // 花鸟+孔雀 → 青绿/青花
-  'peacock__orchid': { arrangement: 'seamless', symmetry: 'mirror', complexity: 60, culturalIntensity: 70, textureDetail: 30, pantoneCode: '16-4725 TCX', lightness: 45, fusionRatio: 50 },
 }
 
-const BEAST_SUBCATEGORY_IDS = new Set([
-  'crane', 'butterfly', 'peacock', 'deer', 'dragon', 'phoenix_bird',
-  'lion', 'dragon_phoenix', 'tiger',
-])
+const GEOMETRIC_SUBCATEGORY_IDS = new Set(['huiwen', 'panchang', 'jindi', 'fangsheng'])
 
 /** 组合 → 默认预设。无精选表项时按两个子类的生成预设派生通用默认。 */
 export function getFusionPairPreset(a: string, b: string): FusionPairPreset {
@@ -83,9 +86,9 @@ export function getFusionPairPreset(a: string, b: string): FusionPairPreset {
 
   const pa = GENERATION_PRESETS[a] ?? DEFAULT_PRESET
   const pb = GENERATION_PRESETS[b] ?? DEFAULT_PRESET
-  const bothBeast = BEAST_SUBCATEGORY_IDS.has(a) && BEAST_SUBCATEGORY_IDS.has(b)
+  const bothGeometric = GEOMETRIC_SUBCATEGORY_IDS.has(a) && GEOMETRIC_SUBCATEGORY_IDS.has(b)
 
-  // fallback 颜色：优先使用双纹样推荐色的第一项（避免硬编码宫墙红）
+  // fallback 颜色：优先使用双纹样推荐色的第一项（避免硬编码单一色）
   const dualRecs = getDualPantoneRecommendations([a, b])
   const defaultColor = dualRecs[0]?.code ?? '18-1662 TCX'
 
@@ -94,9 +97,9 @@ export function getFusionPairPreset(a: string, b: string): FusionPairPreset {
       pa.arrangement === 'seamless' || pb.arrangement === 'seamless'
         ? 'seamless'
         : 'single',
-    // 双瑞兽/对鸟 → 镜像对称；其余按子类默认（任一子类镜像则取镜像，更稳）
+    // 双几何/对称类 → 镜像对称；其余按子类默认（任一子类镜像则取镜像，更稳）
     symmetry:
-      bothBeast || pa.symmetry === 'mirror' || pb.symmetry === 'mirror'
+      bothGeometric || pa.symmetry === 'mirror' || pb.symmetry === 'mirror'
         ? 'mirror'
         : 'none',
     complexity: clamp(round((pa.complexity + pb.complexity) / 2) + 5, 55, 75),

@@ -116,6 +116,13 @@ export function buildPromptParts(params: GenerationParams): {
 
   const parts: string[] = []
 
+  // 0) 方胜纹排布子触发：排布=单独/居中 → 加载方胜单独 LoRA 触发词；
+  //    排布=四方连续 → 加载方胜连续 LoRA 触发词（trigger 对齐训练 caption）
+  if (subcategoryId === 'fangsheng') {
+    const isSeamless = params.arrangement === 'seamless'
+    triggers.push(isSeamless ? 'ichpattern_fangsheng_continuous' : 'ichpattern_fangsheng_single')
+  }
+
   // 1) 触发词（牡丹/莲花/花鸟 双 trigger 都会完整入列）
   for (const t of triggers) parts.push(t)
 
@@ -302,8 +309,8 @@ function buildColorClause(params: GenerationParams): string {
 
   // 潘通色号：区分语义关键词（monochrome-black / multicolor）和真实色号
   // 真实色号（如 '18-1662 TCX'）需要根据当前子类反查 prompt 语义标签，
-  // 因为同一个色号在不同子类下可能对应不同语义（如 18-1662 TCX 对 dragon 是 mono，
-  // 对 dragon_phoenix 是 multicolor）。
+  // 因为同一个色号在不同子类下可能对应不同语义（如 18-1662 TCX 对 panchang 是 mono，
+  // 对 fangsheng 也是 mono；历史 multicolor 语义已随瑞兽子类移除）。
   if (cs.mode === 'pantone' && cs.pantone) {
     const p = cs.pantone.trim()
     // 1. 语义关键词（直接识别）
@@ -472,19 +479,10 @@ function inferDominantHue(colorScheme: ColorSchemeParams | undefined, subcategor
 }
 
 /**
- * Negative prompt 固定模板
- * 注意：
- *   1. 除非当前子类就是鹿纹（deer），否则把 "deer" 列入排除（瑞兽串味）
- *   2. 除非当前子类就是狮纹（lion），否则把 "lion" 列入排除
- *   3. 选中单色主色时，按 hue 抑制"抢色背景"，避免 SD 默认补蓝/灰背景
- *      （仅抑制 background，不抑制 accent，保留纹样本身少量对比色）
- */
-/**
  * Negative prompt 核心实现（支持多个子类 ID，融合用）
  * 注意：
- *   1. 除非子类列表含 deer，否则把 "deer" 列入排除（瑞兽串味）
- *   2. 除非子类列表含 lion，否则把 "lion" 列入排除
- *   3. 选中单色主色时，按 hue 抑制"抢色背景"，避免 SD 默认补蓝/灰背景
+ *   1. 生成几何纹样时，把未选中的其他几何纹样特征词列入排除（几何纹样线条接近，最易串味）
+ *   2. 选中单色主色时，按 hue 抑制"抢色背景"，避免 SD 默认补蓝/灰背景
  *      （仅抑制 background，不抑制 accent，保留纹样本身少量对比色）
  */
 function buildNegativePromptCore(subcategoryIds: string[], colorScheme: ColorSchemeParams | undefined): string {
@@ -504,12 +502,22 @@ function buildNegativePromptCore(subcategoryIds: string[], colorScheme: ColorSch
     'elephant',
     'low quality',
   ]
-  if (!subcategoryIds.includes('deer')) {
-    base.push('deer')
+  // 几何串味排除：任一几何子类被选中时，把未选中的几何纹样特征词全部排除
+  const GEOMETRIC_EXCLUSIONS: Record<string, string[]> = {
+    huiwen: ['endless knot', 'interlocking diamond', 'brocade ground'],
+    panchang: ['meander pattern', 'interlocking diamond', 'brocade ground'],
+    jindi: ['meander pattern', 'endless knot', 'interlocking diamond'],
+    fangsheng: ['meander pattern', 'endless knot', 'brocade ground'],
   }
-  // 狮纹场景下也不希望虎/鹿串味
-  if (!subcategoryIds.includes('lion')) {
-    base.push('lion')
+  const activeGeo = subcategoryIds.filter((id) => id in GEOMETRIC_EXCLUSIONS)
+  if (activeGeo.length > 0) {
+    const activeTerms = new Set<string>()
+    activeGeo.forEach((id) => {
+      GEOMETRIC_EXCLUSIONS[id].forEach((t) => activeTerms.add(t))
+    })
+    ;['meander pattern', 'endless knot', 'interlocking diamond', 'brocade ground'].forEach((t) => {
+      if (!activeTerms.has(t)) base.push(t)
+    })
   }
 
   // 偏色背景抑制：按主色 hue 抑制非选中色 background
@@ -668,7 +676,7 @@ export async function generatePatternWithFallback(
 // ===================== 融合生成 =====================
 
 export interface FusionGenerationOptions {
-  /** 子类 A 的 subcategory id（如 'crane' 鹤纹） */
+  /** 子类 A 的 subcategory id（如 'huiwen' 回纹） */
   subcategoryA: string
   /** 子类 B 的 subcategory id（如 'peony' 牡丹） */
   subcategoryB: string
@@ -696,11 +704,11 @@ export interface FusionPromptInfo {
  *
  * 权重映射公式（写入注释供排障对照）：
  *   weight = clamp( loraMap 推荐权重 × 融合比例 / 100 )   // 保留 2 位小数，上限 1.5
- *   例：鹤纹（推荐 0.7）+ 牡丹（推荐 0.8），比例 70/30
- *     → 子类A: 0.7 × 0.70 = 0.49 → <lora:ICH_crane_pattern_lora_v1:0.49>
+ *   例：回纹（推荐 0.7）+ 牡丹（推荐 0.8），比例 70/30
+ *     → 子类A: 0.7 × 0.70 = 0.49 → <lora:ICH_huiwen_pattern_lora:0.49>
  *     → 子类B: 0.8 × 0.30 = 0.24 → <lora:ICH_peony_pattern_lora_v7_clear:0.24>
  * 说明：
- *   - 推荐权重反映该 LoRA 训练效果（瑞兽 0.7 / 花卉 0.8），再乘比例分配主次，
+ *   - 推荐权重反映该 LoRA 训练效果（几何 0.7 / 花卉 0.8），再乘比例分配主次，
  *     避免两个 LoRA 同时满权导致叠色过冲。
  *   - 权重 < 0.05 视为该子类无贡献：省略 <lora:...> 标签，但 trigger 仍写入 prompt。
  *   - loraMap 中 loraFile 为 null 的子类：不加 lora 标签，只写 trigger，不崩溃。
@@ -719,6 +727,17 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     .split(',')
     .map((t) => t.trim())
     .filter(Boolean)
+  // 方胜纹排布子触发（融合）：单独/居中 → 单独 LoRA；四方连续 → 连续 LoRA
+  if (subcategoryA === 'fangsheng') {
+    triggersA.push(
+      params.arrangement === 'seamless' ? 'ichpattern_fangsheng_continuous' : 'ichpattern_fangsheng_single'
+    )
+  }
+  if (subcategoryB === 'fangsheng') {
+    triggersB.push(
+      params.arrangement === 'seamless' ? 'ichpattern_fangsheng_continuous' : 'ichpattern_fangsheng_single'
+    )
+  }
   const subLabelEnA = subA?.subLabelEn ?? null
   const subLabelEnB = subB?.subLabelEn ?? null
 

@@ -11,8 +11,8 @@ interface PatternRecommendation {
   meaning: string
   region: string
   matchScore: number
-  /** 纹样所属主题（floral/beast），用于点击后自动切主题 */
-  themeId?: 'floral' | 'beast'
+  /** 纹样所属主题（floral/geometric），用于点击后自动切主题 */
+  themeId?: 'floral' | 'geometric'
   /** 场景标准 id（映射自语义表 scene），用于点击后自动勾选「使用场景」 */
   sceneId?: string
 }
@@ -62,15 +62,11 @@ const ETHNIC_KEYWORDS: Record<string, string> = {
 }
 
 const THEME_KEYWORDS: Record<string, string> = {
-  '龙': 'animal',
-  '凤': 'animal',
-  '瑞兽': 'animal',
-  '鱼': 'animal',
-  '虫': 'animal',
   '人物': 'human',
   '回纹': 'geometric',
-  '冰裂纹': 'geometric',
-  '锁子纹': 'geometric',
+  '盘长': 'geometric',
+  '锦地': 'geometric',
+  '方胜': 'geometric',
   '几何': 'geometric',
 }
 
@@ -328,7 +324,7 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
     onParseComplete?.(true)
     onParse({
       dimension: {
-        mainTheme: rec.themeId === 'beast' ? 'beast' : rec.themeId === 'floral' ? 'floral' : undefined,
+        mainTheme: rec.themeId === 'geometric' ? 'geometric' : rec.themeId === 'floral' ? 'floral' : undefined,
         subcategory: rec.patternId,
         scenes: rec.sceneId ? [rec.sceneId] : [],
       } as any,
@@ -373,7 +369,7 @@ export function PromptInput({ onParse, onParseComplete, onSemanticSearch }: Prom
       <textarea
         value={prompt}
         onChange={handleInputChange}
-        placeholder="例如：牡丹纹、蓝色调，适合毕业礼物；或输入「鹤纹」自动匹配瑞兽主题"
+        placeholder="例如：牡丹纹、蓝色调，适合毕业礼物；或输入「回纹」自动匹配几何主题"
         className="w-full px-4 py-3 bg-rice-paper border border-deep-blue-200 rounded-sm font-song text-deep-blue placeholder-deep-blue-300 focus:outline-none focus:border-palace-red resize-none"
         rows={3}
       />

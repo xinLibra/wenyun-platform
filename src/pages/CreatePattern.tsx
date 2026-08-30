@@ -259,7 +259,7 @@ export default function CreatePattern() {
     const explicitScenes = (result.dimension as any)?.scenes as string[] | undefined
     const subId = explicitSub || auto.subcategoryId || ''
     const mainTheme: PatternThemeId | undefined =
-      explicitTheme === 'floral' || explicitTheme === 'beast'
+      explicitTheme === 'floral' || explicitTheme === 'geometric'
         ? explicitTheme
         : auto.themeId || undefined
 
@@ -422,7 +422,7 @@ export default function CreatePattern() {
       }
       if (subLabel) autoTags.push(subLabel)
 
-      // 次标签：主题中文名（花卉 / 瑞兽），仅作次要补充，主分类标签必须是子类
+      // 次标签：主题中文名（花卉 / 几何），仅作次要补充，主分类标签必须是子类
       const themeLabel = mainThemeId
         ? (PATTERN_THEMES.find((t) => t.id === mainThemeId)?.label ?? '')
         : ''
@@ -1404,7 +1404,7 @@ export default function CreatePattern() {
                       }
                       if (subLabel) displayTags.push(subLabel)
 
-                      // 次标签：主题中文名（花卉 / 瑞兽）
+                      // 次标签：主题中文名（花卉 / 几何）
                       const themeLabel = mainThemeId
                         ? (PATTERN_THEMES.find((t) => t.id === mainThemeId)?.label ?? '')
                         : ''

@@ -1,21 +1,20 @@
 /**
  * 纹样子类 → 生成参数预设
  *
- * 数据来源：训练 caption 字段众数表（2026-08-19）。
- * 众数统计自各子类最终版训练 caption；不要拍脑袋改默认。
+ * 数据来源：训练 caption 字段众数表（2026-08-19）；几何子类按训练 caption 对齐。
+ * 不要拍脑袋改默认。
  *
- * 共性（10 个瑞兽子类几乎统一）：
- *   - arrangement: 'single'                  → "single motif, centered medallion"
- *   - complexity: 55                          → "medium detail, balanced density"
- *   - textureDetail: 25                       → "flat pattern design, clean lines, no texture"
- *   - culturalIntensity: 85                   → "classic authentic traditional form, clearly recognizable"
+ * 共性（几何 4 个子类几乎统一）：
+ *   - complexity: 55–65                     → "medium detail, balanced density"
+ *   - textureDetail: 25–30                  → "flat pattern design, clean lines, no texture"
+ *   - culturalIntensity: 85                 → "classic authentic traditional form, clearly recognizable"
  *
- * 仅 symmetry 与 colorScheme 按子类区分（见下表）。
+ * 仅 arrangement / symmetry 按子类区分（见下表）。
  * 花卉等未列入众数表的子类走 DEFAULT_PRESET（排布=single、对称=none、complexity=55、
  * textureDetail=25、culturalIntensity=70），避免默认四方连续或高肌理。
  *
  * 配色双轨制：
- *   - UI 显示：用真实潘通色号（如 '18-1662 TCX'）在色板中高亮选中
+ *   - UI 显示：用真实潘通色号（如 '19-4052 TCX'）在色板中高亮选中
  *   - Prompt 生成：用语义关键词（'monochrome-black' / 'multicolor'）保证训练 caption 一致性
  *   buildColorClause 会把语义关键词翻译成对应英文片段。
  */
@@ -42,8 +41,7 @@ export interface GenerationPreset {
  * 子类 → 默认潘通色号映射
  *
  * 用于 UI 高亮选中 + prompt 配色片段生成。
- * 同一个 pantone 色号在不同子类下可能对应不同的 prompt 语义（如 18-1662 TCX
- * 对 dragon 是 "monochrome black"，对 dragon_phoenix 是 "multicolor"），
+ * 同一个 pantone 色号在不同子类下可能对应不同的 prompt 语义，
  * 因此需要 subcategoryId 级别的映射，而非单纯 pantone code 映射。
  */
 export interface SubcategoryPantone {
@@ -51,7 +49,7 @@ export interface SubcategoryPantone {
   pantoneCode: string
   /** 色块中文名 */
   label: string
-  /** 英文色名（用于 prompt 加权描述，如 "light pink" / "palace red"） */
+  /** 英文色名（用于 prompt 加权描述，如 "dark navy blue" / "palace red"） */
   englishName: string
   /** prompt 配色语义关键词（monochrome-black / multicolor） */
   promptTag: 'monochrome-black' | 'multicolor'
@@ -60,16 +58,11 @@ export interface SubcategoryPantone {
 }
 
 export const SUBCATEGORY_PANTONE_MAP: Record<string, SubcategoryPantone> = {
-  // ===== 瑞兽（10 条，单色系为主） =====
-  crane:          { pantoneCode: '19-4052 TCX', label: '深藏青', englishName: 'dark navy blue',   promptTag: 'monochrome-black', reason: '松鹤延年，清雅' },
-  butterfly:      { pantoneCode: '16-1450 TCX', label: '藕粉',   englishName: 'light pink',       promptTag: 'multicolor',      reason: '蝶恋花，柔美' },
-  peacock:        { pantoneCode: '16-4725 TCX', label: '钴蓝',   englishName: 'cobalt blue',      promptTag: 'monochrome-black', reason: '孔雀蓝绿' },
-  deer:           { pantoneCode: '18-1150 TCX', label: '栗棕',   englishName: 'chestnut brown',   promptTag: 'monochrome-black', reason: '鹿栖山林，古朴' },
-  dragon:         { pantoneCode: '18-1662 TCX', label: '宫墙红', englishName: 'palace red',       promptTag: 'monochrome-black', reason: '皇家气韵' },
-  phoenix_bird:   { pantoneCode: '18-1662 TCX', label: '宫墙红', englishName: 'palace red',       promptTag: 'monochrome-black', reason: '吉祥喜庆' },
-  lion:           { pantoneCode: '12-0752 TCX', label: '金色',   englishName: 'golden yellow',    promptTag: 'monochrome-black', reason: '金狮护佑' },
-  tiger:          { pantoneCode: '17-1462 TCX', label: '橙红',   englishName: 'orange red',       promptTag: 'monochrome-black', reason: '虎虎生威' },
-  dragon_phoenix: { pantoneCode: '18-1662 TCX', label: '宫墙红', englishName: 'palace red',       promptTag: 'multicolor',      reason: '龙凤呈祥' },
+  // ===== 几何（4 条，单色系为主） =====
+  huiwen:    { pantoneCode: '19-4052 TCX', label: '深藏青', englishName: 'dark navy blue', promptTag: 'monochrome-black', reason: '回纹素雅，墨青' },
+  panchang:  { pantoneCode: '18-1662 TCX', label: '宫墙红', englishName: 'palace red',     promptTag: 'monochrome-black', reason: '盘长连绵，吉庆红' },
+  jindi:     { pantoneCode: '12-0752 TCX', label: '金色',   englishName: 'golden yellow',  promptTag: 'monochrome-black', reason: '锦地满铺，富丽金' },
+  fangsheng: { pantoneCode: '18-1555 TCX', label: '朱红',   englishName: 'vermillion',     promptTag: 'monochrome-black', reason: '方胜方正，朱红吉祥' },
 
   // ===== 花卉（单色系为主，按花型自然属性选色） =====
   // 牡丹：花团锦簇，藕粉色
@@ -98,22 +91,16 @@ export function getPantoneForSubcategory(subcategoryId: string | undefined | nul
   return SUBCATEGORY_PANTONE_MAP[subcategoryId] ?? null
 }
 
-/** 配色预设：单色黑（多数瑞兽子类默认，用语义关键词供 buildColorClause 生成 prompt） */
+/** 配色预设：单色黑（多数几何/花卉子类默认，用语义关键词供 buildColorClause 生成 prompt） */
 const COLOR_MONO_BLACK: GenerationParams['colorScheme'] = {
   mode: 'pantone',
   pantone: 'monochrome-black',
 }
 
-/** 配色预设：多色（butterfly / dragon_phoenix 默认） */
-const COLOR_MULTICOLOR: GenerationParams['colorScheme'] = {
-  mode: 'pantone',
-  pantone: 'multicolor',
-}
-
 /**
- * 通用默认预设（无子类 / 花卉等未列入众数表的子类用）
+ * 通用默认预设（无子类 / 未列入预设表的子类用）
  * 注意：symmetry='none'（无规则），culturalIntensity=70（中等偏上），
- * 不是 85（瑞兽子类的经典可辨），因为花卉/通用场景不一定要"经典可辨"。
+ * 不是 85（几何/花卉子类的经典可辨），因为通用场景不一定要"经典可辨"。
  */
 export const DEFAULT_PRESET: GenerationPreset = {
   arrangement: 'single',
@@ -128,24 +115,17 @@ export const DEFAULT_PRESET: GenerationPreset = {
  * 子类 → 预设映射表
  *
  * ┌─────────────────┬──────────┬───────────────┬──────────────────┐
- * │ subcategoryId   │ 中文     │ symmetry      │ colorScheme      │
+ * │ subcategoryId   │ 中文     │ arrangement    │ symmetry         │
  * ├─────────────────┼──────────┼───────────────┼──────────────────┤
- * │ crane           │ 鹤纹     │ none  无规则  │ monochrome black │
- * │ butterfly       │ 蝴蝶纹   │ mirror 镜像   │ multicolor       │
- * │ peacock         │ 孔雀纹   │ none  无规则  │ monochrome black │
- * │ deer            │ 鹿纹     │ none  无规则  │ monochrome black │
- * │ dragon          │ 龙纹     │ none  无规则  │ monochrome black │
- * │ phoenix_bird    │ 凤鸟纹   │ none  无规则  │ monochrome black │
- * │ lion            │ 狮纹     │ mirror 镜像   │ monochrome black │
- * │ dragon_phoenix  │ 龙凤纹   │ mirror 镜像   │ multicolor       │
- * │ tiger           │ 虎纹     │ none  无规则  │ monochrome black │
+ * │ huiwen          │ 回纹     │ single 单独    │ none  无规则      │
+ * │ panchang        │ 盘长纹   │ single 单独    │ mirror 镜像      │
+ * │ jindi           │ 锦地纹   │ seamless 连续  │ none  无规则      │
+ * │ fangsheng       │ 方胜纹   │ single 单独    │ mirror 镜像      │
  * └─────────────────┴──────────┴───────────────┴──────────────────┘
- *
- * 麒麟 qilin：patternTaxonomy 无 qilin 子类，不强行加路由（按需求第 4 条）。
  */
 export const GENERATION_PRESETS: Record<string, GenerationPreset> = {
-  // ===== 瑞兽（10 个，按众数表） =====
-  crane: {
+  // ===== 几何（4 个） =====
+  huiwen: {
     arrangement: 'single',
     symmetry: 'none',
     complexity: 55,
@@ -153,67 +133,27 @@ export const GENERATION_PRESETS: Record<string, GenerationPreset> = {
     culturalIntensity: 85,
     colorScheme: COLOR_MONO_BLACK,
   },
-  butterfly: {
+  panchang: {
     arrangement: 'single',
     symmetry: 'mirror',
-    complexity: 55,
-    textureDetail: 25,
-    culturalIntensity: 85,
-    colorScheme: COLOR_MULTICOLOR,
-  },
-  peacock: {
-    arrangement: 'single',
-    symmetry: 'none',
-    complexity: 55,
-    textureDetail: 25,
+    complexity: 60,
+    textureDetail: 30,
     culturalIntensity: 85,
     colorScheme: COLOR_MONO_BLACK,
   },
-  deer: {
-    arrangement: 'single',
+  jindi: {
+    arrangement: 'seamless',
     symmetry: 'none',
-    complexity: 55,
-    textureDetail: 25,
+    complexity: 65,
+    textureDetail: 30,
     culturalIntensity: 85,
     colorScheme: COLOR_MONO_BLACK,
   },
-  dragon: {
-    arrangement: 'single',
-    symmetry: 'none',
-    complexity: 55,
-    textureDetail: 25,
-    culturalIntensity: 85,
-    colorScheme: COLOR_MONO_BLACK,
-  },
-  phoenix_bird: {
-    arrangement: 'single',
-    symmetry: 'none',
-    complexity: 55,
-    textureDetail: 25,
-    culturalIntensity: 85,
-    colorScheme: COLOR_MONO_BLACK,
-  },
-  lion: {
+  fangsheng: {
     arrangement: 'single',
     symmetry: 'mirror',
-    complexity: 55,
-    textureDetail: 25,
-    culturalIntensity: 85,
-    colorScheme: COLOR_MONO_BLACK,
-  },
-  dragon_phoenix: {
-    arrangement: 'single',
-    symmetry: 'mirror',
-    complexity: 55,
-    textureDetail: 25,
-    culturalIntensity: 85,
-    colorScheme: COLOR_MULTICOLOR,
-  },
-  tiger: {
-    arrangement: 'single',
-    symmetry: 'none',
-    complexity: 55,
-    textureDetail: 25,
+    complexity: 60,
+    textureDetail: 28,
     culturalIntensity: 85,
     colorScheme: COLOR_MONO_BLACK,
   },
@@ -301,7 +241,7 @@ export function getPreset(subcategoryId: string | undefined | null): GenerationP
  * 保留 dimension（mainTheme/subcategory/scenes/style 等）由调用方负责设置。
  *
  * 配色双轨：
- *   - colorScheme.pantone 写入真实潘通色号（如 '18-1662 TCX'），供 UI 色板高亮
+ *   - colorScheme.pantone 写入真实潘通色号（如 '19-4052 TCX'），供 UI 色板高亮
  *   - prompt 生成时 buildColorClause 会根据 pantoneCode + subcategoryId 反查 promptTag
  *     （monochrome-black / multicolor），保证训练 caption 一致性
  */

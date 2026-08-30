@@ -2,29 +2,24 @@
  * 纹样子类 → 缩略图
  *
  * 项目内没有为每个纹样单独存放的成品图，这里用「SVG data-URI 占位图」保证：
- * 1. 每个 patternId / 子类有独立的配色与图形（瑞兽=菱形徽记、花卉=四瓣花），
- *    不再出现凤鸟/蝴蝶/孔雀共用同一张 raw 图的问题；
+ * 1. 每个 patternId / 子类有独立的配色与图形（几何=方胜形、花卉=四瓣花），
+ *    不再出现多个子类共用同一张 raw 图的问题；
  * 2. 图上标注该纹样的中文名，方便用户对照；
- * 3. 将来若按子类补充了真实缩略图（如 /patterns/thumb/crane.png），
+ * 3. 将来若按子类补充了真实缩略图（如 /patterns/thumb/huiwen.png），
  *    只需在 PATTERN_REAL_THUMBS 中登记路径即可优先使用。
  */
 
 /** 真实缩略图登记表：patternId → 静态资源路径（优先使用，空则回落 SVG 占位图） */
 export const PATTERN_REAL_THUMBS: Record<string, string> = {
-  // 示例：crane: '/patterns/thumb/crane.png'
+  // 示例：huiwen: '/patterns/thumb/huiwen.png'
 }
 
 /** 每个纹样子类独立的缩略图色相（0-360），保证彼此视觉可区分 */
 const PATTERN_HUES: Record<string, number> = {
-  phoenix_bird: 350, // 凤鸟 · 红
-  crane: 215, // 鹤 · 青蓝
-  butterfly: 310, // 蝴蝶 · 紫粉
-  tiger: 42, // 虎 · 金黄
-  peacock: 180, // 孔雀 · 青绿
-  dragon: 35, // 龙 · 金橙
-  dragon_phoenix: 320, // 龙凤 · 紫红
-  deer: 95, // 鹿 · 草绿
-  lion: 205, // 狮 · 蓝
+  huiwen: 215, // 回纹 · 青蓝
+  panchang: 350, // 盘长纹 · 红
+  jindi: 45, // 锦地纹 · 金黄
+  fangsheng: 0, // 方胜纹 · 朱红
   orchid: 285, // 兰花 · 淡紫
   furong: 330, // 芙蓉 · 桃粉
   pomegranate_flower: 0, // 石榴花 · 红
@@ -35,28 +30,19 @@ const PATTERN_HUES: Record<string, number> = {
   flower_bird: 255, // 花鸟 · 蓝紫
 }
 
-/** 瑞兽主题子类集合（决定缩略图图形：菱形徽记 vs 四瓣花） */
-const BEAST_IDS = new Set([
-  'phoenix_bird',
-  'crane',
-  'butterfly',
-  'tiger',
-  'peacock',
-  'dragon',
-  'dragon_phoenix',
-  'deer',
-  'lion',
-])
+/** 几何主题子类集合（决定缩略图图形：方胜形 vs 四瓣花） */
+const GEOMETRIC_IDS = new Set(['huiwen', 'panchang', 'jindi', 'fangsheng'])
 
 const FALLBACK_HUE = 30
 
-function buildThumbSvg(label: string, hue: number, isBeast: boolean): string {
+function buildThumbSvg(label: string, hue: number, isGeometric: boolean): string {
   const stroke = `hsl(${hue},58%,42%)`
   const accent = `hsl(${hue},60%,42%)`
-  // 瑞兽用菱形徽记，花卉用四瓣花，一眼区分主题
-  const glyph = isBeast
-    ? `<polygon points="80,42 112,80 80,118 48,80" fill="none" stroke="${stroke}" stroke-width="3"/>
-       <circle cx="80" cy="80" r="11" fill="${accent}"/>`
+  // 几何用方胜形（两个交错正方形），花卉用四瓣花，一眼区分主题
+  const glyph = isGeometric
+    ? `<rect x="62" y="62" width="36" height="36" fill="none" stroke="${stroke}" stroke-width="3" transform="rotate(45 80 80)"/>
+       <rect x="62" y="62" width="36" height="36" fill="none" stroke="${stroke}" stroke-width="3" transform="rotate(-45 80 80)"/>
+       <circle cx="80" cy="80" r="6" fill="${accent}"/>`
     : `<circle cx="80" cy="58" r="15" fill="none" stroke="${stroke}" stroke-width="3"/>
        <circle cx="80" cy="102" r="15" fill="none" stroke="${stroke}" stroke-width="3"/>
        <circle cx="58" cy="80" r="15" fill="none" stroke="${stroke}" stroke-width="3"/>
@@ -83,7 +69,7 @@ export function getPatternThumbnail(patternId: string, label?: string): string {
   if (real) return real
 
   const hue = PATTERN_HUES[patternId] ?? FALLBACK_HUE
-  const isBeast = BEAST_IDS.has(patternId)
+  const isGeometric = GEOMETRIC_IDS.has(patternId)
   const text = label && label.length > 4 ? `${label.slice(0, 4)}…` : label || patternId
-  return buildThumbSvg(text, hue, isBeast)
+  return buildThumbSvg(text, hue, isGeometric)
 }
