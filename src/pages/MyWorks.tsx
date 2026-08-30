@@ -40,6 +40,20 @@ function writeWorksCache(userId: string, data: Generation[]) {
   }
 }
 
+/** 列表查询行 → 前端 Generation 子集（列表不投影 image_url，置空待补图回填） */
+function rowToGeneration(row: any): any {
+  return {
+    id: row.id,
+    image_url: '',
+    is_public: row.is_public,
+    created_at: row.created_at,
+    params: {
+      title: row.title ?? '',
+      tags: Array.isArray(row.tags) ? row.tags : [],
+    },
+  }
+}
+
 /**
  * 单卡缩略图：纯展示组件，不自己发请求（避免组件级 effect 被反复 cleanup 导致永不更新）。
  * - 有真实图（http 短链 / data: base64）→ 直接渲染
@@ -91,6 +105,11 @@ export default function MyWorksPage() {
   // failedIds 只作补图过滤依据，不进 effect 依赖：失败后不重跑补图（避免重试风暴），手动重试由 retryTick 触发
   const failedIdsRef = useRef(failedIds)
   failedIdsRef.current = failedIds
+  // 分页：首次 20 条 +「加载更多」追加（range 多取 1 条探测 hasMore）
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  // 当前用户 id 存入 ref：loadMore 复用，无需重新取会话
+  const userIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -153,21 +172,15 @@ export default function MyWorksPage() {
                 .eq('user_id', userId)
                 .eq('is_deleted', false)
                 .order('created_at', { ascending: false })
-                .limit(20),
+                // 首次 20 条：range 端点含首尾，多取 1 条探测是否还有更多
+                .range(0, 20),
               DB_TIMEOUT_MS,
               '获取作品'
             )
             if (error) throw error
-            rows = (data ?? []).map((row: any) => ({
-              id: row.id,
-              image_url: '',
-              is_public: row.is_public,
-              created_at: row.created_at,
-              params: {
-                title: row.title ?? '',
-                tags: Array.isArray(row.tags) ? row.tags : [],
-              },
-            }))
+            rows = (data ?? []).slice(0, 20).map(rowToGeneration)
+            if (mounted) setHasMore((data?.length ?? 0) > 20)
+            userIdRef.current = userId
             lastError = null
             break
           } catch (e: any) {
@@ -185,6 +198,8 @@ export default function MyWorksPage() {
           if (cached && cached.length > 0) {
             if (mounted) {
               setGenerations(cached)
+              // 缓存满一页（20 条）时也可能还有更多，允许继续加载更多
+              setHasMore(cached.length >= 20)
               setStaleNotice(true)
               setError('')
               setIsLoading(false)
@@ -385,6 +400,44 @@ export default function MyWorksPage() {
     } catch (err) {
       console.error('Delete error:', err)
       alert('删除失败，请重试')
+    }
+  }
+
+  /** 加载更多：按当前列表长度 offset 追加下一页 20 条 */
+  const handleLoadMore = async () => {
+    const userId = userIdRef.current
+    if (!userId || loadingMore) return
+    const offset = generations.length
+    setLoadingMore(true)
+    try {
+      const { data, error } = await withTimeout(
+        supabase
+          .from('generations')
+          .select('id, is_public, created_at, title:params->>title, tags:params->tags')
+          .eq('user_id', userId)
+          .eq('is_deleted', false)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + 20),
+        DB_TIMEOUT_MS,
+        '加载更多'
+      )
+      if (error) throw error
+      const newRows = (data ?? []).slice(0, 20).map(rowToGeneration)
+      setHasMore((data?.length ?? 0) > 20)
+      if (newRows.length > 0) {
+        setGenerations((prev) => {
+          const next = [...prev, ...newRows]
+          writeWorksCache(userId, next)
+          return next
+        })
+        // 追加新卡后重新触发补图 effect，为新增卡片回填缩略图
+        setRetryTick((t) => t + 1)
+      }
+    } catch (e: any) {
+      console.error('[MyWorks] load more failed:', e?.message ?? e)
+      alert('加载更多失败，请重试')
+    } finally {
+      setLoadingMore(false)
     }
   }
 
@@ -746,6 +799,17 @@ export default function MyWorksPage() {
                     </motion.div>
                   ))}
                 </div>
+                {hasMore && (
+                  <div className="mt-8 text-center">
+                    <button
+                      onClick={handleLoadMore}
+                      disabled={loadingMore}
+                      className="px-8 py-2 bg-rice-paper border border-palace-red rounded-sm font-song text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors disabled:opacity-50"
+                    >
+                      {loadingMore ? '加载中...' : '加载更多'}
+                    </button>
+                  </div>
+                )}
               </FrameDecorations>
             </motion.div>
           )}
