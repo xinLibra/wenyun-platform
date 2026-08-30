@@ -49,6 +49,9 @@ export interface Generation {
   is_public: boolean
   created_at: string
   tags: string[]
+  /** 软删除标记：作者删除后置 true，行保留（favorites 关联不失效） */
+  is_deleted?: boolean
+  deleted_at?: string | null
 }
 
 export interface Order {

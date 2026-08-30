@@ -715,6 +715,7 @@ export default function CustomizeProduct() {
             .from('generations')
             .select('id, image_url, params')
             .eq('user_id', sessionUser!.id)
+            .eq('is_deleted', false)
             .order('created_at', { ascending: false })
             .limit(40),
           supabase
@@ -758,6 +759,7 @@ export default function CustomizeProduct() {
               .from('generations')
               .select('id, image_url, params')
               .in('id', generationIds)
+              .eq('is_deleted', false)
               .limit(40)
             if (favResult.error) {
               console.error('Fetch patterns - favorites detail query failed', serializeError(favResult.error))

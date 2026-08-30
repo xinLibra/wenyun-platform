@@ -70,6 +70,7 @@ export default function Gallery() {
         .from('generations')
         .select('id, user_id, style_id, author_nickname, is_public, created_at, title:params->>title, tags:params->tags, theme:params->>theme, subcategory:params->>subcategory, source:params->>source, fusion:params->fusion')
         .eq('is_public', true)
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false })
 
       if (generationsData) {

@@ -151,6 +151,7 @@ export default function MyWorksPage() {
                 // 缩略图用占位，查看详情 / 下载时再按 id 单条取
                 .select('id, is_public, created_at, title:params->>title, tags:params->tags')
                 .eq('user_id', userId)
+                .eq('is_deleted', false)
                 .order('created_at', { ascending: false })
                 .limit(20),
               DB_TIMEOUT_MS,
@@ -353,25 +354,25 @@ export default function MyWorksPage() {
     if (!session?.user) return
 
     try {
-      await supabase
-        .from('favorites')
-        .delete()
-        .eq('generation_id', generationId)
-
+      // 软删除：不物理删除 generations（避免外键失败、保留 favorites 关联），标记已删并取消公开
       const { error } = await supabase
         .from('generations')
-        .delete()
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+          is_public: false,
+        })
         .eq('id', generationId)
+        .eq('user_id', session.user.id)
 
       if (error) {
         console.error('Delete error:', error)
-        if (error.message?.includes('foreign key constraint')) {
-          alert('删除失败：该作品已被其他用户收藏，无法删除')
-        } else {
-          alert(`删除失败: ${error.message || '请重试'}`)
-        }
+        alert(`删除失败: ${error.message || '请重试'}`)
       } else {
-        setGenerations(prev => prev.filter(g => g.id !== generationId))
+        // 本地列表移除 + 同步更新缓存，避免刷新后缓存把已删作品重新带回来
+        const next = generations.filter(g => g.id !== generationId)
+        setGenerations(next)
+        writeWorksCache(session.user.id, next)
         refreshFavorites()
       }
     } catch (err) {
@@ -383,7 +384,7 @@ export default function MyWorksPage() {
   /** 按 id 单条取 image_url（下载时用；列表页不拉大字段） */
   const fetchImageUrl = async (generationId: string): Promise<string> => {
     const { data, error } = await withTimeout(
-      supabase.from('generations').select('image_url').eq('id', generationId).single(),
+      supabase.from('generations').select('image_url').eq('id', generationId).eq('is_deleted', false).single(),
       DB_TIMEOUT_MS,
       '获取图片'
     )

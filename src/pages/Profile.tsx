@@ -46,6 +46,7 @@ export default function ProfilePage() {
           .from('generations')
           .select('*')
           .eq('user_id', session.user.id)
+          .eq('is_deleted', false)
           .order('created_at', { ascending: false })
 
         if (generationsData) {

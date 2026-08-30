@@ -60,6 +60,7 @@ export default function WorkDetailModal({
       .from('generations')
       .select('image_url')
       .eq('id', work.id)
+      .eq('is_deleted', false)
       .single()
       .then(
         ({ data }) => {
@@ -93,6 +94,7 @@ export default function WorkDetailModal({
           .from('generations')
           .select('image_url')
           .eq('id', work.id)
+          .eq('is_deleted', false)
           .single()
         url = (data as any)?.image_url || ''
       } catch {

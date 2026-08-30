@@ -393,6 +393,7 @@ export default function CreatePattern() {
           .from('generations')
           .select('params')
           .eq('user_id', session.user.id)
+          .eq('is_deleted', false)
 
         if (!worksError && existingWorks) {
           const existingTitles = existingWorks.map(w => (w as any).params?.title).filter(Boolean)
@@ -802,6 +803,7 @@ export default function CreatePattern() {
           .from('generations')
           .select('id, params, image_url')
           .eq('user_id', session.user.id)
+          .eq('is_deleted', false)
           .order('created_at', { ascending: false })
           .limit(20)
 
@@ -939,6 +941,7 @@ export default function CreatePattern() {
           .from('generations')
           .select('params')
           .eq('user_id', session.user.id)
+          .eq('is_deleted', false)
 
         if (!worksError && existingWorks) {
           const existingTitles = existingWorks.map(w => (w as any).params?.title).filter(Boolean)

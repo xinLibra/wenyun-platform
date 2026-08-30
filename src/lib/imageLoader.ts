@@ -47,7 +47,7 @@ export async function loadImagesConcurrently(
       const id = ids[cursor++]
       try {
         const { data, error } = await withTimeout(
-          supabase.from('generations').select('id, image_url').eq('id', id).single(),
+          supabase.from('generations').select('id, image_url').eq('id', id).eq('is_deleted', false).single(),
           timeoutMs,
           '加载缩略图'
         )
@@ -88,7 +88,8 @@ export async function fetchHttpImageUrls(ids: string[]): Promise<Record<string, 
           .from('generations')
           .select('id, image_url')
           .in('id', chunk)
-          .like('image_url', 'http%'),
+          .like('image_url', 'http%')
+          .eq('is_deleted', false),
         8000,
         '获取短链图'
       )
@@ -116,7 +117,7 @@ export async function fetchHttpImageUrls(ids: string[]): Promise<Record<string, 
  */
 export async function fetchGenerationImage(id: string, timeoutMs = 45000): Promise<string> {
   const { data, error } = await withTimeout(
-    supabase.from('generations').select('image_url').eq('id', id).single(),
+    supabase.from('generations').select('image_url').eq('id', id).eq('is_deleted', false).single(),
     timeoutMs,
     '获取图片'
   )
