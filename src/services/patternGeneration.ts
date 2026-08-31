@@ -179,8 +179,8 @@ export function buildPromptParts(params: GenerationParams): {
   switch (params.arrangement) {
     case 'single':
       parts.push('single motif, centered medallion')
-      // 方胜单独：强化"单个纹样"语义，避免退化成大面积连续网
-      if (subcategoryId === 'fangsheng') {
+      // 方胜/盘长单独：强化"单个纹样"语义，避免退化成大面积连续网/满铺
+      if (subcategoryId === 'fangsheng' || subcategoryId === 'panchang') {
         parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
       }
       break
@@ -288,6 +288,10 @@ function buildColorWeightedClause(params: GenerationParams): string {
         if (tag === 'multicolor') {
           return `${en} color, ${en} color scheme, ${zh}色调, multicolor palette${hexPart}`
         }
+        // 盘长：配色写"线稿色"而非整块色，避免 palace red 实底引导实物丝带（2026-08-31）
+        if (subId === 'panchang') {
+          return `${en} line color, ${zh}线稿色${hexPart}`
+        }
         return `${en} color, ${en} color scheme, ${zh}色调${hexPart}`
       }
     }
@@ -332,7 +336,12 @@ function buildColorClause(params: GenerationParams): string {
   if (cs.mode === 'pantone' && cs.pantone) {
     const p = cs.pantone.trim()
     // 1. 语义关键词（直接识别）
-    if (p === 'monochrome-black') return 'monochrome black palette'
+    if (p === 'monochrome-black') {
+      // 盘长：黑白也写"线 + 浅底"，避免实底引导实物
+      return params.dimension?.subcategory === 'panchang'
+        ? 'monochrome black line on off-white background'
+        : 'monochrome black palette'
+    }
     if (p === 'multicolor') return 'multicolor palette'
 
     // 2. 真实潘通色号 → 按当前子类反查色名，写"具体色 + pantone code + HEX"。
@@ -346,6 +355,10 @@ function buildColorClause(params: GenerationParams): string {
         const en = pantoneInfo.englishName
         const hex = getPantoneHex(p)
         const hexPart = hex ? `, ${hex.toLowerCase()}` : ''
+        // 盘长：线色 + 浅底（避免整块大红实底引导实物丝带；2026-08-31）
+        if (subId === 'panchang') {
+          return `${en} line color on off-white background, pantone ${p.split(' ')[0]}${hexPart}`
+        }
         return `${en} color palette, pantone ${p.split(' ')[0]}${hexPart}`
       }
     }
@@ -542,6 +555,9 @@ const GEOMETRIC_STRUCTURE_BOOST: Record<string, string[]> = {
     'continuous interwoven ribbon knot',
     'mystic knot',
     'never-ending knot',
+    // 实物丝带/胶带卷漂移的元凶：缺"平面介质"限定。2d illustration / graphic design 强制图案而非实物（2026-08-31）
+    '2d illustration',
+    'graphic design',
   ],
 }
 
@@ -590,6 +606,23 @@ function buildNegativePromptCore(
     // 方胜正向依赖 diamond 语义（interlocking/overlapping diamond），不压菱形词，避免误伤。
     if (!subcategoryIds.includes('fangsheng')) {
       base.push('diamond lattice', 'argyle', 'grid pattern', 'simple geometric diamonds')
+    }
+
+    // 盘长强制实物压制：必须常驻 negative（漂成实物丝带/胶带卷照片的元凶）。
+    // 只压 spool / roll of tape / yarn 等实物词，不压 ribbon（正向 interwoven ribbon 语义依赖）。
+    if (subcategoryIds.includes('panchang')) {
+      base.push(
+        'photograph',
+        'product photo',
+        'spool',
+        'roll of tape',
+        'ribbon spool',
+        'thread spool',
+        'yarn',
+        'physical object',
+        'still life',
+        'depth of field',
+      )
     }
   }
 
@@ -744,6 +777,9 @@ export async function generatePatternWithFallback(
         ? `OK（${loraFile} @ ${loraWeight} / ${trigger}）`
         : `异常（lora=${loraFile}, trigger=${trigger}）`,
     )
+    // 供与 WebUI 同 seed 对比：完整 prompt / negative
+    console.log('[patternGeneration] 盘长 final prompt:\n' + prompt)
+    console.log('[patternGeneration] 盘长 final negative:\n' + negativePrompt)
   }
 
   console.log(
@@ -953,7 +989,7 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     case 'single':
       parts.push('single motif, centered medallion')
       // 融合含方胜且排布=单独：强化"单个纹样"语义，避免退化成连续网
-      if (hasFangsheng) {
+      if (hasFangsheng || subcategoryA === 'panchang' || subcategoryB === 'panchang') {
         parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
       }
       break
