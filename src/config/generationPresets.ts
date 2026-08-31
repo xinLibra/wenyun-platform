@@ -2,14 +2,18 @@
  * 纹样子类 → 生成参数预设
  *
  * 数据来源：训练 caption 字段众数表（2026-08-19）；几何子类按训练 caption 对齐。
+ * 2026-08-31 按「几何四类预设参数建议」校准：繁复度/平面化/文化强度按各子类区间取中值，
+ * 默认排布与对称对齐对应 LoRA 训练变体（方胜按排布拆分 single/continuous）。
  * 不要拍脑袋改默认。
  *
  * 共性（几何 4 个子类几乎统一）：
- *   - complexity: 55–65                     → "medium detail, balanced density"
- *   - textureDetail: 25–30                  → "flat pattern design, clean lines, no texture"
- *   - culturalIntensity: 85                 → "classic authentic traditional form, clearly recognizable"
+ *   - complexity: 45–70                     → "medium detail, balanced density"
+ *   - textureDetail: 20–40（偏低）          → "flat pattern design, clean lines, no texture"（几何纹以线稿平面为主）
+ *   - culturalIntensity: 75–95（偏高）      → "classic authentic traditional form, clearly recognizable"
  *
- * 仅 arrangement / symmetry 按子类区分（见下表）。
+ * 排布/对称按子类区分（见下表），与 LoRA 训练变体保持一致：
+ *   - 回纹 / 锦地 / 方胜·连续 → 四方连续 + 镜像
+ *   - 方胜·单独 / 盘长         → 单独纹样 + 镜像/旋转（强负向防铺满）
  * 花卉等未列入众数表的子类走 DEFAULT_PRESET（排布=single、对称=none、complexity=55、
  * textureDetail=25、culturalIntensity=70），避免默认四方连续或高肌理。
  *
@@ -58,11 +62,11 @@ export interface SubcategoryPantone {
 }
 
 export const SUBCATEGORY_PANTONE_MAP: Record<string, SubcategoryPantone> = {
-  // ===== 几何（4 条，单色系为主） =====
-  huiwen:    { pantoneCode: '19-4052 TCX', label: '深藏青', englishName: 'dark navy blue', promptTag: 'monochrome-black', reason: '回纹素雅，墨青' },
-  panchang:  { pantoneCode: '18-1662 TCX', label: '宫墙红', englishName: 'palace red',     promptTag: 'monochrome-black', reason: '盘长连绵，吉庆红' },
-  jindi:     { pantoneCode: '12-0752 TCX', label: '金色',   englishName: 'golden yellow',  promptTag: 'monochrome-black', reason: '锦地满铺，富丽金' },
-  fangsheng: { pantoneCode: '18-1555 TCX', label: '朱红',   englishName: 'vermillion',     promptTag: 'monochrome-black', reason: '方胜方正，朱红吉祥' },
+  // ===== 几何（4 条，单色系为主；推荐色按 2026-08-31 建议表） =====
+  huiwen:    { pantoneCode: '19-4052 TCX', label: '深藏青', englishName: 'dark navy blue', promptTag: 'monochrome-black', reason: '回纹素雅，深藏青/墨黑' },
+  panchang:  { pantoneCode: '18-1662 TCX', label: '宫墙红', englishName: 'palace red',     promptTag: 'monochrome-black', reason: '盘长连绵，宫墙红/朱红/金' },
+  jindi:     { pantoneCode: '19-4052 TCX', label: '深藏青', englishName: 'dark navy blue', promptTag: 'monochrome-black', reason: '锦地典雅，深藏青/宫墙红' },
+  fangsheng: { pantoneCode: '19-4006 TCX', label: '墨黑',   englishName: 'ink black',      promptTag: 'monochrome-black', reason: '方胜线稿，墨黑/朱红/深藏青' },
 
   // ===== 花卉（单色系为主，按花型自然属性选色） =====
   // 牡丹：花团锦簇，藕粉色
@@ -112,51 +116,82 @@ export const DEFAULT_PRESET: GenerationPreset = {
 }
 
 /**
+ * 方胜纹排布 → 预设变体（与 loraMap 的 FANGSHENG_LORA_MAP key 对齐：single/continuous）
+ *
+ * 2026-08-31 建议表：方胜随排布自动切换单独/连续预设：
+ *   - 排布=单独/居中（single/adapted）→ 单独变体：complexity 40–55、平面 20–30、镜像、强度 80–90
+ *   - 排布=四方连续（seamless）      → 连续变体：complexity 45–60、平面 20–30、镜像、强度 80–90
+ * 配色统一墨黑（线稿感；婚礼/节庆可在色板改朱红）。
+ * 生成层同时按排布切换方胜单独/连续 LoRA（见 patternGeneration.ts），UI 与 LoRA 保持一致。
+ */
+export const FANGSHENG_LAYOUT_PRESETS: Record<
+  'single' | 'continuous',
+  GenerationPreset
+> = {
+  single: {
+    arrangement: 'single',
+    symmetry: 'mirror',
+    complexity: 48, // 建议 40–55
+    textureDetail: 25, // 建议 20–30 偏平面
+    culturalIntensity: 85, // 建议 80–90
+    colorScheme: { mode: 'pantone', pantone: '19-4006 TCX' }, // 墨黑
+  },
+  continuous: {
+    arrangement: 'seamless',
+    symmetry: 'mirror',
+    complexity: 52, // 建议 45–60
+    textureDetail: 25, // 建议 20–30 偏平面
+    culturalIntensity: 85, // 建议 80–90
+    colorScheme: { mode: 'pantone', pantone: '19-4006 TCX' }, // 墨黑
+  },
+}
+
+/** 按全局排布取方胜对应变体预设：seamless → continuous，其余（single/adapted）→ single */
+export function getFangshengLayoutPreset(
+  arrangement: GenerationParams['arrangement'],
+): GenerationPreset {
+  return FANGSHENG_LAYOUT_PRESETS[arrangement === 'seamless' ? 'continuous' : 'single']
+}
+
+/**
  * 子类 → 预设映射表
  *
  * ┌─────────────────┬──────────┬───────────────┬──────────────────┐
  * │ subcategoryId   │ 中文     │ arrangement    │ symmetry         │
  * ├─────────────────┼──────────┼───────────────┼──────────────────┤
- * │ huiwen          │ 回纹     │ single 单独    │ none  无规则      │
- * │ panchang        │ 盘长纹   │ single 单独    │ mirror 镜像      │
- * │ jindi           │ 锦地纹   │ seamless 连续  │ none  无规则      │
- * │ fangsheng       │ 方胜纹   │ single 单独    │ mirror 镜像      │
+ * │ huiwen          │ 回纹     │ seamless 连续  │ mirror 镜像      │
+ * │ panchang        │ 盘长纹   │ single 单独    │ rotation 旋转    │
+ * │ jindi           │ 锦地纹   │ seamless 连续  │ mirror 镜像      │
+ * │ fangsheng       │ 方胜纹   │ 排布分流见 FANGSHENG_LAYOUT_PRESETS（single/continuous） │
  * └─────────────────┴──────────┴───────────────┴──────────────────┘
  */
 export const GENERATION_PRESETS: Record<string, GenerationPreset> = {
-  // ===== 几何（4 个） =====
+  // ===== 几何（4 个，数值按 2026-08-31 建议表；fangsheng 默认走 single 变体） =====
   huiwen: {
-    arrangement: 'single',
-    symmetry: 'none',
-    complexity: 55,
-    textureDetail: 25,
-    culturalIntensity: 85,
+    arrangement: 'seamless',
+    symmetry: 'mirror',
+    complexity: 55, // 建议 45–60
+    textureDetail: 25, // 建议 20–30 偏平面
+    culturalIntensity: 85, // 建议 80–90
     colorScheme: COLOR_MONO_BLACK,
   },
   panchang: {
     arrangement: 'single',
-    symmetry: 'mirror',
-    complexity: 60,
-    textureDetail: 30,
-    culturalIntensity: 85,
+    symmetry: 'rotation', // 建议 旋转对称 / 镜像
+    complexity: 58, // 建议 50–65
+    textureDetail: 28, // 建议 20–35
+    culturalIntensity: 90, // 建议 85–95
     colorScheme: COLOR_MONO_BLACK,
   },
   jindi: {
     arrangement: 'seamless',
-    symmetry: 'none',
-    complexity: 65,
-    textureDetail: 30,
-    culturalIntensity: 85,
-    colorScheme: COLOR_MONO_BLACK,
-  },
-  fangsheng: {
-    arrangement: 'single',
     symmetry: 'mirror',
-    complexity: 60,
-    textureDetail: 28,
-    culturalIntensity: 85,
+    complexity: 62, // 建议 55–70
+    textureDetail: 30, // 建议 25–40
+    culturalIntensity: 80, // 建议 75–85
     colorScheme: COLOR_MONO_BLACK,
   },
+  fangsheng: FANGSHENG_LAYOUT_PRESETS.single,
 
   // ===== 花卉子类默认值 =====
   // 配色：每个子类对应一个具体潘通色号（见 SUBCATEGORY_PANTONE_MAP），不再使用 multicolor 语义预设

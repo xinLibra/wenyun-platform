@@ -27,9 +27,9 @@ export const SEMANTIC_MATCH_WEIGHT = 10
 
 export const CULTURAL_SEMANTICS: CulturalSemantic[] = [
   // ==================== 回纹 ====================
-  { id: 'huiwen_1', scene: '毕业/升学', keywords: ['毕业', '升学', '学业', '成才', '学有所成'], meaning: '回环往复、学无止境，寓意学业连续进取', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_1', scene: '毕业/升学', keywords: ['毕业', '升学', '学业', '成才', '学有所成', '成长'], meaning: '回环往复、学无止境，寓意学业连续进取', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
   { id: 'huiwen_2', scene: '励志/求学', keywords: ['励志', '求学', '苦读', '寒窗'], meaning: '回纹循环往复，寓意持之以恒、终有所成', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
-  { id: 'huiwen_3', scene: '新年/春节', keywords: ['新年', '春节', '过年', '迎春'], meaning: '回纹连绵不断、周而复始，新春纳福', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_3', scene: '新年/春节', keywords: ['新年', '春节', '过年', '迎春', '包装', '礼盒'], meaning: '回纹连绵不断、周而复始，新春纳福', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
   { id: 'huiwen_4', scene: '文化礼品', keywords: ['礼品', '伴手礼', '文创', '纪念品', '赠礼'], meaning: '回纹简洁耐看，书签、文创周边经典之选', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
   { id: 'huiwen_5', scene: '国风/非遗', keywords: ['国风', '传统', '非遗', '文化', '展览'], meaning: '经典几何非遗感，寓意文化传承、源远流长', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
   { id: 'huiwen_6', scene: '现代/极简', keywords: ['极简', '现代', '线条', '黑白', '冷淡', '简约'], meaning: '干净利落的几何美，回纹线描疏朗耐看', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
@@ -37,9 +37,10 @@ export const CULTURAL_SEMANTICS: CulturalSemantic[] = [
   { id: 'huiwen_8', scene: '传统服饰', keywords: ['汉服', '服饰', '衣饰', '绣品'], meaning: '回纹织带、服饰缘边，传统服饰经典边饰', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
   { id: 'huiwen_9', scene: '底纹/满铺', keywords: ['连续', '底纹', '纹理', '布料', '满铺'], meaning: '回纹四方连续，回环往复适合满铺底纹', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
   { id: 'huiwen_10', scene: '友谊/金兰', keywords: ['友谊', '金兰', '知己', '情谊'], meaning: '回纹回环，寓意情谊绵长、往来不息', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
+  { id: 'huiwen_11', scene: '乔迁/新居', keywords: ['乔迁', '新居', '搬家', '入宅'], meaning: '回纹回环连绵，寓意新居绵长顺遂、好运流转', patternLabel: '回纹', patternId: 'huiwen', themeId: 'geometric' },
 
   // ==================== 盘长纹 ====================
-  { id: 'panchang_1', scene: '婚礼/新婚', keywords: ['婚礼', '新婚', '结婚', '喜事', '婚庆'], meaning: '盘长连绵不断，寓意长长久久、白头偕老', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_1', scene: '婚礼/新婚', keywords: ['婚礼', '新婚', '结婚', '喜事', '婚庆', '百年', '喜庆'], meaning: '盘长连绵不断，寓意长长久久、白头偕老', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
   { id: 'panchang_2', scene: '订婚/良缘', keywords: ['订婚', '良缘', '定亲', '求婚', '提亲'], meaning: '盘长无终无始，寓意缘分绵长、佳偶天成', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
   { id: 'panchang_3', scene: '新年/春节', keywords: ['新年', '春节', '年货', '礼盒', '过年'], meaning: '盘长吉庆、礼序井然，新春纳福长长久久', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
   { id: 'panchang_4', scene: '节日庆典', keywords: ['节庆', '庆典', '宴会', '吉庆', '盛典'], meaning: '盘长为八吉祥之一，寓意吉庆祥和、福缘绵长', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
@@ -49,6 +50,8 @@ export const CULTURAL_SEMANTICS: CulturalSemantic[] = [
   { id: 'panchang_8', scene: 'logo/徽章', keywords: ['徽章', '居中', 'logo', '图标', '单独'], meaning: '盘长对称完整，适合徽章、居中单纹样', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
   { id: 'panchang_9', scene: '寿辰/祝寿', keywords: ['寿辰', '祝寿', '寿宴', '延年'], meaning: '盘长福寿绵长，寓意福气连绵、长寿安康', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
   { id: 'panchang_10', scene: '生日/生辰', keywords: ['生日', '生辰', '庆生'], meaning: '盘长福缘绵长，寓意岁岁福气相连', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_11', scene: '商务/会议', keywords: ['商务', '会议', '办公', '商谈', '职场'], meaning: '盘长绵长无断，寓意商务合作长久顺遂', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
+  { id: 'panchang_12', scene: '国风/非遗', keywords: ['国风', '非遗', '展览', '文化', '传统'], meaning: '盘长为八吉祥之一，经典非遗纹样，寓意文化传承福缘绵长', patternLabel: '盘长纹', patternId: 'panchang', themeId: 'geometric' },
 
   // ==================== 锦地纹 ====================
   { id: 'jindi_1', scene: '乔迁/新居', keywords: ['乔迁', '新居', '搬家', '入宅', '新房'], meaning: '满铺底纹、典雅体面，寓意新居锦绣盈门', patternLabel: '锦地纹', patternId: 'jindi', themeId: 'geometric' },
@@ -73,6 +76,9 @@ export const CULTURAL_SEMANTICS: CulturalSemantic[] = [
   { id: 'fangsheng_8', scene: '文创周边', keywords: ['手机壳', '托特包', '抱枕', '书签'], meaning: '方胜是产品定制常用几何，方正耐看', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
   { id: 'fangsheng_9', scene: '国风/非遗', keywords: ['国风', '传统', '非遗', '文化'], meaning: '经典几何，方胜承载传统吉祥寓意', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
   { id: 'fangsheng_10', scene: '乔迁/新居', keywords: ['乔迁', '新居', '搬家', '入宅'], meaning: '方胜纳福，寓意新居方正吉祥、得胜安居', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_11', scene: '毕业/升学', keywords: ['毕业', '升学', '学业', '成长'], meaning: '方胜得胜，寓意学业步步取胜、旗开得胜', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_12', scene: '婚礼/新婚', keywords: ['婚礼', '新婚', '喜庆', '百年好合', '同心'], meaning: '方胜同心同德、成双成对，寓意姻缘得胜圆满', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
+  { id: 'fangsheng_13', scene: '底纹/满铺', keywords: ['底纹', '满铺', '布料', '墙纸', '连续'], meaning: '方胜四方连续、疏朗有序，适合满铺底纹', patternLabel: '方胜纹', patternId: 'fangsheng', themeId: 'geometric' },
 
   // ==================== 牡丹纹 ====================
   { id: 'peony_1', scene: '富贵/荣华', keywords: ['富贵', '荣华', '富贵花开', '富丽'], meaning: '花开富贵，牡丹为花中之王，寓意富贵荣华', patternLabel: '牡丹纹', patternId: 'peony', themeId: 'floral' },

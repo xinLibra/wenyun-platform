@@ -25,8 +25,9 @@ export const PANTONE_TABLE: PantoneEntry[] = [
   // ===== 几何 =====
   { code: '19-4052 TCX', name: '深藏青', englishName: 'dark navy blue', hex: '#26364B' }, // huiwen 回纹
   { code: '18-1662 TCX', name: '宫墙红', englishName: 'palace red', hex: '#C3423F' }, // panchang 盘长纹
-  { code: '12-0752 TCX', name: '金色', englishName: 'golden yellow', hex: '#D4AF37' }, // jindi 锦地纹
-  { code: '18-1555 TCX', name: '朱红', englishName: 'vermillion', hex: '#E63946' }, // fangsheng 方胜纹
+  { code: '12-0752 TCX', name: '金色', englishName: 'golden yellow', hex: '#D4AF37' }, // 礼品点缀色
+  { code: '18-1555 TCX', name: '朱红', englishName: 'vermillion', hex: '#E63946' }, // 喜庆/盘长
+  { code: '19-4006 TCX', name: '墨黑', englishName: 'ink black', hex: '#1C1C1A' }, // fangsheng 方胜纹/线稿
   // ===== 花卉 =====
   { code: '16-1450 TCX', name: '藕粉', englishName: 'light pink', hex: '#E8B4B8' }, // peony / lotus
   { code: '14-3904 TCX', name: '淡紫', englishName: 'soft lilac', hex: '#A78BBA' }, // orchid

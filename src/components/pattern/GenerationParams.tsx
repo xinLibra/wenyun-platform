@@ -4,7 +4,7 @@ import { InkSlider } from '../ui/InkSlider'
 import { BambooToggle } from '../ui/Select'
 import { ColorPalette } from '../ui/ColorPalette'
 import { GenerationParams as GenerationParamsType, ARRANGEMENT_OPTIONS, SYMMETRY_OPTIONS, ColorSchemeParams } from '../../types/pattern'
-import { SUBCATEGORY_PANTONE_MAP, getPantoneForSubcategory } from '../../config/generationPresets'
+import { SUBCATEGORY_PANTONE_MAP, getPantoneForSubcategory, getFangshengLayoutPreset } from '../../config/generationPresets'
 import { findPantoneEntry, normalizePantoneCode } from '../../config/pantoneMap'
 import { getLoraEntry } from '../../config/loraMap'
 
@@ -44,6 +44,8 @@ const pantoneColors: Record<string, string> = {
   '19-3950': '#00695C',
   '12-0752 TCX': '#D4AF37',
   '12-0752': '#D4AF37',
+  '19-4006 TCX': '#1C1C1A',
+  '19-4006': '#1C1C1A',
   '20-0000 TCX': '#262626',
   '20-0000': '#262626',
   '11-0601 TCX': '#F5F5F5',
@@ -493,7 +495,8 @@ export function ColorPicker({ value, onChange, subcategoryId, subcategoryIds }: 
               const isFloral = entryList.some((e) => e?.themeId === 'floral')
               const isGeometric = entryList.some((e) => e?.themeId === 'geometric')
               // 几何色号集合
-              const geometricCodes = new Set<string>(['19-4052 TCX', '18-1662 TCX', '12-0752 TCX', '18-1555 TCX'])
+              // 几何常用色固定色板：深藏青、宫墙红、金色、朱红 + 墨黑（线稿/方胜可选补充）
+              const geometricCodes = new Set<string>(['19-4052 TCX', '18-1662 TCX', '12-0752 TCX', '18-1555 TCX', '19-4006 TCX'])
               // 花卉色号集合
               const flowerCodes = new Set<string>(['16-1450 TCX', '12-0752 TCX', '18-1662 TCX', '18-1555 TCX', '14-3904 TCX', '16-1720 TCX'])
 
@@ -661,7 +664,24 @@ export function GenerationParamsPanel({ value, onChange, selectedPatternName }: 
           <BambooToggle
             options={ARRANGEMENT_OPTIONS}
             value={value.arrangement}
-            onChange={(v) => onChange({ ...value, arrangement: v as GenerationParamsType['arrangement'] })}
+            onChange={(v) => {
+              const arrangement = v as GenerationParamsType['arrangement']
+              let next: GenerationParamsType = { ...value, arrangement }
+              // 方胜纹：排布=四方连续 ↔ 单独 自动切换对应预设（与 loraMap 排布分流一致），
+              // 回写疏密/平面化/文化强度/对称/推荐色；融合页由 buildFusionPromptParts 自动切 LoRA
+              if (value.dimension?.subcategory === 'fangsheng') {
+                const layoutPreset = getFangshengLayoutPreset(arrangement)
+                next = {
+                  ...next,
+                  complexity: layoutPreset.complexity,
+                  textureDetail: layoutPreset.textureDetail,
+                  culturalIntensity: layoutPreset.culturalIntensity,
+                  symmetry: layoutPreset.symmetry,
+                  colorScheme: layoutPreset.colorScheme,
+                }
+              }
+              onChange(next)
+            }}
           />
         </div>
 
