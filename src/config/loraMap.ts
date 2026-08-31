@@ -164,7 +164,7 @@ export const LORA_MAP: LoraMapEntry[] = [
     subLabelEn: 'huiwen (meander)',
     trigger: 'ichpattern_huiwen',
     loraFile: 'ICH_huiwen_pattern_lora_v1_epoch5_FINAL',
-    loraWeight: DEFAULT_LORA_WEIGHT,
+    loraWeight: 0.85, // 回纹结构弱、易画成放射花格，提权至推荐区间 0.8–0.9（2026-08-31）
   },
   {
     subcategoryId: 'panchang',

@@ -137,6 +137,13 @@ export function buildPromptParts(params: GenerationParams): {
     parts.push('Chinese traditional pattern')
   }
 
+  // 2.5) 几何结构强化：回纹补 greek key / 直角折线 / 雷纹等描述，
+  //      防止模型只看到 (meander) 就退化成放射状花格
+  const structureBoost = GEOMETRIC_STRUCTURE_BOOST[subcategoryId]
+  if (structureBoost) {
+    structureBoost.forEach((w) => parts.push(w))
+  }
+
   // 3) 颜色加权前缀：在 prompt 前半部分重复颜色词，增强模型对颜色的响应
   //    这是修复"选色后生成颜色不匹配"的核心改动——把颜色词放在 prompt 前半段
   //    并重复 2-3 次，让模型优先关注颜色描述。
@@ -512,6 +519,22 @@ const GEOMETRIC_STRUCTURE_TERMS: Record<string, string[]> = {
 /** 全部几何结构候选词（去重后的 flat 列表，用于负向"排除未选中子类"） */
 const ALL_GEOMETRIC_STRUCTURE_TERMS: string[] = Object.values(GEOMETRIC_STRUCTURE_TERMS).flat()
 
+/**
+ * 几何子类正向结构强化段（插在 "Chinese traditional ... pattern" 之后）。
+ * 回纹（2026-08-31）：预览出现"放射状小花/星形"而非回字形折线，说明仅 (meander) 结构约束不足，
+ * 补 greek key fret / rectangular spiral / thunder pattern / 正交直线 / 直角折线 / no floral。
+ */
+const GEOMETRIC_STRUCTURE_BOOST: Record<string, string[]> = {
+  huiwen: [
+    'greek key fret pattern',
+    'rectangular spiral meander',
+    'thunder pattern',
+    'continuous geometric orthogonal lines',
+    'right-angle turns',
+    'no floral',
+  ],
+}
+
 function buildNegativePromptCore(
   subcategoryIds: string[],
   colorScheme: ColorSchemeParams | undefined,
@@ -545,6 +568,13 @@ function buildNegativePromptCore(
     ALL_GEOMETRIC_STRUCTURE_TERMS.forEach((t) => {
       if (!protectedTerms.has(t)) base.push(t)
     })
+
+    // 几何纹样防"花卉化/星形化"：压 floral / star / snowflake / radial（回纹被画成放射状花格的元凶）。
+    // 融合含花卉子类（如 回纹+牡丹）时不压 floral，避免削弱融合侧特征。
+    const hasFloralSide = subcategoryIds.some((id) => getLoraEntry(id)?.themeId === 'floral')
+    if (!hasFloralSide) {
+      base.push('floral', 'flower', 'petal', 'blossom', 'star motif', 'snowflake', 'radial petals', 'radial')
+    }
   }
 
   // 方胜纹排布=单独/居中：额外排除连续/平铺特征，防止退化成大面积连续网
@@ -852,6 +882,12 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   } else {
     parts.push('Chinese traditional pattern')
   }
+
+  // 2.5) 几何结构强化（融合侧命中则并入，如 回纹+牡丹 时回纹补直角折线描述）
+  ;[subcategoryA, subcategoryB].forEach((id) => {
+    const boost = GEOMETRIC_STRUCTURE_BOOST[id]
+    if (boost) boost.forEach((w) => parts.push(w))
+  })
 
   // 3) 颜色加权前缀：在 prompt 前半部分重复颜色词，增强模型对颜色的响应
   const colorWeighted = buildColorWeightedClause(pseudoParams)
