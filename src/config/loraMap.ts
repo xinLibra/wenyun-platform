@@ -180,10 +180,10 @@ export const LORA_MAP: LoraMapEntry[] = [
     themeId: 'geometric',
     subLabelZh: '锦地纹',
     subLabelEn: 'jindi (brocade ground)',
-    // 训练 caption 真实触发词（data_geometric/dataset_floral/2_jindi_hex 首词）；占位文案已弃用
-    trigger: 'ichpattern_jindi_hex',
+    // 2026-08-31 专项：trigger 按交付约定写死 ichpattern_jindi（若实测触发弱，对照训练 caption 首词再调）
+    trigger: 'ichpattern_jindi',
     loraFile: 'ICH_jindi_pattern_lora_v4-000004',
-    loraWeight: DEFAULT_LORA_WEIGHT,
+    loraWeight: 0.85, // 锦地结构弱、易漂成软边抽象块面，固定 0.85（2026-08-31）
   },
   {
     subcategoryId: 'fangsheng',

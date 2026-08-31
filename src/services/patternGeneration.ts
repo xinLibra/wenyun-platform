@@ -187,6 +187,10 @@ export function buildPromptParts(params: GenerationParams): {
       if (subcategoryId === 'huiwen') {
         parts.push('framed border, isolated emblem, large empty margin, no repeat, no tiling')
       }
+      // 锦地单独：同款孤立纹样强化（数据集少见，用户主动选单独时保持清晰）
+      if (subcategoryId === 'jindi') {
+        parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
+      }
       break
     case 'seamless':
       parts.push('seamless repeat, tileable continuous pattern')
@@ -197,6 +201,10 @@ export function buildPromptParts(params: GenerationParams): {
       // 回纹连续版：显式写 meander / greek key border（2026-08-31 专项）
       if (subcategoryId === 'huiwen') {
         parts.push('tileable continuous meander pattern, repeating greek key border')
+      }
+      // 锦地连续版（默认）：满铺底纹细节（2026-08-31 专项）
+      if (subcategoryId === 'jindi') {
+        parts.push('dense elaborate full pattern, intricate detail')
       }
       break
     case 'adapted':
@@ -296,8 +304,8 @@ function buildColorWeightedClause(params: GenerationParams): string {
         if (tag === 'multicolor') {
           return `${en} color, ${en} color scheme, ${zh}色调, multicolor palette${hexPart}`
         }
-        // 盘长/回纹：配色写"线稿色"而非整块色，避免实底引导实物丝带/抽象块面（2026-08-31）
-        if (subId === 'panchang' || subId === 'huiwen') {
+        // 盘长/回纹/锦地：配色写"线稿色"而非整块色，避免实底引导实物丝带/抽象块面（2026-08-31）
+        if (subId === 'panchang' || subId === 'huiwen' || subId === 'jindi') {
           return `${en} line color, ${zh}线稿色${hexPart}`
         }
         return `${en} color, ${en} color scheme, ${zh}色调${hexPart}`
@@ -347,7 +355,7 @@ function buildColorClause(params: GenerationParams): string {
     if (p === 'monochrome-black') {
       // 盘长/回纹：黑白也写"线 + 浅底"，避免实底引导实物/块面
       const lineSub = params.dimension?.subcategory
-      return lineSub === 'panchang' || lineSub === 'huiwen'
+      return lineSub === 'panchang' || lineSub === 'huiwen' || lineSub === 'jindi'
         ? 'monochrome black line on off-white background'
         : 'monochrome black palette'
     }
@@ -364,8 +372,8 @@ function buildColorClause(params: GenerationParams): string {
         const en = pantoneInfo.englishName
         const hex = getPantoneHex(p)
         const hexPart = hex ? `, ${hex.toLowerCase()}` : ''
-        // 盘长/回纹：线色 + 浅底（避免整块实底引导实物丝带/抽象块面；2026-08-31）
-        if (subId === 'panchang' || subId === 'huiwen') {
+        // 盘长/回纹/锦地：线色 + 浅底（避免整块实底引导实物丝带/抽象块面；2026-08-31）
+        if (subId === 'panchang' || subId === 'huiwen' || subId === 'jindi') {
           return `${en} line color on off-white background, pantone ${p.split(' ')[0]}${hexPart}`
         }
         return `${en} color palette, pantone ${p.split(' ')[0]}${hexPart}`
@@ -570,6 +578,16 @@ const GEOMETRIC_STRUCTURE_BOOST: Record<string, string[]> = {
     '2d illustration',
     'graphic design',
   ],
+  jindi: [
+    // 2026-08-31 专项：对齐数据集（龟背六角蜂窝 / 连锁圆环 / 菱格花心 / 团窠满铺）
+    'hexagonal honeycomb lattice',
+    'tortoiseshell pattern',
+    'repeating hexagon grid',
+    'geometric brocade ground',
+    // 软边抽象块面漂移元凶：缺"平面介质"限定。2d illustration / graphic design 强制图案而非剪影
+    '2d illustration',
+    'graphic design',
+  ],
 }
 
 function buildNegativePromptCore(
@@ -614,8 +632,8 @@ function buildNegativePromptCore(
     }
 
     // 几何防"菱格/网格化"：压 diamond lattice / argyle（盘长易漂成红底菱格满铺）。
-    // 方胜正向依赖 diamond 语义（interlocking/overlapping diamond），不压菱形词，避免误伤。
-    if (!subcategoryIds.includes('fangsheng')) {
+    // 方胜正向依赖 diamond 语义；锦地数据集含"菱格花心"且用户要求 negative 不得含 lattice——两者都不压菱形词。
+    if (!subcategoryIds.includes('fangsheng') && !subcategoryIds.includes('jindi')) {
       base.push('diamond lattice', 'argyle', 'grid pattern', 'simple geometric diamonds')
     }
 
@@ -647,6 +665,18 @@ function buildNegativePromptCore(
         'abstract block',
         'fragmented shapes',
         'random geometry',
+      )
+    }
+
+    // 锦地强制"软边抽象块面"压制：深色底+白剪影漂移的元凶（2026-08-31 专项）。
+    if (subcategoryIds.includes('jindi')) {
+      base.push(
+        'soft blob',
+        'cloudy silhouette',
+        'abstract amorphous shapes',
+        'random geometry',
+        'watercolor',
+        'physical object',
       )
     }
   }
@@ -780,11 +810,11 @@ export async function generatePatternWithFallback(
     )
   }
 
-  // 校验 3：jindi 必须用训练 caption 真实触发词（ichpattern_jindi_hex），不得是占位文案
+  // 校验 3：jindi 触发词写死（2026-08-31 约定 ichpattern_jindi），不得是占位文案
   if (subcategoryId === 'jindi') {
     console.log(
       '[patternGeneration] 锦地触发词校验:',
-      trigger === 'ichpattern_jindi_hex' ? 'OK（真实 caption 触发词 ichpattern_jindi_hex）' : `异常（当前: ${trigger}）`,
+      trigger === 'ichpattern_jindi' ? 'OK（ichpattern_jindi）' : `异常（当前: ${trigger}）`,
     )
   }
 
@@ -832,6 +862,22 @@ export async function generatePatternWithFallback(
     )
     console.log('[patternGeneration] 回纹 final prompt:\n' + prompt)
     console.log('[patternGeneration] 回纹 final negative:\n' + negativePrompt)
+  }
+
+  // 校验 6：锦地 negative 必含软边/抽象压制词，且不得含结构禁词
+  if (subcategoryId === 'jindi') {
+    const required = ['soft blob', 'cloudy silhouette', 'abstract amorphous shapes', 'random geometry', 'watercolor', 'physical object']
+    const missing = required.filter((t) => !negativePrompt.includes(t))
+    const forbidden = ['hexagon', 'honeycomb', 'tortoiseshell', 'brocade', 'lattice', 'jindi', 'geometric ground']
+    const leakedForbidden = forbidden.filter((t) => negativePrompt.includes(t))
+    console.log(
+      '[patternGeneration] 锦地负向校验:',
+      missing.length === 0 && leakedForbidden.length === 0
+        ? 'OK（压制词齐全，且无 hexagon/honeycomb/tortoiseshell/brocade/lattice/jindi/geometric ground）'
+        : `${missing.length > 0 ? `缺: ${missing.join('/')}` : ''}${leakedForbidden.length > 0 ? ` 泄漏: ${leakedForbidden.join('/')}` : ''}`,
+    )
+    console.log('[patternGeneration] 锦地 final prompt:\n' + prompt)
+    console.log('[patternGeneration] 锦地 final negative:\n' + negativePrompt)
   }
 
   console.log(
@@ -1046,7 +1092,9 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
         subcategoryA === 'panchang' ||
         subcategoryB === 'panchang' ||
         subcategoryA === 'huiwen' ||
-        subcategoryB === 'huiwen'
+        subcategoryB === 'huiwen' ||
+        subcategoryA === 'jindi' ||
+        subcategoryB === 'jindi'
       ) {
         parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
       }
@@ -1060,6 +1108,10 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
       // 回纹连续版（融合侧命中则补）：显式 meander / greek key border
       if (subcategoryA === 'huiwen' || subcategoryB === 'huiwen') {
         parts.push('tileable continuous meander pattern, repeating greek key border')
+      }
+      // 锦地连续版（融合侧命中则补）：满铺底纹细节
+      if (subcategoryA === 'jindi' || subcategoryB === 'jindi') {
+        parts.push('dense elaborate full pattern, intricate detail')
       }
       break
     case 'adapted':
