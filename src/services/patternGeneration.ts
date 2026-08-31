@@ -324,14 +324,18 @@ function buildColorClause(params: GenerationParams): string {
     if (p === 'monochrome-black') return 'monochrome black palette'
     if (p === 'multicolor') return 'multicolor palette'
 
-    // 2. 真实潘通色号 → 按当前子类查 prompt 语义标签
-    //    使用 normalizePantone + stripTcx 比较，与 buildColorWeightedClause 保持一致
+    // 2. 真实潘通色号 → 按当前子类反查色名，写"具体色 + pantone code + HEX"。
+    //    2026-08-31 修复：不再回写 'monochrome black palette'——
+    //    前缀 buildColorWeightedClause 已写具体色（如 dark navy blue / #26364b），
+    //    末尾再写黑白调会与所选色冲突（如"深藏青 + monochrome black"并存）。
     const subId = params.dimension?.subcategory
     if (subId) {
       const pantoneInfo = getPantoneForSubcategory(subId)
       if (pantoneInfo && normalizePantone(pantoneInfo.pantoneCode, { stripTcx: true }) === normalizePantone(p, { stripTcx: true })) {
-        if (pantoneInfo.promptTag === 'monochrome-black') return 'monochrome black palette'
-        if (pantoneInfo.promptTag === 'multicolor') return 'multicolor palette'
+        const en = pantoneInfo.englishName
+        const hex = getPantoneHex(p)
+        const hexPart = hex ? `, ${hex.toLowerCase()}` : ''
+        return `${en} color palette, pantone ${p.split(' ')[0]}${hexPart}`
       }
     }
 
@@ -492,6 +496,22 @@ function inferDominantHue(colorScheme: ColorSchemeParams | undefined, subcategor
  *   2. 选中单色主色时，按 hue 抑制"抢色背景"，避免 SD 默认补蓝/灰背景
  *      （仅抑制 background，不抑制 accent，保留纹样本身少量对比色）
  */
+/**
+ * 几何子类 → 结构同义词（正向我方 prompt 已通过这些词描述结构）。
+ * 负向规则（2026-08-31 修复）：
+ *   - 选中某几何子类时，negative 中"保护"该子类的结构词——不能出现，否则与正向结构描述正负冲突、结构被弱化；
+ *   - 未选中子类的结构特征词照常排除（防几何串味，如生成回纹时禁止 endless knot / interlocking diamond）。
+ */
+const GEOMETRIC_STRUCTURE_TERMS: Record<string, string[]> = {
+  huiwen: ['meander pattern', 'greek key', 'meander'],
+  panchang: ['endless knot'],
+  jindi: ['brocade ground'],
+  fangsheng: ['interlocking diamond', 'nested diamond', 'overlapping diamond'],
+}
+
+/** 全部几何结构候选词（去重后的 flat 列表，用于负向"排除未选中子类"） */
+const ALL_GEOMETRIC_STRUCTURE_TERMS: string[] = Object.values(GEOMETRIC_STRUCTURE_TERMS).flat()
+
 function buildNegativePromptCore(
   subcategoryIds: string[],
   colorScheme: ColorSchemeParams | undefined,
@@ -513,21 +533,17 @@ function buildNegativePromptCore(
     'elephant',
     'low quality',
   ]
-  // 几何串味排除：任一几何子类被选中时，把未选中的几何纹样特征词全部排除
-  const GEOMETRIC_EXCLUSIONS: Record<string, string[]> = {
-    huiwen: ['endless knot', 'interlocking diamond', 'brocade ground'],
-    panchang: ['meander pattern', 'interlocking diamond', 'brocade ground'],
-    jindi: ['meander pattern', 'endless knot', 'interlocking diamond'],
-    fangsheng: ['meander pattern', 'endless knot', 'brocade ground'],
-  }
-  const activeGeo = subcategoryIds.filter((id) => id in GEOMETRIC_EXCLUSIONS)
+  // 几何串味排除 + 结构词保护：
+  //   - 选中子类的结构词 → 保护（不进 negative）
+  //   - 未选中子类的结构词 → 全部排除（防串味）
+  const activeGeo = subcategoryIds.filter((id) => id in GEOMETRIC_STRUCTURE_TERMS)
   if (activeGeo.length > 0) {
-    const activeTerms = new Set<string>()
+    const protectedTerms = new Set<string>()
     activeGeo.forEach((id) => {
-      GEOMETRIC_EXCLUSIONS[id].forEach((t) => activeTerms.add(t))
+      ;(GEOMETRIC_STRUCTURE_TERMS[id] ?? []).forEach((t) => protectedTerms.add(t))
     })
-    ;['meander pattern', 'endless knot', 'interlocking diamond', 'brocade ground'].forEach((t) => {
-      if (!activeTerms.has(t)) base.push(t)
+    ALL_GEOMETRIC_STRUCTURE_TERMS.forEach((t) => {
+      if (!protectedTerms.has(t)) base.push(t)
     })
   }
 
@@ -636,6 +652,38 @@ export async function generatePatternWithFallback(
   console.log('[patternGeneration] lora:', loraFile ? `<lora:${loraFile}:${loraWeight}>` : 'none', '| weight:', loraWeight)
   console.log('[patternGeneration] final prompt:', prompt)
   console.log('[patternGeneration] negative prompt:', negativePrompt)
+
+  // 校验 1：当前子类的结构词不得出现在 negative（防止与正向结构描述正负冲突）
+  const geoStructureTerms = GEOMETRIC_STRUCTURE_TERMS[subcategoryId] ?? []
+  const leakedStructureTerms = geoStructureTerms.filter((t) => negativePrompt.includes(t))
+  console.log(
+    '[patternGeneration] 结构词负向校验:',
+    subcategoryId,
+    leakedStructureTerms.length === 0
+      ? `OK（negative 未含自身结构词：${geoStructureTerms.join(' / ') || 'n/a'}）`
+      : `泄漏: ${leakedStructureTerms.join(' / ')}`,
+  )
+
+  // 校验 2：真实潘通色号时，prompt 不得同时出现具体色与 monochrome black palette（颜色单一）
+  const hasRealPantone = /pantone \d{2}-\d{4}/.test(prompt)
+  const hasMonoBlackPalette = prompt.includes('monochrome black palette')
+  if (hasRealPantone && hasMonoBlackPalette) {
+    console.warn('[patternGeneration] 颜色冲突: 具体潘通色号与 monochrome black palette 同时存在！')
+  } else {
+    console.log(
+      '[patternGeneration] 颜色一致性:',
+      hasRealPantone ? 'OK（具体潘通色号，单一色系）' : hasMonoBlackPalette ? 'OK（monochrome black 语义色）' : 'OK',
+    )
+  }
+
+  // 校验 3：jindi 必须用训练 caption 真实触发词（ichpattern_jindi_hex），不得是占位文案
+  if (subcategoryId === 'jindi') {
+    console.log(
+      '[patternGeneration] 锦地触发词校验:',
+      trigger === 'ichpattern_jindi_hex' ? 'OK（真实 caption 触发词 ichpattern_jindi_hex）' : `异常（当前: ${trigger}）`,
+    )
+  }
+
   console.log(
     '[patternGeneration] params: steps=', SD_DEFAULTS.steps,
     'cfg=', SD_DEFAULTS.cfgScale,

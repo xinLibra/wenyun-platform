@@ -54,7 +54,7 @@ export interface LoraMapEntry {
  * 文件已置于 WebUI models/Lora 目录（C:\LoraTraining\stable-diffusion-webui\models\Lora\）：
  *   - huiwen    → ICH_huiwen_pattern_lora_v1_epoch5_FINAL     trigger: ichpattern_huiwen
  *   - panchang  → ICH_panchang_pattern_lora_v1_epoch8_FINAL_DELIVERY  trigger: ichpattern_panchang
- *   - jindi     → ICH_jindi_pattern_lora_v4-000004            trigger: ichpattern_jindi
+ *   - jindi     → ICH_jindi_pattern_lora_v4-000004            trigger: ichpattern_jindi_hex（训练 caption 真实第一词）
  *   - fangsheng → 排布分流（FANGSHENG_LORA_MAP）：
  *       排布=单独/居中 → ICH_fangsheng_single_lora_v2-000001    trigger: ichpattern_fangsheng_single
  *       排布=四方连续 → ICH_fangsheng_continuous_lora_v1-000003 trigger: ichpattern_fangsheng_continuous
@@ -180,7 +180,8 @@ export const LORA_MAP: LoraMapEntry[] = [
     themeId: 'geometric',
     subLabelZh: '锦地纹',
     subLabelEn: 'jindi (brocade ground)',
-    trigger: 'ichpattern_jindi',
+    // 训练 caption 真实触发词（data_geometric/dataset_floral/2_jindi_hex 首词）；占位文案已弃用
+    trigger: 'ichpattern_jindi_hex',
     loraFile: 'ICH_jindi_pattern_lora_v4-000004',
     loraWeight: DEFAULT_LORA_WEIGHT,
   },
