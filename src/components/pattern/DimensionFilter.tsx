@@ -82,7 +82,7 @@ export function DimensionFilter({ value, onChange }: DimensionFilterProps) {
         <p className="font-song text-sm text-deep-blue mb-2">
           纹样子类 <span className="text-palace-red">*</span>
           <span className="text-deep-blue-light text-xs ml-2">
-            对应具体 LoRA（如鹤纹、牡丹纹）
+            对应具体 LoRA（如回纹、牡丹纹）
           </span>
         </p>
         {!mainTheme ? (
