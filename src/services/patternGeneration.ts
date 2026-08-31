@@ -10,7 +10,7 @@
  */
 
 import { GenerationParams, ColorSchemeParams } from '../types/pattern'
-import { getLoraEntry, DEFAULT_LORA_WEIGHT } from '../config/loraMap'
+import { getLoraEntry, DEFAULT_LORA_WEIGHT, FANGSHENG_LORA_MAP } from '../config/loraMap'
 import { getPantoneForSubcategory } from '../config/generationPresets'
 import { getPantoneHex as getPantoneHexFromMap } from '../config/pantoneMap'
 import { mockGeneratePattern } from './mockGeneration'
@@ -105,22 +105,25 @@ export function buildPromptParts(params: GenerationParams): {
   const sub = getLoraEntry(params.dimension.subcategory)
   // 多 trigger 兼容：loraMap.trigger 支持逗号分隔字符串（比如牡丹：'ich_flower_pattern, ich_peony_pattern'）
   // 逐项写入 prompt 前部，保证每个触发词都被模型作为独立 token 单元处理
-  const triggers: string[] = (sub?.trigger ?? '')
+  let triggers: string[] = (sub?.trigger ?? '')
     .split(',')
     .map((t) => t.trim())
     .filter(Boolean)
   const subLabelEn = sub?.subLabelEn ?? null
-  const loraFile = sub?.loraFile ?? null
-  const loraWeight = sub?.loraWeight ?? DEFAULT_LORA_WEIGHT
+  let loraFile = sub?.loraFile ?? null
+  let loraWeight = sub?.loraWeight ?? DEFAULT_LORA_WEIGHT
   const subcategoryId = params.dimension.subcategory ?? 'n/a'
 
   const parts: string[] = []
 
-  // 0) 方胜纹排布子触发：排布=单独/居中 → 加载方胜单独 LoRA 触发词；
-  //    排布=四方连续 → 加载方胜连续 LoRA 触发词（trigger 对齐训练 caption）
+  // 0) 方胜纹排布分流：排布=单独/居中 → 单独 LoRA（trigger: ichpattern_fangsheng_single）；
+  //    排布=四方连续 → 连续 LoRA（trigger: ichpattern_fangsheng_continuous）。
+  //    直接覆盖 trigger/loraFile，一次只挂一个方胜 LoRA，禁止两个同时加载。
   if (subcategoryId === 'fangsheng') {
     const isSeamless = params.arrangement === 'seamless'
-    triggers.push(isSeamless ? 'ichpattern_fangsheng_continuous' : 'ichpattern_fangsheng_single')
+    const fs = FANGSHENG_LORA_MAP[isSeamless ? 'continuous' : 'single']
+    triggers = [fs.trigger]
+    loraFile = fs.loraFile
   }
 
   // 1) 触发词（牡丹/莲花/花鸟 双 trigger 都会完整入列）
@@ -169,6 +172,10 @@ export function buildPromptParts(params: GenerationParams): {
   switch (params.arrangement) {
     case 'single':
       parts.push('single motif, centered medallion')
+      // 方胜单独：强化"单个纹样"语义，避免退化成大面积连续网
+      if (subcategoryId === 'fangsheng') {
+        parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
+      }
       break
     case 'seamless':
       parts.push('seamless repeat, tileable continuous pattern')
@@ -485,7 +492,11 @@ function inferDominantHue(colorScheme: ColorSchemeParams | undefined, subcategor
  *   2. 选中单色主色时，按 hue 抑制"抢色背景"，避免 SD 默认补蓝/灰背景
  *      （仅抑制 background，不抑制 accent，保留纹样本身少量对比色）
  */
-function buildNegativePromptCore(subcategoryIds: string[], colorScheme: ColorSchemeParams | undefined): string {
+function buildNegativePromptCore(
+  subcategoryIds: string[],
+  colorScheme: ColorSchemeParams | undefined,
+  arrangement?: GenerationParams['arrangement'],
+): string {
   const base = [
     'realistic photo',
     '3d render',
@@ -520,6 +531,19 @@ function buildNegativePromptCore(subcategoryIds: string[], colorScheme: ColorSch
     })
   }
 
+  // 方胜纹排布=单独/居中：额外排除连续/平铺特征，防止退化成大面积连续网
+  if (subcategoryIds.includes('fangsheng') && arrangement !== 'seamless') {
+    base.push(
+      'seamless',
+      'tileable',
+      'continuous pattern',
+      'repeating pattern',
+      'full background pattern',
+      'multiple motifs',
+      'all-over pattern',
+    )
+  }
+
   // 偏色背景抑制：按主色 hue 抑制非选中色 background
   const hue = inferDominantHue(colorScheme, subcategoryIds)
   if (hue !== null) {
@@ -535,6 +559,7 @@ export function buildNegativePrompt(params: GenerationParams): string {
   return buildNegativePromptCore(
     params.dimension?.subcategory ? [params.dimension.subcategory] : [],
     params.colorScheme,
+    params.arrangement,
   )
 }
 
@@ -727,19 +752,26 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     .split(',')
     .map((t) => t.trim())
     .filter(Boolean)
-  // 方胜纹排布子触发（融合）：单独/居中 → 单独 LoRA；四方连续 → 连续 LoRA
-  if (subcategoryA === 'fangsheng') {
-    triggersA.push(
-      params.arrangement === 'seamless' ? 'ichpattern_fangsheng_continuous' : 'ichpattern_fangsheng_single'
-    )
-  }
-  if (subcategoryB === 'fangsheng') {
-    triggersB.push(
-      params.arrangement === 'seamless' ? 'ichpattern_fangsheng_continuous' : 'ichpattern_fangsheng_single'
-    )
-  }
   const subLabelEnA = subA?.subLabelEn ?? null
   const subLabelEnB = subB?.subLabelEn ?? null
+
+  // 方胜纹排布分流（融合）：排布=单独/居中 → 单独 LoRA；排布=四方连续 → 连续 LoRA。
+  // 直接覆盖 trigger 与 lora 文件，一次只挂一个方胜 LoRA，禁止两个同时加载。
+  const isSeamless = params.arrangement === 'seamless'
+  let loraFileA = subA?.loraFile ?? null
+  let loraFileB = subB?.loraFile ?? null
+  if (subcategoryA === 'fangsheng') {
+    const fs = FANGSHENG_LORA_MAP[isSeamless ? 'continuous' : 'single']
+    triggersA.length = 0
+    triggersA.push(fs.trigger)
+    loraFileA = fs.loraFile
+  }
+  if (subcategoryB === 'fangsheng') {
+    const fs = FANGSHENG_LORA_MAP[isSeamless ? 'continuous' : 'single']
+    triggersB.length = 0
+    triggersB.push(fs.trigger)
+    loraFileB = fs.loraFile
+  }
 
   // 权重映射：推荐权重 × 比例（公式见函数上方注释）
   const clampW = (w: number) => Math.max(0, Math.min(1.5, w))
@@ -747,8 +779,11 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     Math.round(clampW((recommended * ratio) / 100) * 100) / 100
   const weightA = calcWeight(subA?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioA)
   const weightB = calcWeight(subB?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioB)
-  const loraA = subA?.loraFile && weightA >= 0.05 ? { file: subA.loraFile, weight: weightA } : null
-  const loraB = subB?.loraFile && weightB >= 0.05 ? { file: subB.loraFile, weight: weightB } : null
+  const loraA = loraFileA && weightA >= 0.05 ? { file: loraFileA, weight: weightA } : null
+  const loraB = loraFileB && weightB >= 0.05 ? { file: loraFileB, weight: weightB } : null
+
+  // 融合是否含方胜：任一槽为方胜时，按全局排布决定"单独/连续"语义与负向提示
+  const hasFangsheng = subcategoryA === 'fangsheng' || subcategoryB === 'fangsheng'
 
   // 复用单纹样的颜色/排布/对称等装饰段；伪 params 挂子类 A，用于潘通色号反查
   const pseudoParams: GenerationParams = {
@@ -801,6 +836,10 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   switch (params.arrangement) {
     case 'single':
       parts.push('single motif, centered medallion')
+      // 融合含方胜且排布=单独：强化"单个纹样"语义，避免退化成连续网
+      if (hasFangsheng) {
+        parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
+      }
       break
     case 'seamless':
       parts.push('seamless repeat, tileable continuous pattern')
@@ -844,7 +883,7 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   if (loraB) parts.push(`<lora:${loraB.file}:${loraB.weight}>`)
 
   const prompt = parts.join(', ')
-  const negativePrompt = buildNegativePromptCore([subcategoryA, subcategoryB], params.colorScheme)
+  const negativePrompt = buildNegativePromptCore([subcategoryA, subcategoryB], params.colorScheme, params.arrangement)
 
   return {
     prompt,

@@ -8,6 +8,8 @@
  *  2) loraFile 仅录入「最终应存在于本机 WebUI 的 models/Lora/ 目录」的文件名（不含路径、不含扩展名）
  *     这些文件由用户手动放置（几何部分来自 C:\LoraTraining\outputs\<subdir>\，花卉部分来自朋友交付）
  *  3) 找不到 LoRA 的子类：loraFile 留空（null），prompt 仍然会带 trigger，只是不追加 <lora:...:w> 标签
+ *  4) 方胜纹按排布分流（FANGSHENG_LORA_MAP）：单独/居中 → single LoRA；四方连续 → continuous LoRA
+ *     一次请求只挂一个方胜 LoRA，禁止同时加载两个
  *
  * 默认权重：
  *   - 几何 DEFAULT_LORA_WEIGHT = 0.7（与训练验证时一致，推荐 0.70–0.85）
@@ -48,14 +50,14 @@ export interface LoraMapEntry {
 /**
  * 映射表
  *
- * ===== 几何 4 个子类 =====
- * （trigger 与训练 caption 对齐；LoRA 文件尚未部署时 loraFile=null，只写 trigger）
- *   - huiwen    → trigger: ichpattern_huiwen
- *   - panchang  → trigger: ichpattern_panchang
- *   - jindi     → trigger: ichpattern_jindi（若有 hex/floral 等子触发，按现有 LoRA 映射追加）
- *   - fangsheng → trigger: ichpattern_fangsheng
- *     排布=单独/居中 → 追加 ichpattern_fangsheng_single（单独 LoRA）
- *     排布=四方连续 → 追加 ichpattern_fangsheng_continuous（连续 LoRA）
+ * ===== 几何 4 个子类（2026-08-31 已全部接入真实 LoRA） =====
+ * 文件已置于 WebUI models/Lora 目录（C:\LoraTraining\stable-diffusion-webui\models\Lora\）：
+ *   - huiwen    → ICH_huiwen_pattern_lora_v1_epoch5_FINAL     trigger: ichpattern_huiwen
+ *   - panchang  → ICH_panchang_pattern_lora_v1_epoch8_FINAL_DELIVERY  trigger: ichpattern_panchang
+ *   - jindi     → ICH_jindi_pattern_lora_v4-000004            trigger: ichpattern_jindi
+ *   - fangsheng → 排布分流（FANGSHENG_LORA_MAP）：
+ *       排布=单独/居中 → ICH_fangsheng_single_lora_v2-000001    trigger: ichpattern_fangsheng_single
+ *       排布=四方连续 → ICH_fangsheng_continuous_lora_v1-000003 trigger: ichpattern_fangsheng_continuous
  *     （由 buildPrompt 按 arrangement 自动切换，见 patternGeneration.ts）
  *
  * ===== 花卉 8 个专属子类（均已挂载专属 LoRA） =====
@@ -161,8 +163,7 @@ export const LORA_MAP: LoraMapEntry[] = [
     subLabelZh: '回纹',
     subLabelEn: 'huiwen (meander)',
     trigger: 'ichpattern_huiwen',
-    // 几何 LoRA 文件未部署时只写 trigger，不追加 <lora:...> 标签
-    loraFile: null,
+    loraFile: 'ICH_huiwen_pattern_lora_v1_epoch5_FINAL',
     loraWeight: DEFAULT_LORA_WEIGHT,
   },
   {
@@ -171,7 +172,7 @@ export const LORA_MAP: LoraMapEntry[] = [
     subLabelZh: '盘长纹',
     subLabelEn: 'panchang (endless knot)',
     trigger: 'ichpattern_panchang',
-    loraFile: null,
+    loraFile: 'ICH_panchang_pattern_lora_v1_epoch8_FINAL_DELIVERY',
     loraWeight: DEFAULT_LORA_WEIGHT,
   },
   {
@@ -180,7 +181,7 @@ export const LORA_MAP: LoraMapEntry[] = [
     subLabelZh: '锦地纹',
     subLabelEn: 'jindi (brocade ground)',
     trigger: 'ichpattern_jindi',
-    loraFile: null,
+    loraFile: 'ICH_jindi_pattern_lora_v4-000004',
     loraWeight: DEFAULT_LORA_WEIGHT,
   },
   {
@@ -188,14 +189,32 @@ export const LORA_MAP: LoraMapEntry[] = [
     themeId: 'geometric',
     subLabelZh: '方胜纹',
     subLabelEn: 'fangsheng (overlapping diamond)',
+    // 排布分流在 buildPrompt 完成：loraFile/trigger 由 FANGSHENG_LORA_MAP 按 arrangement 覆盖
     trigger: 'ichpattern_fangsheng',
-    // 排布子触发由 buildPrompt 按 arrangement 追加：
-    //   single/居中 → ichpattern_fangsheng_single（单独 LoRA）
-    //   seamless     → ichpattern_fangsheng_continuous（连续 LoRA）
     loraFile: null,
     loraWeight: DEFAULT_LORA_WEIGHT,
   },
 ]
+
+/**
+ * 方胜纹排布 → LoRA 映射（仅当 subcategoryId === 'fangsheng' 时使用）
+ *   - single      → 排布=单独/居中徽章：单纹样 LoRA（禁止大面积连续网）
+ *   - continuous  → 排布=四方连续/满铺：连续铺排 LoRA
+ * 一次请求只挂一个方胜 LoRA，禁止两个同时加载。
+ */
+export const FANGSHENG_LORA_MAP: Record<
+  'single' | 'continuous',
+  { loraFile: string; trigger: string }
+> = {
+  single: {
+    loraFile: 'ICH_fangsheng_single_lora_v2-000001',
+    trigger: 'ichpattern_fangsheng_single',
+  },
+  continuous: {
+    loraFile: 'ICH_fangsheng_continuous_lora_v1-000003',
+    trigger: 'ichpattern_fangsheng_continuous',
+  },
+}
 
 /** 索引：subcategoryId → LoraMapEntry */
 const LORA_INDEX: Record<string, LoraMapEntry> = LORA_MAP.reduce(
