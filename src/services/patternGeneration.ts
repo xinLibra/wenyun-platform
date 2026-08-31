@@ -131,7 +131,12 @@ export function buildPromptParts(params: GenerationParams): {
 
   // 2) Chinese traditional {子类英文} pattern
   if (subLabelEn) {
-    parts.push(`Chinese traditional ${subLabelEn} pattern`)
+    // 锦地：固定前缀要求 "jindi brocade ground pattern"（不带括号变体）
+    parts.push(
+      subcategoryId === 'jindi'
+        ? 'Chinese traditional jindi brocade ground pattern'
+        : `Chinese traditional ${subLabelEn} pattern`,
+    )
   } else {
     // 没有具体子类时，仍保留 "Chinese traditional pattern" 的语义
     parts.push('Chinese traditional pattern')
@@ -152,17 +157,21 @@ export function buildPromptParts(params: GenerationParams): {
     parts.push(colorWeighted)
   }
 
-  // 4) decorative motif（固定）
-  parts.push('decorative motif')
+  // 4) decorative motif（固定；锦地已并入固定前缀，避免重复）
+  if (subcategoryId !== 'jindi') {
+    parts.push('decorative motif')
+  }
 
-  // 5) 平面/肌理：textureDetail 0–100
+  // 5) 平面/肌理：textureDetail 0–100（锦地默认偏 flat，flat 限定已在固定前缀，跳过避免重复）
   const tex = params.textureDetail ?? 50
-  if (tex < 40) {
-    parts.push('flat pattern design, clean lines, no texture')
-  } else if (tex < 70) {
-    parts.push('flat pattern design, subtle surface hint')
-  } else {
-    parts.push('embroidery texture')
+  if (subcategoryId !== 'jindi') {
+    if (tex < 40) {
+      parts.push('flat pattern design, clean lines, no texture')
+    } else if (tex < 70) {
+      parts.push('flat pattern design, subtle surface hint')
+    } else {
+      parts.push('embroidery texture')
+    }
   }
 
   // 6) 疏密：complexity 0–100
@@ -187,9 +196,9 @@ export function buildPromptParts(params: GenerationParams): {
       if (subcategoryId === 'huiwen') {
         parts.push('framed border, isolated emblem, large empty margin, no repeat, no tiling')
       }
-      // 锦地单独：同款孤立纹样强化（数据集少见，用户主动选单独时保持清晰）
+      // 锦地单独：centered medallion + single motif（基础已含）+ large empty margin / no seamless tile（2026-08-31）
       if (subcategoryId === 'jindi') {
-        parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
+        parts.push('large empty margin, no seamless tile')
       }
       break
     case 'seamless':
@@ -202,10 +211,7 @@ export function buildPromptParts(params: GenerationParams): {
       if (subcategoryId === 'huiwen') {
         parts.push('tileable continuous meander pattern, repeating greek key border')
       }
-      // 锦地连续版（默认）：满铺底纹细节（2026-08-31 专项）
-      if (subcategoryId === 'jindi') {
-        parts.push('dense elaborate full pattern, intricate detail')
-      }
+      // 锦地连续版（默认）：疏密由第 6 步统一 caption 表控制，不在此重复
       break
     case 'adapted':
       parts.push('fitted panel motif, shaped to border')
@@ -218,7 +224,7 @@ export function buildPromptParts(params: GenerationParams): {
       parts.push('bilateral mirror symmetry')
       break
     case 'rotation':
-      parts.push('radial rotational symmetry')
+      parts.push('rotational symmetry')
       break
     case 'none':
       parts.push('asymmetric free composition')
@@ -579,12 +585,18 @@ const GEOMETRIC_STRUCTURE_BOOST: Record<string, string[]> = {
     'graphic design',
   ],
   jindi: [
-    // 2026-08-31 专项：对齐数据集（龟背六角蜂窝 / 连锁圆环 / 菱格花心 / 团窠满铺）
+    // 2026-08-31 二次修订：按用户固定前缀顺序（龟背六角 / 套环 / 菱格），
+    // decorative motif / flat pattern design / clean lines / no texture 并入前缀，确保出现在配色之前
     'hexagonal honeycomb lattice',
     'tortoiseshell pattern',
-    'repeating hexagon grid',
+    'repeating regular hexagon grid',
     'geometric brocade ground',
-    // 软边抽象块面漂移元凶：缺"平面介质"限定。2d illustration / graphic design 强制图案而非剪影
+    'clean geometric cells',
+    'decorative motif',
+    'flat pattern design',
+    'clean lines',
+    'no texture',
+    // 介质限定（防软边剪影漂移）：紧跟固定前缀，仍在配色之前
     '2d illustration',
     'graphic design',
   ],
@@ -668,14 +680,19 @@ function buildNegativePromptCore(
       )
     }
 
-    // 锦地强制"软边抽象块面"压制：深色底+白剪影漂移的元凶（2026-08-31 专项）。
+    // 锦地强制"软边抽象块面"压制：深色底+白剪影漂移的元凶（2026-08-31 专项，二次修订）。
+    // broken lattice（破格/烂网格）是刻意压制词，允许含 lattice 子串，不算结构词泄漏。
     if (subcategoryIds.includes('jindi')) {
       base.push(
         'soft blob',
         'cloudy silhouette',
         'abstract amorphous shapes',
+        'watercolor wash',
+        'irregular organic blobs',
+        'photorealistic fabric folds',
+        'product photo',
+        'broken lattice',
         'random geometry',
-        'watercolor',
         'physical object',
       )
     }
@@ -866,15 +883,29 @@ export async function generatePatternWithFallback(
 
   // 校验 6：锦地 negative 必含软边/抽象压制词，且不得含结构禁词
   if (subcategoryId === 'jindi') {
-    const required = ['soft blob', 'cloudy silhouette', 'abstract amorphous shapes', 'random geometry', 'watercolor', 'physical object']
+    const required = [
+      'soft blob',
+      'cloudy silhouette',
+      'abstract amorphous shapes',
+      'watercolor wash',
+      'irregular organic blobs',
+      'photorealistic fabric folds',
+      'product photo',
+      'broken lattice',
+      'random geometry',
+      'physical object',
+    ]
     const missing = required.filter((t) => !negativePrompt.includes(t))
-    const forbidden = ['hexagon', 'honeycomb', 'tortoiseshell', 'brocade', 'lattice', 'jindi', 'geometric ground']
+    const forbidden = ['hexagon', 'honeycomb', 'tortoiseshell', 'brocade', 'jindi', 'geometric ground']
     const leakedForbidden = forbidden.filter((t) => negativePrompt.includes(t))
+    // lattice 特判：只允许 broken lattice（刻意压制词），独立 lattice 结构词算泄漏
+    const latticeOnlyBroken = negativePrompt.includes('lattice') && !negativePrompt.includes('broken lattice')
+    const ok = missing.length === 0 && leakedForbidden.length === 0 && !latticeOnlyBroken
     console.log(
       '[patternGeneration] 锦地负向校验:',
-      missing.length === 0 && leakedForbidden.length === 0
-        ? 'OK（压制词齐全，且无 hexagon/honeycomb/tortoiseshell/brocade/lattice/jindi/geometric ground）'
-        : `${missing.length > 0 ? `缺: ${missing.join('/')}` : ''}${leakedForbidden.length > 0 ? ` 泄漏: ${leakedForbidden.join('/')}` : ''}`,
+      ok
+        ? 'OK（压制词齐全，无 hexagon/honeycomb/tortoiseshell/brocade/jindi/geometric ground，lattice 仅以 broken lattice 刻意压制形式存在）'
+        : `${missing.length > 0 ? `缺: ${missing.join('/')}` : ''}${leakedForbidden.length > 0 ? ` 泄漏: ${leakedForbidden.join('/')}` : ''}${latticeOnlyBroken ? ' lattice 泄漏' : ''}`,
     )
     console.log('[patternGeneration] 锦地 final prompt:\n' + prompt)
     console.log('[patternGeneration] 锦地 final negative:\n' + negativePrompt)
@@ -1059,17 +1090,21 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   const colorWeighted = buildColorWeightedClause(pseudoParams)
   if (colorWeighted) parts.push(colorWeighted)
 
-  // 4) decorative motif（固定）
-  parts.push('decorative motif')
+  // 4) decorative motif（固定；锦地已并入固定前缀，避免重复）
+  if (subcategoryA !== 'jindi' && subcategoryB !== 'jindi') {
+    parts.push('decorative motif')
+  }
 
-  // 5) 平面/肌理：textureDetail 0–100
+  // 5) 平面/肌理：textureDetail 0–100（锦地默认偏 flat，flat 限定已在固定前缀，跳过避免重复）
   const tex = params.textureDetail ?? 50
-  if (tex < 40) {
-    parts.push('flat pattern design, clean lines, no texture')
-  } else if (tex < 70) {
-    parts.push('flat pattern design, subtle surface hint')
-  } else {
-    parts.push('embroidery texture')
+  if (subcategoryA !== 'jindi' && subcategoryB !== 'jindi') {
+    if (tex < 40) {
+      parts.push('flat pattern design, clean lines, no texture')
+    } else if (tex < 70) {
+      parts.push('flat pattern design, subtle surface hint')
+    } else {
+      parts.push('embroidery texture')
+    }
   }
 
   // 6) 疏密：complexity 0–100
@@ -1092,11 +1127,13 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
         subcategoryA === 'panchang' ||
         subcategoryB === 'panchang' ||
         subcategoryA === 'huiwen' ||
-        subcategoryB === 'huiwen' ||
-        subcategoryA === 'jindi' ||
-        subcategoryB === 'jindi'
+        subcategoryB === 'huiwen'
       ) {
         parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
+      }
+      // 锦地单独：large empty margin / no seamless tile（2026-08-31）
+      if (subcategoryA === 'jindi' || subcategoryB === 'jindi') {
+        parts.push('large empty margin, no seamless tile')
       }
       break
     case 'seamless':
@@ -1109,10 +1146,7 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
       if (subcategoryA === 'huiwen' || subcategoryB === 'huiwen') {
         parts.push('tileable continuous meander pattern, repeating greek key border')
       }
-      // 锦地连续版（融合侧命中则补）：满铺底纹细节
-      if (subcategoryA === 'jindi' || subcategoryB === 'jindi') {
-        parts.push('dense elaborate full pattern, intricate detail')
-      }
+      // 锦地连续版（默认）：疏密由第 6 步统一 caption 表控制，不在此重复
       break
     case 'adapted':
       parts.push('fitted panel motif, shaped to border')
@@ -1125,7 +1159,7 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
       parts.push('bilateral mirror symmetry')
       break
     case 'rotation':
-      parts.push('radial rotational symmetry')
+      parts.push('rotational symmetry')
       break
     case 'none':
       parts.push('asymmetric free composition')
