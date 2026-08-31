@@ -168,7 +168,7 @@ export function getFangshengLayoutPreset(
 export const GENERATION_PRESETS: Record<string, GenerationPreset> = {
   // ===== 几何（4 个，数值按 2026-08-31 建议表；fangsheng 默认走 single 变体） =====
   huiwen: {
-    arrangement: 'seamless',
+    arrangement: 'single', // 2026-08-31：训练预览多为居中带框纹样，默认单独纹样（用户选四方连续再切 seamless 分支）
     symmetry: 'mirror',
     complexity: 55, // 建议 45–60
     textureDetail: 25, // 建议 20–30 偏平面

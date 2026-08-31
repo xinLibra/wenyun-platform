@@ -183,12 +183,20 @@ export function buildPromptParts(params: GenerationParams): {
       if (subcategoryId === 'fangsheng' || subcategoryId === 'panchang') {
         parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
       }
+      // 回纹单独：训练预览多为居中带框纹样（framed border）
+      if (subcategoryId === 'huiwen') {
+        parts.push('framed border, isolated emblem, large empty margin, no repeat, no tiling')
+      }
       break
     case 'seamless':
       parts.push('seamless repeat, tileable continuous pattern')
       // 盘长连续版：补"交织结"连续语义，避免退化成单纯菱形网
       if (subcategoryId === 'panchang') {
         parts.push('continuous interlocking knot pattern')
+      }
+      // 回纹连续版：显式写 meander / greek key border（2026-08-31 专项）
+      if (subcategoryId === 'huiwen') {
+        parts.push('tileable continuous meander pattern, repeating greek key border')
       }
       break
     case 'adapted':
@@ -288,8 +296,8 @@ function buildColorWeightedClause(params: GenerationParams): string {
         if (tag === 'multicolor') {
           return `${en} color, ${en} color scheme, ${zh}色调, multicolor palette${hexPart}`
         }
-        // 盘长：配色写"线稿色"而非整块色，避免 palace red 实底引导实物丝带（2026-08-31）
-        if (subId === 'panchang') {
+        // 盘长/回纹：配色写"线稿色"而非整块色，避免实底引导实物丝带/抽象块面（2026-08-31）
+        if (subId === 'panchang' || subId === 'huiwen') {
           return `${en} line color, ${zh}线稿色${hexPart}`
         }
         return `${en} color, ${en} color scheme, ${zh}色调${hexPart}`
@@ -337,8 +345,9 @@ function buildColorClause(params: GenerationParams): string {
     const p = cs.pantone.trim()
     // 1. 语义关键词（直接识别）
     if (p === 'monochrome-black') {
-      // 盘长：黑白也写"线 + 浅底"，避免实底引导实物
-      return params.dimension?.subcategory === 'panchang'
+      // 盘长/回纹：黑白也写"线 + 浅底"，避免实底引导实物/块面
+      const lineSub = params.dimension?.subcategory
+      return lineSub === 'panchang' || lineSub === 'huiwen'
         ? 'monochrome black line on off-white background'
         : 'monochrome black palette'
     }
@@ -355,8 +364,8 @@ function buildColorClause(params: GenerationParams): string {
         const en = pantoneInfo.englishName
         const hex = getPantoneHex(p)
         const hexPart = hex ? `, ${hex.toLowerCase()}` : ''
-        // 盘长：线色 + 浅底（避免整块大红实底引导实物丝带；2026-08-31）
-        if (subId === 'panchang') {
+        // 盘长/回纹：线色 + 浅底（避免整块实底引导实物丝带/抽象块面；2026-08-31）
+        if (subId === 'panchang' || subId === 'huiwen') {
           return `${en} line color on off-white background, pantone ${p.split(' ')[0]}${hexPart}`
         }
         return `${en} color palette, pantone ${p.split(' ')[0]}${hexPart}`
@@ -543,12 +552,14 @@ const ALL_GEOMETRIC_STRUCTURE_TERMS: string[] = Object.values(GEOMETRIC_STRUCTUR
  */
 const GEOMETRIC_STRUCTURE_BOOST: Record<string, string[]> = {
   huiwen: [
-    'greek key fret pattern',
+    // 2026-08-31 专项：对齐训练预览（直角回纹 / greek key 边框 / 矩形螺旋迷宫 / 居中带框）
     'rectangular spiral meander',
-    'thunder pattern',
-    'continuous geometric orthogonal lines',
-    'right-angle turns',
-    'no floral',
+    'greek key fret',
+    'orthogonal right-angle lines',
+    'nested rectangular maze',
+    // 实物/抽象块面漂移元凶：缺"平面介质"限定。2d illustration / graphic design 强制图案而非实物
+    '2d illustration',
+    'graphic design',
   ],
   panchang: [
     'pan chang endless knot',
@@ -622,6 +633,20 @@ function buildNegativePromptCore(
         'physical object',
         'still life',
         'depth of field',
+      )
+    }
+
+    // 回纹强制实物/抽象块面压制：花星、雪花、蓝灰抽象块面漂移的元凶（2026-08-31 专项）。
+    if (subcategoryIds.includes('huiwen')) {
+      base.push(
+        'photograph',
+        'product photo',
+        'physical object',
+        'still life',
+        'organic',
+        'abstract block',
+        'fragmented shapes',
+        'random geometry',
       )
     }
   }
@@ -780,6 +805,33 @@ export async function generatePatternWithFallback(
     // 供与 WebUI 同 seed 对比：完整 prompt / negative
     console.log('[patternGeneration] 盘长 final prompt:\n' + prompt)
     console.log('[patternGeneration] 盘长 final negative:\n' + negativePrompt)
+  }
+
+  // 校验 5：回纹 negative 必含实物/块面压制词，且不得含自身结构词
+  if (subcategoryId === 'huiwen') {
+    const required = [
+      'photograph',
+      'product photo',
+      'physical object',
+      'still life',
+      'organic',
+      'abstract block',
+      'fragmented shapes',
+      'random geometry',
+      'star motif',
+      'snowflake',
+    ]
+    const missing = required.filter((t) => !negativePrompt.includes(t))
+    const forbidden = ['meander', 'greek key', 'rectangular spiral', 'maze', 'fret', 'orthogonal', 'huiwen']
+    const leakedForbidden = forbidden.filter((t) => negativePrompt.includes(t))
+    console.log(
+      '[patternGeneration] 回纹负向校验:',
+      missing.length === 0 && leakedForbidden.length === 0
+        ? 'OK（压制词齐全，且无 meander/greek key/rectangular spiral/maze/fret/orthogonal）'
+        : `${missing.length > 0 ? `缺: ${missing.join('/')}` : ''}${leakedForbidden.length > 0 ? ` 泄漏: ${leakedForbidden.join('/')}` : ''}`,
+    )
+    console.log('[patternGeneration] 回纹 final prompt:\n' + prompt)
+    console.log('[patternGeneration] 回纹 final negative:\n' + negativePrompt)
   }
 
   console.log(
@@ -988,8 +1040,14 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   switch (params.arrangement) {
     case 'single':
       parts.push('single motif, centered medallion')
-      // 融合含方胜且排布=单独：强化"单个纹样"语义，避免退化成连续网
-      if (hasFangsheng || subcategoryA === 'panchang' || subcategoryB === 'panchang') {
+      // 融合含方胜/盘长/回纹且排布=单独：强化"单个纹样"语义，避免退化成连续网
+      if (
+        hasFangsheng ||
+        subcategoryA === 'panchang' ||
+        subcategoryB === 'panchang' ||
+        subcategoryA === 'huiwen' ||
+        subcategoryB === 'huiwen'
+      ) {
         parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
       }
       break
@@ -998,6 +1056,10 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
       // 盘长连续版（融合侧命中则补）：交织结连续语义，避免退化成菱形网
       if (subcategoryA === 'panchang' || subcategoryB === 'panchang') {
         parts.push('continuous interlocking knot pattern')
+      }
+      // 回纹连续版（融合侧命中则补）：显式 meander / greek key border
+      if (subcategoryA === 'huiwen' || subcategoryB === 'huiwen') {
+        parts.push('tileable continuous meander pattern, repeating greek key border')
       }
       break
     case 'adapted':
