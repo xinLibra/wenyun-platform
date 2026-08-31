@@ -186,6 +186,10 @@ export function buildPromptParts(params: GenerationParams): {
       break
     case 'seamless':
       parts.push('seamless repeat, tileable continuous pattern')
+      // 盘长连续版：补"交织结"连续语义，避免退化成单纯菱形网
+      if (subcategoryId === 'panchang') {
+        parts.push('continuous interlocking knot pattern')
+      }
       break
     case 'adapted':
       parts.push('fitted panel motif, shaped to border')
@@ -533,6 +537,12 @@ const GEOMETRIC_STRUCTURE_BOOST: Record<string, string[]> = {
     'right-angle turns',
     'no floral',
   ],
+  panchang: [
+    'pan chang endless knot',
+    'continuous interwoven ribbon knot',
+    'mystic knot',
+    'never-ending knot',
+  ],
 }
 
 function buildNegativePromptCore(
@@ -574,6 +584,12 @@ function buildNegativePromptCore(
     const hasFloralSide = subcategoryIds.some((id) => getLoraEntry(id)?.themeId === 'floral')
     if (!hasFloralSide) {
       base.push('floral', 'flower', 'petal', 'blossom', 'star motif', 'snowflake', 'radial petals', 'radial')
+    }
+
+    // 几何防"菱格/网格化"：压 diamond lattice / argyle（盘长易漂成红底菱格满铺）。
+    // 方胜正向依赖 diamond 语义（interlocking/overlapping diamond），不压菱形词，避免误伤。
+    if (!subcategoryIds.includes('fangsheng')) {
+      base.push('diamond lattice', 'argyle', 'grid pattern', 'simple geometric diamonds')
     }
   }
 
@@ -711,6 +727,22 @@ export async function generatePatternWithFallback(
     console.log(
       '[patternGeneration] 锦地触发词校验:',
       trigger === 'ichpattern_jindi_hex' ? 'OK（真实 caption 触发词 ichpattern_jindi_hex）' : `异常（当前: ${trigger}）`,
+    )
+  }
+
+  // 校验 4：盘长 negative 不得含 endless knot / interwoven / panchang / knot（会压掉正确结形）
+  if (subcategoryId === 'panchang') {
+    const forbidden = ['endless knot', 'interwoven', 'panchang', 'knot']
+    const leaked = forbidden.filter((t) => negativePrompt.includes(t))
+    console.log(
+      '[patternGeneration] 盘长负向校验:',
+      leaked.length === 0 ? 'OK（negative 无 endless knot / interwoven / panchang / knot）' : `泄漏: ${leaked.join(' / ')}`,
+    )
+    console.log(
+      '[patternGeneration] 盘长 LoRA/trigger 校验:',
+      loraFile === 'ICH_panchang_pattern_lora_v1_epoch8_FINAL_DELIVERY' && trigger === 'ichpattern_panchang'
+        ? `OK（${loraFile} @ ${loraWeight} / ${trigger}）`
+        : `异常（lora=${loraFile}, trigger=${trigger}）`,
     )
   }
 
@@ -927,6 +959,10 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
       break
     case 'seamless':
       parts.push('seamless repeat, tileable continuous pattern')
+      // 盘长连续版（融合侧命中则补）：交织结连续语义，避免退化成菱形网
+      if (subcategoryA === 'panchang' || subcategoryB === 'panchang') {
+        parts.push('continuous interlocking knot pattern')
+      }
       break
     case 'adapted':
       parts.push('fitted panel motif, shaped to border')

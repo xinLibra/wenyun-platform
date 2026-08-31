@@ -173,7 +173,7 @@ export const LORA_MAP: LoraMapEntry[] = [
     subLabelEn: 'panchang (endless knot)',
     trigger: 'ichpattern_panchang',
     loraFile: 'ICH_panchang_pattern_lora_v1_epoch8_FINAL_DELIVERY',
-    loraWeight: DEFAULT_LORA_WEIGHT,
+    loraWeight: 0.85, // 盘长结构弱、易漂成菱格，提权至推荐区间 0.8–0.9（2026-08-31）
   },
   {
     subcategoryId: 'jindi',
