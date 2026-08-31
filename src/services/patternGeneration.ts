@@ -102,7 +102,23 @@ export function buildPromptParts(params: GenerationParams): {
   subLabelEn: string | null
   subcategoryId: string
 } {
-  const sub = getLoraEntry(params.dimension.subcategory)
+  const subcategoryId = params.dimension.subcategory ?? 'n/a'
+  // 方胜纹 ID 兼容三种写法：fangsheng / fangsheng_single / fangsheng_continuous
+  const isFangsheng =
+    subcategoryId === 'fangsheng' || subcategoryId === 'fangsheng_single' || subcategoryId === 'fangsheng_continuous'
+  // 方胜排布分流：fangsheng_continuous 强制连续；fangsheng_single 强制单独；fangsheng 按 arrangement 判定
+  const fangshengLayout =
+    subcategoryId === 'fangsheng_continuous'
+      ? 'continuous'
+      : subcategoryId === 'fangsheng_single'
+        ? 'single'
+        : params.arrangement === 'seamless'
+          ? 'continuous'
+          : 'single'
+
+  const sub = getLoraEntry(
+    subcategoryId === 'fangsheng_single' || subcategoryId === 'fangsheng_continuous' ? 'fangsheng' : subcategoryId,
+  )
   // 多 trigger 兼容：loraMap.trigger 支持逗号分隔字符串（比如牡丹：'ich_flower_pattern, ich_peony_pattern'）
   // 逐项写入 prompt 前部，保证每个触发词都被模型作为独立 token 单元处理
   let triggers: string[] = (sub?.trigger ?? '')
@@ -112,18 +128,17 @@ export function buildPromptParts(params: GenerationParams): {
   const subLabelEn = sub?.subLabelEn ?? null
   let loraFile = sub?.loraFile ?? null
   let loraWeight = sub?.loraWeight ?? DEFAULT_LORA_WEIGHT
-  const subcategoryId = params.dimension.subcategory ?? 'n/a'
 
   const parts: string[] = []
 
-  // 0) 方胜纹排布分流：排布=单独/居中 → 单独 LoRA（trigger: ichpattern_fangsheng_single）；
-  //    排布=四方连续 → 连续 LoRA（trigger: ichpattern_fangsheng_continuous）。
-  //    直接覆盖 trigger/loraFile，一次只挂一个方胜 LoRA，禁止两个同时加载。
-  if (subcategoryId === 'fangsheng') {
-    const isSeamless = params.arrangement === 'seamless'
-    const fs = FANGSHENG_LORA_MAP[isSeamless ? 'continuous' : 'single']
+  // 0) 方胜纹排布分流：单独 → ichpattern_fangsheng_single + single LoRA（weight 0.85）；
+  //    四方连续 → ichpattern_fangsheng_continuous + continuous LoRA（weight 0.85）。
+  //    直接覆盖 trigger/loraFile/loraWeight，一次只挂一个方胜 LoRA，禁止单独模式误挂 continuous。
+  if (isFangsheng) {
+    const fs = FANGSHENG_LORA_MAP[fangshengLayout]
     triggers = [fs.trigger]
     loraFile = fs.loraFile
+    loraWeight = 0.85 // 用户要求 0.85–0.95
   }
 
   // 1) 触发词（牡丹/莲花/花鸟 双 trigger 都会完整入列）
@@ -131,11 +146,13 @@ export function buildPromptParts(params: GenerationParams): {
 
   // 2) Chinese traditional {子类英文} pattern
   if (subLabelEn) {
-    // 锦地：固定前缀要求 "jindi brocade ground pattern"（不带括号变体）
+    // 锦地/方胜：固定前缀要求（不带括号变体）
     parts.push(
       subcategoryId === 'jindi'
         ? 'Chinese traditional jindi brocade ground pattern'
-        : `Chinese traditional ${subLabelEn} pattern`,
+        : isFangsheng
+          ? 'Chinese traditional fangsheng pattern'
+          : `Chinese traditional ${subLabelEn} pattern`,
     )
   } else {
     // 没有具体子类时，仍保留 "Chinese traditional pattern" 的语义
@@ -149,6 +166,13 @@ export function buildPromptParts(params: GenerationParams): {
     structureBoost.forEach((w) => parts.push(w))
   }
 
+  // 2.6) 方胜固定结构词（紧跟 trigger/描述、在配色之前；按排布分流）
+  if (isFangsheng) {
+    const prefix =
+      fangshengLayout === 'continuous' ? FANGSHENG_FIXED_PREFIX_CONTINUOUS : FANGSHENG_FIXED_PREFIX_SINGLE
+    prefix.forEach((w) => parts.push(w))
+  }
+
   // 3) 颜色加权前缀：在 prompt 前半部分重复颜色词，增强模型对颜色的响应
   //    这是修复"选色后生成颜色不匹配"的核心改动——把颜色词放在 prompt 前半段
   //    并重复 2-3 次，让模型优先关注颜色描述。
@@ -157,14 +181,14 @@ export function buildPromptParts(params: GenerationParams): {
     parts.push(colorWeighted)
   }
 
-  // 4) decorative motif（固定；锦地已并入固定前缀，避免重复）
-  if (subcategoryId !== 'jindi') {
+  // 4) decorative motif（固定；锦地/方胜已并入固定前缀，避免重复）
+  if (subcategoryId !== 'jindi' && !isFangsheng) {
     parts.push('decorative motif')
   }
 
-  // 5) 平面/肌理：textureDetail 0–100（锦地默认偏 flat，flat 限定已在固定前缀，跳过避免重复）
+  // 5) 平面/肌理：textureDetail 0–100（锦地/方胜默认偏 flat，flat 限定已在固定前缀，跳过避免重复）
   const tex = params.textureDetail ?? 50
-  if (subcategoryId !== 'jindi') {
+  if (subcategoryId !== 'jindi' && !isFangsheng) {
     if (tex < 40) {
       parts.push('flat pattern design, clean lines, no texture')
     } else if (tex < 70) {
@@ -184,13 +208,15 @@ export function buildPromptParts(params: GenerationParams): {
     parts.push('dense elaborate full pattern, intricate detail')
   }
 
-  // 7) 排布：arrangement
+  // 7) 排布：arrangement（方胜固定结构词已按排布写入，此处跳过重复；adapted 保留 fitted panel）
   switch (params.arrangement) {
     case 'single':
-      parts.push('single motif, centered medallion')
-      // 方胜/盘长单独：强化"单个纹样"语义，避免退化成大面积连续网/满铺
-      if (subcategoryId === 'fangsheng' || subcategoryId === 'panchang') {
-        parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
+      if (!isFangsheng) {
+        parts.push('single motif, centered medallion')
+        // 盘长单独：强化"单个纹样"语义，避免退化成大面积连续网/满铺
+        if (subcategoryId === 'panchang') {
+          parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
+        }
       }
       // 回纹单独：训练预览多为居中带框纹样（framed border）
       if (subcategoryId === 'huiwen') {
@@ -202,14 +228,16 @@ export function buildPromptParts(params: GenerationParams): {
       }
       break
     case 'seamless':
-      parts.push('seamless repeat, tileable continuous pattern')
-      // 盘长连续版：补"交织结"连续语义，避免退化成单纯菱形网
-      if (subcategoryId === 'panchang') {
-        parts.push('continuous interlocking knot pattern')
-      }
-      // 回纹连续版：显式写 meander / greek key border（2026-08-31 专项）
-      if (subcategoryId === 'huiwen') {
-        parts.push('tileable continuous meander pattern, repeating greek key border')
+      if (!isFangsheng) {
+        parts.push('seamless repeat, tileable continuous pattern')
+        // 盘长连续版：补"交织结"连续语义，避免退化成单纯菱形网
+        if (subcategoryId === 'panchang') {
+          parts.push('continuous interlocking knot pattern')
+        }
+        // 回纹连续版：显式写 meander / greek key border（2026-08-31 专项）
+        if (subcategoryId === 'huiwen') {
+          parts.push('tileable continuous meander pattern, repeating greek key border')
+        }
       }
       // 锦地连续版（默认）：疏密由第 6 步统一 caption 表控制，不在此重复
       break
@@ -602,11 +630,55 @@ const GEOMETRIC_STRUCTURE_BOOST: Record<string, string[]> = {
   ],
 }
 
+/**
+ * 方胜纹固定结构词（2026-08-31 专项）：紧跟 trigger 写入、在配色之前。
+ * 按排布分流：单独/适合边框 → single 版；四方连续 → continuous 版。
+ * decorative motif / flat pattern design / clean lines / no texture / 2d illustration 已固定于此，
+ * 因此方胜跳过通用第 4/5 步，避免重复。
+ */
+const FANGSHENG_FIXED_PREFIX_SINGLE = [
+  'interlocking diamond motif',
+  'double diamond overlapping squares',
+  'single centered medallion',
+  'isolated emblem',
+  'large empty margin',
+  'no seamless tile',
+  'no repeat',
+  'decorative motif',
+  'flat pattern design',
+  'clean lines',
+  'no texture',
+  '2d illustration',
+  'graphic design',
+  'vector-like pattern',
+]
+
+const FANGSHENG_FIXED_PREFIX_CONTINUOUS = [
+  'interlocking diamond lattice',
+  'double diamond overlapping squares',
+  'seamless repeat',
+  'tileable continuous pattern',
+  'geometric fangsheng grid',
+  'decorative motif',
+  'flat pattern design',
+  'clean lines',
+  'no texture',
+  '2d illustration',
+  'graphic design',
+]
+
 function buildNegativePromptCore(
   subcategoryIds: string[],
   colorScheme: ColorSchemeParams | undefined,
   arrangement?: GenerationParams['arrangement'],
 ): string {
+  // 方胜纹 ID 兼容三种写法：fangsheng / fangsheng_single / fangsheng_continuous
+  const hasFangshengId = (ids: string[]) =>
+    ids.some((id) => id === 'fangsheng' || id === 'fangsheng_single' || id === 'fangsheng_continuous')
+  // 几何结构词索引用主 ID：fangsheng_single / fangsheng_continuous → fangsheng（保护其结构词不进 negative）
+  const normalizeGeoId = (id: string) =>
+    id === 'fangsheng_single' || id === 'fangsheng_continuous' ? 'fangsheng' : id
+
   const base = [
     'realistic photo',
     '3d render',
@@ -626,11 +698,11 @@ function buildNegativePromptCore(
   // 几何串味排除 + 结构词保护：
   //   - 选中子类的结构词 → 保护（不进 negative）
   //   - 未选中子类的结构词 → 全部排除（防串味）
-  const activeGeo = subcategoryIds.filter((id) => id in GEOMETRIC_STRUCTURE_TERMS)
+  const activeGeo = subcategoryIds.filter((id) => normalizeGeoId(id) in GEOMETRIC_STRUCTURE_TERMS)
   if (activeGeo.length > 0) {
     const protectedTerms = new Set<string>()
     activeGeo.forEach((id) => {
-      ;(GEOMETRIC_STRUCTURE_TERMS[id] ?? []).forEach((t) => protectedTerms.add(t))
+      ;(GEOMETRIC_STRUCTURE_TERMS[normalizeGeoId(id)] ?? []).forEach((t) => protectedTerms.add(t))
     })
     ALL_GEOMETRIC_STRUCTURE_TERMS.forEach((t) => {
       if (!protectedTerms.has(t)) base.push(t)
@@ -645,7 +717,7 @@ function buildNegativePromptCore(
 
     // 几何防"菱格/网格化"：压 diamond lattice / argyle（盘长易漂成红底菱格满铺）。
     // 方胜正向依赖 diamond 语义；锦地数据集含"菱格花心"且用户要求 negative 不得含 lattice——两者都不压菱形词。
-    if (!subcategoryIds.includes('fangsheng') && !subcategoryIds.includes('jindi')) {
+    if (!hasFangshengId(subcategoryIds) && !subcategoryIds.includes('jindi')) {
       base.push('diamond lattice', 'argyle', 'grid pattern', 'simple geometric diamonds')
     }
 
@@ -696,10 +768,38 @@ function buildNegativePromptCore(
         'physical object',
       )
     }
+
+    // 方胜强制"实物/织物/地砖/标尺照片"压制：漂成实物、布料、地板砖、带标尺/文字照片的元凶（2026-08-31 专项）。
+    if (hasFangshengId(subcategoryIds)) {
+      base.push(
+        'photograph',
+        'product photo',
+        'furniture',
+        'chair',
+        'sofa',
+        'blanket',
+        'throw',
+        'fabric folds',
+        'textile texture',
+        'woven cloth',
+        'floor tiles',
+        'checkerboard floor',
+        'ruler',
+        'measuring tape',
+        'scale bar',
+        'caption',
+      )
+    }
   }
 
-  // 方胜纹排布=单独/居中：额外排除连续/平铺特征，防止退化成大面积连续网
-  if (subcategoryIds.includes('fangsheng') && arrangement !== 'seamless') {
+  // 方胜纹排布=单独/居中：额外排除连续/平铺特征，防止退化成大面积连续网。
+  // 变体 ID 覆盖：fangsheng_continuous 强制连续（不压 seamless）；fangsheng_single 强制单独。
+  const effArrangement = subcategoryIds.includes('fangsheng_continuous')
+    ? 'seamless'
+    : subcategoryIds.includes('fangsheng_single')
+      ? 'single'
+      : arrangement
+  if (hasFangshengId(subcategoryIds) && effArrangement !== 'seamless') {
     base.push(
       'seamless',
       'tileable',
@@ -909,6 +1009,64 @@ export async function generatePatternWithFallback(
     )
     console.log('[patternGeneration] 锦地 final prompt:\n' + prompt)
     console.log('[patternGeneration] 锦地 final negative:\n' + negativePrompt)
+  }
+
+  // 校验 7：方胜 LoRA/trigger 排布分流 + 负向必含/禁止 + flat/2d（2026-08-31 专项）
+  const isFangshengGen =
+    subcategoryId === 'fangsheng' || subcategoryId === 'fangsheng_single' || subcategoryId === 'fangsheng_continuous'
+  if (isFangshengGen) {
+    const layout =
+      subcategoryId === 'fangsheng_continuous'
+        ? 'continuous'
+        : subcategoryId === 'fangsheng_single'
+          ? 'single'
+          : params.arrangement === 'seamless'
+            ? 'continuous'
+            : 'single'
+    const expectLora =
+      layout === 'continuous' ? 'ICH_fangsheng_continuous_lora_v1-000003' : 'ICH_fangsheng_single_lora_v2-000001'
+    const expectTrigger = layout === 'continuous' ? 'ichpattern_fangsheng_continuous' : 'ichpattern_fangsheng_single'
+    const loraOk = loraFile === expectLora && trigger === expectTrigger
+    const wrongSideLora = layout === 'single' ? loraFile?.includes('continuous') : loraFile?.includes('single')
+    const weightOk = loraWeight >= 0.85 && loraWeight <= 0.95
+    const requiredNegative = [
+      'realistic photo',
+      'photograph',
+      'product photo',
+      '3d render',
+      'furniture',
+      'chair',
+      'sofa',
+      'blanket',
+      'throw',
+      'fabric folds',
+      'textile texture',
+      'woven cloth',
+      'floor tiles',
+      'checkerboard floor',
+      'ruler',
+      'measuring tape',
+      'scale bar',
+      'text',
+      'watermark',
+      'logo',
+      'letters',
+      'words',
+      'caption',
+    ]
+    const missing = requiredNegative.filter((t) => !negativePrompt.includes(t))
+    const forbidden = ['fangsheng', 'interlocking diamond', 'diamond motif', 'medallion']
+    const leaked = forbidden.filter((t) => negativePrompt.includes(t))
+    const hasFlat = prompt.includes('flat pattern design') && prompt.includes('2d illustration')
+    const ok = loraOk && !wrongSideLora && weightOk && missing.length === 0 && leaked.length === 0 && hasFlat
+    console.log(
+      '[patternGeneration] 方胜校验:',
+      ok
+        ? `OK（排布=${layout}，lora=${expectLora} weight=${loraWeight}，负向必含/禁止齐全，含 flat pattern design + 2d illustration）`
+        : `${!loraOk ? `LoRA 不匹配(实际 ${loraFile})` : ''}${wrongSideLora ? ' 误挂另一侧 LoRA' : ''}${!weightOk ? ` weight 越界(${loraWeight})` : ''}${missing.length > 0 ? ` 负向缺: ${missing.join('/')}` : ''}${leaked.length > 0 ? ` 负向泄漏: ${leaked.join('/')}` : ''}${!hasFlat ? ' 无 flat pattern design/2d illustration' : ''}`,
+    )
+    console.log('[patternGeneration] 方胜 final prompt:\n' + prompt)
+    console.log('[patternGeneration] 方胜 final negative:\n' + negativePrompt)
   }
 
   console.log(
