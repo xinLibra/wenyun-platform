@@ -141,7 +141,7 @@ export function buildPromptParts(params: GenerationParams): {
     loraWeight = 0.9 // 用户要求默认 0.9（0.85–0.95 区间内）
   }
 
-  // 1) 触发词（牡丹/莲花/花鸟 双 trigger 都会完整入列）
+  // 1) 触发词（牡丹/莲花 双 trigger 都会完整入列）
   for (const t of triggers) parts.push(t)
 
   // 2) Chinese traditional {子类英文} pattern

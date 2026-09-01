@@ -60,31 +60,20 @@ export interface LoraMapEntry {
  *       排布=四方连续 → ICH_fangsheng_continuous_lora_v1-000003 trigger: ichpattern_fangsheng_continuous
  *     （由 buildPrompt 按 arrangement 自动切换，见 patternGeneration.ts）
  *
- * ===== 花卉 8 个专属子类（均已挂载专属 LoRA） =====
+ * ===== 花卉 7 个专属子类（均已挂载专属 LoRA） =====
  * （2026-08-20 朋友按 DELIVERY.md 交付，已复制到 WebUI models/Lora；
  *   2026-08-26 追加 兰花/芙蓉花/石榴花 三个专属 LoRA，trigger 以 safetensors metadata 为准）
  *   - peony          → ICH_peony_pattern_lora_v7_clear    trigger: ich_flower_pattern + ich_peony_pattern
  *   - chrysanthemum  → ICH_chrysanthemum_pattern_lora_v3   trigger: ichpattern_chrysanthemum
  *   - plum           → ICH_plum_blossom_pattern_lora_v2    trigger: ichpattern_plum_blossom（训练原词）+ 兼容旧 ichpattern_plum
  *   - lotus          → ICH_lotus_pattern_lora_v3_attr      trigger: ich_flower_pattern + ich_lotus_pattern
- *   - flower_bird    → ICH_flower_bird_pattern_lora_v3     trigger: ich_flower_pattern + ich_flower_bird_pattern
  *   - orchid         → ICH_orchid_pattern_lora_v3          trigger: ichpattern_orchid
  *   - furong         → ICH_hibiscus_pattern_lora_v5        trigger: ichpattern_hibiscus（旧占位 ichpattern_furong 已废弃）
  *   - pomegranate_flower → ICH_pomegranate_flower_pattern_lora_v6  trigger: ichpattern_pomegranate_flower
  */
 export const LORA_MAP: LoraMapEntry[] = [
   // ============ 花卉（专属 LoRA） ============
-  // 专属花卉 LoRA 1: 花鸟（双 trigger）
-  {
-    subcategoryId: 'flower_bird',
-    themeId: 'floral',
-    subLabelZh: '花鸟纹',
-    subLabelEn: 'flower and bird',
-    trigger: 'ich_flower_pattern, ich_flower_bird_pattern',
-    loraFile: 'ICH_flower_bird_pattern_lora_v3',
-    loraWeight: FLOWER_LORA_WEIGHT,
-  },
-  // 专属花卉 LoRA 2: 菊花（单 trigger）
+  // 专属花卉 LoRA 1: 菊花（单 trigger）
   {
     subcategoryId: 'chrysanthemum',
     themeId: 'floral',
@@ -94,7 +83,7 @@ export const LORA_MAP: LoraMapEntry[] = [
     loraFile: 'ICH_chrysanthemum_pattern_lora_v3',
     loraWeight: FLOWER_LORA_WEIGHT,
   },
-  // 专属花卉 LoRA 3: 莲花（双 trigger）
+  // 专属花卉 LoRA 2: 莲花（双 trigger）
   {
     subcategoryId: 'lotus',
     themeId: 'floral',
@@ -104,7 +93,7 @@ export const LORA_MAP: LoraMapEntry[] = [
     loraFile: 'ICH_lotus_pattern_lora_v3_attr',
     loraWeight: FLOWER_LORA_WEIGHT,
   },
-  // 专属花卉 LoRA 4: 梅花（训练原词 ichpattern_plum_blossom 在前，兼容旧 ichpattern_plum 在后）
+  // 专属花卉 LoRA 3: 梅花（训练原词 ichpattern_plum_blossom 在前，兼容旧 ichpattern_plum 在后）
   {
     subcategoryId: 'plum',
     themeId: 'floral',
@@ -114,7 +103,7 @@ export const LORA_MAP: LoraMapEntry[] = [
     loraFile: 'ICH_plum_blossom_pattern_lora_v2',
     loraWeight: FLOWER_LORA_WEIGHT,
   },
-  // 专属花卉 LoRA 5: 牡丹（双 trigger）
+  // 专属花卉 LoRA 4: 牡丹（双 trigger）
   {
     subcategoryId: 'peony',
     themeId: 'floral',

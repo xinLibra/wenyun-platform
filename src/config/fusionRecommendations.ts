@@ -13,27 +13,25 @@ const BASE_RECOMMENDATIONS: Record<string, string[]> = {
   huiwen: ['jindi', 'fangsheng', 'panchang', 'plum', 'lotus'],
   // 盘长 ↔ 方胜 / 回纹 / 锦地（单纹样与连续均适配）
   panchang: ['fangsheng', 'huiwen', 'jindi', 'peony'],
-  // 锦地 ↔ 回纹 / 盘长 / 花鸟（满铺底纹百搭）
-  jindi: ['huiwen', 'panchang', 'fangsheng', 'flower_bird', 'chrysanthemum'],
+  // 锦地 ↔ 回纹 / 盘长 / 菊花（满铺底纹百搭）
+  jindi: ['huiwen', 'panchang', 'fangsheng', 'chrysanthemum'],
   // 方胜 ↔ 回纹 / 盘长 / 牡丹（方正吉祥）
   fangsheng: ['huiwen', 'panchang', 'jindi', 'peony'],
   // ===== 花卉 =====
   // 兰 ↔ 蝶 / 梅
   orchid: ['plum', 'furong'],
   // 牡丹：花中之王，百搭
-  peony: ['flower_bird', 'furong', 'panchang', 'fangsheng'],
-  // 莲花：花鸟 / 回纹
-  lotus: ['flower_bird', 'huiwen'],
+  peony: ['furong', 'panchang', 'fangsheng'],
+  // 莲花：菊 / 回纹
+  lotus: ['chrysanthemum', 'huiwen'],
   // 梅花：兰 / 菊 / 回纹（梅兰竹菊 + 几何组合）
   plum: ['orchid', 'chrysanthemum', 'huiwen'],
   // 菊花
   chrysanthemum: ['plum', 'orchid', 'jindi'],
-  // 花鸟：牡丹 / 兰 / 锦地
-  flower_bird: ['peony', 'orchid', 'jindi'],
   // 芙蓉：牡丹 / 莲
   furong: ['peony', 'lotus'],
-  // 石榴花：花鸟 / 牡丹
-  pomegranate_flower: ['flower_bird', 'peony'],
+  // 石榴花：牡丹 / 菊
+  pomegranate_flower: ['peony', 'chrysanthemum'],
 }
 
 function mirror(record: Record<string, string[]>): Record<string, string[]> {

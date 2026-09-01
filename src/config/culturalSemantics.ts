@@ -163,18 +163,6 @@ export const CULTURAL_SEMANTICS: CulturalSemantic[] = [
   { id: 'pomegranate_flower_8', scene: '家居装饰', keywords: ['家居', '装饰', '布置', '挂画'], meaning: '榴花似锦，为家居增添红火吉庆之气', patternLabel: '石榴花纹', patternId: 'pomegranate_flower', themeId: 'floral' },
   { id: 'pomegranate_flower_9', scene: '夏日/时节', keywords: ['夏天', '夏日', '五月', '榴月'], meaning: '五月榴花照眼明，寓意夏时之美与生机', patternLabel: '石榴花纹', patternId: 'pomegranate_flower', themeId: 'floral' },
   { id: 'pomegranate_flower_10', scene: '生日/生辰', keywords: ['生日', '生辰', '庆生'], meaning: '榴开百子，寓意生日喜庆、福泽绵长', patternLabel: '石榴花纹', patternId: 'pomegranate_flower', themeId: 'floral' },
-
-  // ==================== 花鸟纹 ====================
-  { id: 'flower_bird_1', scene: '生机/和谐', keywords: ['生机', '和谐', '自然', '鸟语花香'], meaning: '鸟语花香，寓意生机盎然、岁月静好', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
-  { id: 'flower_bird_2', scene: '喜事/报喜', keywords: ['报喜', '喜事', '喜鹊', '佳音'], meaning: '喜鹊登梅，寓意喜事临门、佳音将至', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
-  { id: 'flower_bird_3', scene: '春天/春意', keywords: ['春天', '春意', '踏青', '迎春'], meaning: '春色满园，寓意春和景明、万象更新', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
-  { id: 'flower_bird_4', scene: '工笔/雅趣', keywords: ['工笔', '国画', '雅趣', '笔墨'], meaning: '花鸟工笔，国画中最富生趣的雅致纹样', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
-  { id: 'flower_bird_5', scene: '家居装饰', keywords: ['家居', '装饰', '挂画', '布置'], meaning: '花鸟图卷，为家居增添灵秀雅致之气', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
-  { id: 'flower_bird_6', scene: '传统服饰', keywords: ['汉服', '旗袍', '服饰', '衣饰'], meaning: '花鸟绣纹，传统服饰上寓意吉庆的经典纹样', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
-  { id: 'flower_bird_7', scene: '文化礼品', keywords: ['礼品', '送礼', '伴手礼'], meaning: '花鸟寄情，寓意美好安宁，是雅致的赠礼', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
-  { id: 'flower_bird_8', scene: '新婚/美满', keywords: ['婚礼', '新婚', '成双', '美满'], meaning: '双鸟栖枝，寓意比翼双飞、恩爱美满', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
-  { id: 'flower_bird_9', scene: '祝寿/延年', keywords: ['祝寿', '延年', '长寿', '寿辰'], meaning: '绶带鸟衔芝，寓意福寿绵长、健康延年', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
-  { id: 'flower_bird_10', scene: '书房/文雅', keywords: ['书房', '文房', '文雅', '雅室'], meaning: '鸟语花韵，为书房增添闲雅意趣', patternLabel: '花鸟纹', patternId: 'flower_bird', themeId: 'floral' },
 ]
 
 /** 根据关键词做包含匹配，返回命中的语义记录（按场景分组去重） */
@@ -349,14 +337,14 @@ const SCENE_META: Record<string, { label: string; hint?: string }> = {
   coming_of_age: { label: '成人礼', hint: '寓意长大成才；宜用回纹、方胜；精神昂扬。' },
   valor: { label: '勇武', hint: '寓意勇武气魄；宜用方胜、回纹；刚健有力。' },
   noble: { label: '尊贵', hint: '寓意尊贵权威；宜用方胜、锦地；雍容华贵。' },
-  nature: { label: '自然四季', hint: '寓意自然生机；宜用花鸟、菊梅、莲花；清新明快。' },
+  nature: { label: '自然四季', hint: '寓意自然生机；宜用菊、梅、莲花；清新明快。' },
   family: { label: '家业传承', hint: '寓意子孙绵延、家业兴旺；宜用石榴、牡丹、莲花。' },
   zen: { label: '静心禅意', hint: '寓意宁静祥和；宜用莲、盘长、兰；素雅沉静。' },
   integrity: { label: '清廉高洁', hint: '寓意清正高洁；宜用莲、兰、梅；淡雅端正。' },
   friendship: { label: '友谊金兰', hint: '寓意情谊相投；宜用兰、回纹、梅；清雅隽永。' },
   gratitude: { label: '感恩', hint: '寓意感恩敬重；宜用牡丹、兰；温暖真诚。' },
-  joy: { label: '喜事报喜', hint: '寓意喜事临门；宜用花鸟、喜鹊、牡丹；欢快明亮。' },
-  craft: { label: '工艺雅器', hint: '适用于瓷器、织绣、建筑装饰；宜花鸟、回纹、莲。' },
+  joy: { label: '喜事报喜', hint: '寓意喜事临门；宜用牡丹、梅、莲花；欢快明亮。' },
+  craft: { label: '工艺雅器', hint: '适用于瓷器、织绣、建筑装饰；宜回纹、莲、牡丹。' },
   // ===== 几何新增场景 =====
   heritage: { label: '国风非遗', hint: '寓意经典传承；宜用回纹、锦地、方胜；传统配色。' },
   minimalist: { label: '极简几何', hint: '寓意干净现代；宜用回纹、方胜；黑白或单色。' },

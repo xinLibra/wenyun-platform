@@ -27,7 +27,6 @@ const PATTERN_HUES: Record<string, number> = {
   lotus: 165, // 莲 · 青
   chrysanthemum: 50, // 菊 · 黄
   plum: 15, // 梅 · 玫粉
-  flower_bird: 255, // 花鸟 · 蓝紫
 }
 
 /** 几何主题子类集合（决定缩略图图形：方胜形 vs 四瓣花） */

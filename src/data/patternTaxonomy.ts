@@ -21,7 +21,6 @@ export const PATTERN_THEMES: PatternTheme[] = [
     id: 'floral',
     label: '花卉',
     subcategories: [
-      { id: 'flower_bird', label: '花鸟纹', trigger: 'ichpattern_flower_bird' },
       { id: 'chrysanthemum', label: '菊花纹', trigger: 'ichpattern_chrysanthemum' },
       { id: 'lotus', label: '莲花纹', trigger: 'ichpattern_lotus' },
       { id: 'plum', label: '梅花纹', trigger: 'ichpattern_plum' },
@@ -85,7 +84,6 @@ export function parsePromptToTags(text: string): {
       [/兰花|兰草/, 'orchid'],
       [/芙蓉/, 'furong'],
       [/石榴/, 'pomegranate_flower'],
-      [/花鸟/, 'flower_bird'],
     ]
     for (const [re, id] of floralMap) {
       if (re.test(t)) {

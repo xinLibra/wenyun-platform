@@ -62,8 +62,6 @@ export const FUSION_PAIR_PRESETS: Record<string, FusionPairPreset> = {
   'plum__huiwen': { arrangement: 'single', symmetry: 'none', complexity: 60, culturalIntensity: 75, textureDetail: 28, pantoneCode: '14-3904 TCX', lightness: 50, fusionRatio: 50 },
   // 莲花 + 回纹：清莲与几何
   'lotus__huiwen': { arrangement: 'single', symmetry: 'mirror', complexity: 60, culturalIntensity: 75, textureDetail: 28, pantoneCode: '19-4052 TCX', lightness: 45, fusionRatio: 50 },
-  // 花鸟 + 锦地：工笔满铺
-  'flower_bird__jindi': { arrangement: 'seamless', symmetry: 'mirror', complexity: 70, culturalIntensity: 75, textureDetail: 35, pantoneCode: '12-0752 TCX', lightness: 45, fusionRatio: 50 },
   // 菊花 + 锦地：金秋满铺
   'chrysanthemum__jindi': { arrangement: 'seamless', symmetry: 'mirror', complexity: 65, culturalIntensity: 75, textureDetail: 30, pantoneCode: '12-0752 TCX', lightness: 45, fusionRatio: 50 },
   // ===== 花卉 × 花卉（保留经典组合） =====

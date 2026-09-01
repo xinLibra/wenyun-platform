@@ -77,8 +77,6 @@ export const SUBCATEGORY_PANTONE_MAP: Record<string, SubcategoryPantone> = {
   plum:                 { pantoneCode: '18-1662 TCX', label: '宫墙红', englishName: 'palace red',       promptTag: 'monochrome-black', reason: '红梅傲雪，朱红' },
   // 莲花：出淤泥不染，淡粉
   lotus:                { pantoneCode: '16-1450 TCX', label: '藕粉',   englishName: 'light pink',       promptTag: 'monochrome-black', reason: '莲花清雅，淡粉' },
-  // 花鸟：工笔重彩，朱红
-  flower_bird:          { pantoneCode: '18-1555 TCX', label: '朱红',   englishName: 'vermillion',       promptTag: 'monochrome-black', reason: '花鸟工笔，朱红点睛' },
   // 兰花：空谷幽兰，月白/淡紫
   orchid:               { pantoneCode: '14-3904 TCX', label: '淡紫',   englishName: 'soft lilac',       promptTag: 'monochrome-black', reason: '空谷幽兰，淡雅' },
   // 芙蓉：朝开暮合，芙蓉出水，粉色
@@ -196,14 +194,6 @@ export const GENERATION_PRESETS: Record<string, GenerationPreset> = {
   // ===== 花卉子类默认值 =====
   // 配色：每个子类对应一个具体潘通色号（见 SUBCATEGORY_PANTONE_MAP），不再使用 multicolor 语义预设
   // applyPreset 会自动用 SUBCATEGORY_PANTONE_MAP 中的真实色号覆盖 colorScheme
-  flower_bird: {
-    arrangement: 'single',
-    symmetry: 'none',
-    complexity: 65,
-    textureDetail: 35,
-    culturalIntensity: 75,
-    colorScheme: { mode: 'pantone', pantone: '18-1555 TCX' },
-  },
   chrysanthemum: {
     arrangement: 'single',
     symmetry: 'mirror',
