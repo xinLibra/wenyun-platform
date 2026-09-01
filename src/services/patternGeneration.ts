@@ -131,14 +131,14 @@ export function buildPromptParts(params: GenerationParams): {
 
   const parts: string[] = []
 
-  // 0) 方胜纹排布分流：单独 → ichpattern_fangsheng_single + single LoRA（weight 0.85）；
-  //    四方连续 → ichpattern_fangsheng_continuous + continuous LoRA（weight 0.85）。
+  // 0) 方胜纹排布分流：单独 → ichpattern_fangsheng_single + single LoRA（weight 0.9）；
+  //    四方连续 → ichpattern_fangsheng_continuous + continuous LoRA（weight 0.9）。
   //    直接覆盖 trigger/loraFile/loraWeight，一次只挂一个方胜 LoRA，禁止单独模式误挂 continuous。
   if (isFangsheng) {
     const fs = FANGSHENG_LORA_MAP[fangshengLayout]
     triggers = [fs.trigger]
     loraFile = fs.loraFile
-    loraWeight = 0.85 // 用户要求 0.85–0.95
+    loraWeight = 0.9 // 用户要求默认 0.9（0.85–0.95 区间内）
   }
 
   // 1) 触发词（牡丹/莲花/花鸟 双 trigger 都会完整入列）
@@ -651,6 +651,10 @@ const FANGSHENG_FIXED_PREFIX_SINGLE = [
   '2d illustration',
   'graphic design',
   'vector-like pattern',
+  // 2026-09-01：单独专属结构强化（only one motif / nested diamond core / petal-like outer frame；large empty margin 已在固定前缀）
+  'only one motif',
+  'nested diamond core',
+  'petal-like outer frame',
 ]
 
 const FANGSHENG_FIXED_PREFIX_CONTINUOUS = [
@@ -665,6 +669,11 @@ const FANGSHENG_FIXED_PREFIX_CONTINUOUS = [
   'no texture',
   '2d illustration',
   'graphic design',
+  // 2026-09-01：连续专属结构强化（细线线描 / 嵌套双菱形轮廓 / 菱形网格）
+  'fine line',
+  'thin stroke linework',
+  'nested double diamond outline',
+  'diamond mesh',
 ]
 
 function buildNegativePromptCore(
@@ -1058,12 +1067,35 @@ export async function generatePatternWithFallback(
     const forbidden = ['fangsheng', 'interlocking diamond', 'diamond motif', 'medallion']
     const leaked = forbidden.filter((t) => negativePrompt.includes(t))
     const hasFlat = prompt.includes('flat pattern design') && prompt.includes('2d illustration')
-    const ok = loraOk && !wrongSideLora && weightOk && missing.length === 0 && leaked.length === 0 && hasFlat
+    // 排布专属正向词（2026-09-01）：连续 → fine line / thin stroke linework / nested double diamond outline / diamond mesh；
+    // 单独 → only one motif / nested diamond core / petal-like outer frame（large empty margin 已在固定前缀）
+    const posSingleWords = ['only one motif', 'nested diamond core', 'petal-like outer frame']
+    const posContinuousWords = ['fine line', 'thin stroke linework', 'nested double diamond outline', 'diamond mesh']
+    const missingPos = (layout === 'continuous' ? posContinuousWords : posSingleWords).filter((t) => !prompt.includes(t))
+    // 排布专属负向：单独必含 seamless/tileable/full background/all-over；连续必不含 seamless/tileable/continuous
+    const missingNegSingle =
+      layout === 'single'
+        ? ['seamless', 'tileable', 'full background pattern', 'all-over pattern'].filter((t) => !negativePrompt.includes(t))
+        : []
+    const leakedNegContinuous =
+      layout === 'continuous'
+        ? ['seamless', 'tileable', 'continuous pattern'].filter((t) => negativePrompt.includes(t))
+        : []
+    const ok =
+      loraOk &&
+      !wrongSideLora &&
+      weightOk &&
+      missing.length === 0 &&
+      leaked.length === 0 &&
+      hasFlat &&
+      missingPos.length === 0 &&
+      missingNegSingle.length === 0 &&
+      leakedNegContinuous.length === 0
     console.log(
       '[patternGeneration] 方胜校验:',
       ok
-        ? `OK（排布=${layout}，lora=${expectLora} weight=${loraWeight}，负向必含/禁止齐全，含 flat pattern design + 2d illustration）`
-        : `${!loraOk ? `LoRA 不匹配(实际 ${loraFile})` : ''}${wrongSideLora ? ' 误挂另一侧 LoRA' : ''}${!weightOk ? ` weight 越界(${loraWeight})` : ''}${missing.length > 0 ? ` 负向缺: ${missing.join('/')}` : ''}${leaked.length > 0 ? ` 负向泄漏: ${leaked.join('/')}` : ''}${!hasFlat ? ' 无 flat pattern design/2d illustration' : ''}`,
+        ? `OK（排布=${layout}，lora=${expectLora} weight=${loraWeight}，负向必含/禁止齐全，含 flat pattern design + 2d illustration，排布专属正/负向词齐）`
+        : `${!loraOk ? `LoRA 不匹配(实际 ${loraFile})` : ''}${wrongSideLora ? ' 误挂另一侧 LoRA' : ''}${!weightOk ? ` weight 越界(${loraWeight})` : ''}${missing.length > 0 ? ` 负向缺: ${missing.join('/')}` : ''}${leaked.length > 0 ? ` 负向泄漏: ${leaked.join('/')}` : ''}${!hasFlat ? ' 无 flat pattern design/2d illustration' : ''}${missingPos.length > 0 ? ` 正向缺排布词: ${missingPos.join('/')}` : ''}${missingNegSingle.length > 0 ? ` 单独负向缺: ${missingNegSingle.join('/')}` : ''}${leakedNegContinuous.length > 0 ? ` 连续负向误含: ${leakedNegContinuous.join('/')}` : ''}`,
     )
     console.log('[patternGeneration] 方胜 final prompt:\n' + prompt)
     console.log('[patternGeneration] 方胜 final negative:\n' + negativePrompt)
