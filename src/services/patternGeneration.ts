@@ -1300,6 +1300,8 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     parts.push('huiwen meander as border frame only')
     parts.push('greek key border along outer edge')
     parts.push('floral motif as main content in center')
+    // 2026-09-01：回纹仅最外层边框、内区仅花卉；禁止内区再生成回纹方框
+    parts.push('huiwen ONLY as outermost border, interior ONLY floral, no meander inside')
     // 可选布局词：旋转对称 → 圆形回纹环；镜像/默认 → 方形回纹框 + 角花
     // （empty center 与"花卉居中主体"冲突，不启用）
     if (params.symmetry === 'rotation') {
@@ -1417,7 +1419,8 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   let negativePrompt = buildNegativePromptCore([subcategoryA, subcategoryB], params.colorScheme, params.arrangement)
   // 回纹+花卉边框模式：回纹不得铺满背景 / 不得无边（2026-09-01）
   if (hasHuiwenBorder) {
-    negativePrompt += ', meander all-over pattern, huiwen filling whole background, borderless'
+    negativePrompt +=
+      ', meander all-over pattern, huiwen filling whole background, borderless, inner meander frame, meander in the center, nested meander square, huiwen inside'
   }
 
   return {
@@ -1474,9 +1477,18 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
       'huiwen meander as border frame only',
       'greek key border along outer edge',
       'floral motif as main content in center',
+      'huiwen ONLY as outermost border, interior ONLY floral, no meander inside',
     ]
     const missing = req.filter((t) => !info.prompt.includes(t))
-    const negReq = ['meander all-over pattern', 'huiwen filling whole background', 'borderless']
+    const negReq = [
+      'meander all-over pattern',
+      'huiwen filling whole background',
+      'borderless',
+      'inner meander frame',
+      'meander in the center',
+      'nested meander square',
+      'huiwen inside',
+    ]
     const negMissing = negReq.filter((t) => !info.negativePrompt.includes(t))
     const huiwenW = options.subcategoryA === 'huiwen' ? info.loraA?.weight : info.loraB?.weight
     const floralW = options.subcategoryA === 'huiwen' ? info.loraB?.weight : info.loraA?.weight
