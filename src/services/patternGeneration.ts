@@ -1242,13 +1242,31 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   const clampW = (w: number) => Math.max(0, Math.min(1.5, w))
   const calcWeight = (recommended: number, ratio: number) =>
     Math.round(clampW((recommended * ratio) / 100) * 100) / 100
-  const weightA = calcWeight(subA?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioA)
-  const weightB = calcWeight(subB?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioB)
-  const loraA = loraFileA && weightA >= 0.05 ? { file: loraFileA, weight: weightA } : null
-  const loraB = loraFileB && weightB >= 0.05 ? { file: loraFileB, weight: weightB } : null
+  let weightA = calcWeight(subA?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioA)
+  let weightB = calcWeight(subB?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioB)
 
   // 融合是否含方胜：任一槽为方胜时，按全局排布决定"单独/连续"语义与负向提示
   const hasFangsheng = subcategoryA === 'fangsheng' || subcategoryB === 'fangsheng'
+
+  // 回纹+花卉 边框模式（2026-09-01）：回纹只作边框、花卉居中主体。
+  // 任一槽为回纹、另一槽为花卉（themeId === 'floral'）即启用（默认意图即边框融合）。
+  const hasHuiwenBorder =
+    (subcategoryA === 'huiwen' && subB?.themeId === 'floral') ||
+    (subcategoryB === 'huiwen' && subA?.themeId === 'floral')
+  if (hasHuiwenBorder) {
+    // 双 LoRA 权重：花卉 0.55–0.7，回纹 0.7–0.85（回纹略高保证框线清晰）
+    const clampRange = (w: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(w * 100) / 100))
+    if (subcategoryA === 'huiwen') {
+      weightA = clampRange(weightA, 0.7, 0.85)
+      weightB = clampRange(weightB, 0.55, 0.7)
+    } else {
+      weightB = clampRange(weightB, 0.7, 0.85)
+      weightA = clampRange(weightA, 0.55, 0.7)
+    }
+  }
+
+  const loraA = loraFileA && weightA >= 0.05 ? { file: loraFileA, weight: weightA } : null
+  const loraB = loraFileB && weightB >= 0.05 ? { file: loraFileB, weight: weightB } : null
 
   // 复用单纹样的颜色/排布/对称等装饰段；伪 params 挂子类 A，用于潘通色号反查
   const pseudoParams: GenerationParams = {
@@ -1275,6 +1293,22 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     const boost = GEOMETRIC_STRUCTURE_BOOST[id]
     if (boost) boost.forEach((w) => parts.push(w))
   })
+
+  // 2.7) 回纹+花卉 边框模式（2026-09-01）：回纹只作边框、花卉居中主体，
+  //      避免"无角色区分"的简单拼接。比例滑条仍映射到 LoRA 权重，prompt 侧回纹追加 border/frame 语义。
+  if (hasHuiwenBorder) {
+    parts.push('huiwen meander as border frame only')
+    parts.push('greek key border along outer edge')
+    parts.push('floral motif as main content in center')
+    // 可选布局词：旋转对称 → 圆形回纹环；镜像/默认 → 方形回纹框 + 角花
+    // （empty center 与"花卉居中主体"冲突，不启用）
+    if (params.symmetry === 'rotation') {
+      parts.push('circular meander ring')
+    } else {
+      parts.push('square frame')
+      parts.push('corner cloud ornaments')
+    }
+  }
 
   // 3) 颜色加权前缀：在 prompt 前半部分重复颜色词，增强模型对颜色的响应
   const colorWeighted = buildColorWeightedClause(pseudoParams)
@@ -1312,12 +1346,12 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     case 'single':
       parts.push('single motif, centered medallion')
       // 融合含方胜/盘长/回纹且排布=单独：强化"单个纹样"语义，避免退化成连续网
+      // （回纹+花卉边框模式除外：回纹作边框、花卉居中，不由 isolated emblem 语义接管）
       if (
         hasFangsheng ||
         subcategoryA === 'panchang' ||
         subcategoryB === 'panchang' ||
-        subcategoryA === 'huiwen' ||
-        subcategoryB === 'huiwen'
+        ((subcategoryA === 'huiwen' || subcategoryB === 'huiwen') && !hasHuiwenBorder)
       ) {
         parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
       }
@@ -1327,14 +1361,17 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
       }
       break
     case 'seamless':
-      parts.push('seamless repeat, tileable continuous pattern')
-      // 盘长连续版（融合侧命中则补）：交织结连续语义，避免退化成菱形网
-      if (subcategoryA === 'panchang' || subcategoryB === 'panchang') {
-        parts.push('continuous interlocking knot pattern')
-      }
-      // 回纹连续版（融合侧命中则补）：显式 meander / greek key border
-      if (subcategoryA === 'huiwen' || subcategoryB === 'huiwen') {
-        parts.push('tileable continuous meander pattern, repeating greek key border')
+      // 回纹+花卉边框模式：不写平铺词（seamless/tileable 与"回纹只作边框"冲突），边框语义已在 2.7 注入
+      if (!hasHuiwenBorder) {
+        parts.push('seamless repeat, tileable continuous pattern')
+        // 盘长连续版（融合侧命中则补）：交织结连续语义，避免退化成菱形网
+        if (subcategoryA === 'panchang' || subcategoryB === 'panchang') {
+          parts.push('continuous interlocking knot pattern')
+        }
+        // 回纹连续版（融合侧命中则补）：显式 meander / greek key border
+        if (subcategoryA === 'huiwen' || subcategoryB === 'huiwen') {
+          parts.push('tileable continuous meander pattern, repeating greek key border')
+        }
       }
       // 锦地连续版（默认）：疏密由第 6 步统一 caption 表控制，不在此重复
       break
@@ -1377,7 +1414,11 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   if (loraB) parts.push(`<lora:${loraB.file}:${loraB.weight}>`)
 
   const prompt = parts.join(', ')
-  const negativePrompt = buildNegativePromptCore([subcategoryA, subcategoryB], params.colorScheme, params.arrangement)
+  let negativePrompt = buildNegativePromptCore([subcategoryA, subcategoryB], params.colorScheme, params.arrangement)
+  // 回纹+花卉边框模式：回纹不得铺满背景 / 不得无边（2026-09-01）
+  if (hasHuiwenBorder) {
+    negativePrompt += ', meander all-over pattern, huiwen filling whole background, borderless'
+  }
 
   return {
     prompt,
@@ -1423,6 +1464,36 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
     'sampler=', SD_DEFAULTS.samplerName,
     'size=', `${SD_DEFAULTS.width}x${SD_DEFAULTS.height}`,
   )
+
+  // 回纹+花卉边框模式校验（2026-09-01）：正向角色词、负向压制词、双 LoRA 权重范围
+  const huiwenBorder =
+    (options.subcategoryA === 'huiwen' && getLoraEntry(options.subcategoryB)?.themeId === 'floral') ||
+    (options.subcategoryB === 'huiwen' && getLoraEntry(options.subcategoryA)?.themeId === 'floral')
+  if (huiwenBorder) {
+    const req = [
+      'huiwen meander as border frame only',
+      'greek key border along outer edge',
+      'floral motif as main content in center',
+    ]
+    const missing = req.filter((t) => !info.prompt.includes(t))
+    const negReq = ['meander all-over pattern', 'huiwen filling whole background', 'borderless']
+    const negMissing = negReq.filter((t) => !info.negativePrompt.includes(t))
+    const huiwenW = options.subcategoryA === 'huiwen' ? info.loraA?.weight : info.loraB?.weight
+    const floralW = options.subcategoryA === 'huiwen' ? info.loraB?.weight : info.loraA?.weight
+    const wOk =
+      huiwenW !== undefined &&
+      floralW !== undefined &&
+      huiwenW >= 0.7 &&
+      huiwenW <= 0.85 &&
+      floralW >= 0.55 &&
+      floralW <= 0.7
+    console.log(
+      '[patternGeneration] 回纹+花卉边框校验:',
+      missing.length === 0 && negMissing.length === 0 && wOk
+        ? `OK（回纹=${huiwenW}，花卉=${floralW}，边框正/负向词齐）`
+        : `${missing.length > 0 ? ` 正向缺: ${missing.join('/')}` : ''}${negMissing.length > 0 ? ` 负向缺: ${negMissing.join('/')}` : ''}${!wOk ? ` 权重越界(回纹=${huiwenW}, 花卉=${floralW})` : ''}`,
+    )
+  }
 
   try {
     const result = await callSdProxy({
