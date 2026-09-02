@@ -1244,6 +1244,55 @@ export interface FusionPromptInfo {
  *   - loraMap 中 loraFile 为 null 的子类：不加 lora 标签，只写 trigger，不崩溃。
  *     （2026-08-26 起兰花/芙蓉花/石榴花已挂载专属 LoRA，不再命中该分支。）
  */
+/**
+ * 花卉+回纹边框模式词表（2026-09-02 稳定版）
+ *
+ * 目标：回纹仅作最外细边框、内区仅花卉，避免回纹权重过高 / maze 结构词诱发「满铺迷宫」。
+ * - 回纹 LoRA 权重恒 ≤0.6（默认 0.45–0.55），任何比例下滑条都降级为 border 语义；
+ * - 花卉 LoRA 权重 0.75–0.85（内区主体）。
+ */
+const HUIWEN_BORDER_PROMPT = {
+  /** 花卉侧 LoRA 权重区间（默认 0.75–0.85） */
+  floralWeightRange: [0.75, 0.85] as const,
+  /** 回纹侧 LoRA 权重区间（0.45–0.55，最高不超过 0.6） */
+  huiwenWeightRange: [0.45, 0.55] as const,
+  /** 正向必须包含的边框句（替换旧 border frame only / corner ornaments 倾向词） */
+  requiredPositive: [
+    'thin single-line outermost border only',
+    'one narrow greek key frame along the four outer edges',
+    'floral filling the inner panel only',
+  ],
+  /** 允许的补充边框描述（thin border 宽度约束） */
+  availablePositive: ['simple rectangular meander border band', 'thin border width'],
+  /** 正向禁止词：maze / labyrinth 类，命中即从 prompt 移除（以 border only 为准） */
+  bannedPositive: [
+    'nested rectangular maze',
+    'rectangular spiral meander',
+    'labyrinth',
+    'dense meander field',
+    'full meander background',
+  ],
+  /** 负向固定追加：压制满铺 / 迷宫 / 多层内框 */
+  fixedNegative: [
+    'meander filling the whole image',
+    'labyrinth',
+    'maze background',
+    'nested meander',
+    'all-over greek key',
+    'huiwen all-over',
+    'dense maze',
+    'complex labyrinth medallion',
+    // 保留既有压制（去重后拼入）
+    'meander all-over pattern',
+    'huiwen filling whole background',
+    'borderless',
+    'inner meander frame',
+    'meander in the center',
+    'nested meander square',
+    'huiwen inside',
+  ],
+}
+
 export function buildFusionPromptParts(options: FusionGenerationOptions): FusionPromptInfo {
   const { subcategoryA, subcategoryB, ratioA, ratioB, params } = options
   const subA = getLoraEntry(subcategoryA)
@@ -1294,14 +1343,18 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     (subcategoryA === 'huiwen' && subB?.themeId === 'floral') ||
     (subcategoryB === 'huiwen' && subA?.themeId === 'floral')
   if (hasHuiwenBorder) {
-    // 双 LoRA 权重：花卉 0.55–0.7，回纹 0.7–0.85（回纹略高保证框线清晰）
+    // 2026-09-02 权重反转修复：旧值「回纹 0.7–0.85 略高」导致回纹满铺成迷宫。
+    // 新值：花卉 0.75–0.85（内区主体）、回纹 0.45–0.55（最外细边框，恒 ≤0.6）。
+    // 滑条把回纹比例推到 >45% 时仍按此 clamp（≤0.6），"满铺回纹"意图被降级为 border。
     const clampRange = (w: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(w * 100) / 100))
+    const [fwLo, fwHi] = HUIWEN_BORDER_PROMPT.floralWeightRange
+    const [hwLo, hwHi] = HUIWEN_BORDER_PROMPT.huiwenWeightRange
     if (subcategoryA === 'huiwen') {
-      weightA = clampRange(weightA, 0.7, 0.85)
-      weightB = clampRange(weightB, 0.55, 0.7)
+      weightA = clampRange(weightA, hwLo, hwHi)
+      weightB = clampRange(weightB, fwLo, fwHi)
     } else {
-      weightB = clampRange(weightB, 0.7, 0.85)
-      weightA = clampRange(weightA, 0.55, 0.7)
+      weightB = clampRange(weightB, hwLo, hwHi)
+      weightA = clampRange(weightA, fwLo, fwHi)
     }
   }
 
@@ -1328,27 +1381,42 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     parts.push('Chinese traditional pattern')
   }
 
-  // 2.5) 几何结构强化（融合侧命中则并入，如 回纹+牡丹 时回纹补直角折线描述）
+  // 2.5) 几何结构强化（融合侧命中则并入，如 回纹+牡丹 时回纹补直角折线描述）。
+  // 2026-09-02：花卉+回纹边框模式下过滤回纹 maze/labyrinth 类结构词（nested rectangular maze /
+  // rectangular spiral meander 会把"回纹边框"诱发成满幅迷宫），以 border only 语义为准。
+  const removedMazeWords: string[] = []
   ;[subcategoryA, subcategoryB].forEach((id) => {
     const boost = GEOMETRIC_STRUCTURE_BOOST[id]
-    if (boost) boost.forEach((w) => parts.push(w))
+    if (!boost) return
+    boost.forEach((w) => {
+      if (hasHuiwenBorder && id === 'huiwen') {
+        const banned = HUIWEN_BORDER_PROMPT.bannedPositive.find((b) => w.toLowerCase().includes(b.toLowerCase()))
+        if (banned) {
+          removedMazeWords.push(w)
+          return
+        }
+      }
+      parts.push(w)
+    })
   })
+  if (removedMazeWords.length > 0) {
+    console.debug(
+      '[patternGeneration] 花卉+回纹边框模式：移除正向 maze 倾向词 =',
+      removedMazeWords.join(' | '),
+      '（以 thin outermost border only 为准）',
+    )
+  }
 
-  // 2.7) 回纹+花卉 边框模式（2026-09-01）：回纹只作边框、花卉居中主体，
-  //      避免"无角色区分"的简单拼接。比例滑条仍映射到 LoRA 权重，prompt 侧回纹追加 border/frame 语义。
+  // 2.7) 回纹+花卉 边框模式（2026-09-02 稳定版）：回纹仅最外细边框、内区仅花卉。
+  //      用 thin single-line / narrow greek key 精确词替换旧的 border frame only / square frame /
+  //      corner cloud ornaments（角花/方框词会叠加成多框或诱发迷宫）。
   if (hasHuiwenBorder) {
-    parts.push('huiwen meander as border frame only')
-    parts.push('greek key border along outer edge')
-    parts.push('floral motif as main content in center')
-    // 2026-09-01：回纹仅最外层边框、内区仅花卉；禁止内区再生成回纹方框
+    for (const w of HUIWEN_BORDER_PROMPT.requiredPositive) parts.push(w)
+    for (const w of HUIWEN_BORDER_PROMPT.availablePositive) parts.push(w)
     parts.push('huiwen ONLY as outermost border, interior ONLY floral, no meander inside')
-    // 可选布局词：旋转对称 → 圆形回纹环；镜像/默认 → 方形回纹框 + 角花
-    // （empty center 与"花卉居中主体"冲突，不启用）
+    // 旋转对称 → 细圆形回纹环（仍是最外细边框）
     if (params.symmetry === 'rotation') {
-      parts.push('circular meander ring')
-    } else {
-      parts.push('square frame')
-      parts.push('corner cloud ornaments')
+      parts.push('thin circular meander ring along outer edge')
     }
   }
 
@@ -1384,7 +1452,10 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   }
 
   // 7) 排布：arrangement
-  switch (params.arrangement) {
+  // 2026-09-02：花卉+回纹边框模式强制 single——continuous tile 语义会要求"满铺可平铺"，
+  // 与"回纹仅最外细边框"冲突，会把回纹融回满铺。预设/UI 已 single，这里做兜底强制。
+  const arrangementUsed = hasHuiwenBorder ? ('single' as const) : params.arrangement
+  switch (arrangementUsed) {
     case 'single':
       parts.push('single motif, centered medallion')
       // 融合含方胜/盘长/回纹且排布=单独：强化"单个纹样"语义，避免退化成连续网
@@ -1456,11 +1527,10 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   if (loraB) parts.push(`<lora:${loraB.file}:${loraB.weight}>`)
 
   const prompt = parts.join(', ')
-  let negativePrompt = buildNegativePromptCore([subcategoryA, subcategoryB], params.colorScheme, params.arrangement)
-  // 回纹+花卉边框模式：回纹不得铺满背景 / 不得无边（2026-09-01）
+  let negativePrompt = buildNegativePromptCore([subcategoryA, subcategoryB], params.colorScheme, arrangementUsed)
+  // 回纹+花卉边框模式：固定追加迷宫/满铺/多层框压制（2026-09-02 合并新旧压制词）
   if (hasHuiwenBorder) {
-    negativePrompt +=
-      ', meander all-over pattern, huiwen filling whole background, borderless, inner meander frame, meander in the center, nested meander square, huiwen inside'
+    negativePrompt += ', ' + HUIWEN_BORDER_PROMPT.fixedNegative.join(', ')
   }
 
   return {
@@ -1508,43 +1578,59 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
     'size=', `${SD_DEFAULTS.width}x${SD_DEFAULTS.height}`,
   )
 
-  // 回纹+花卉边框模式校验（2026-09-01）：正向角色词、负向压制词、双 LoRA 权重范围
+  // 回纹+花卉边框模式校验（2026-09-02）：正向细边框句、正向无 maze 泄漏、负向压制词、双 LoRA 权重区间
   const huiwenBorder =
     (options.subcategoryA === 'huiwen' && getLoraEntry(options.subcategoryB)?.themeId === 'floral') ||
     (options.subcategoryB === 'huiwen' && getLoraEntry(options.subcategoryA)?.themeId === 'floral')
   if (huiwenBorder) {
-    const req = [
-      'huiwen meander as border frame only',
-      'greek key border along outer edge',
-      'floral motif as main content in center',
-      'huiwen ONLY as outermost border, interior ONLY floral, no meander inside',
-    ]
-    const missing = req.filter((t) => !info.prompt.includes(t))
+    const huiwenRatio = options.subcategoryA === 'huiwen' ? options.ratioA : options.ratioB
+    const huiwenW = options.subcategoryA === 'huiwen' ? info.loraA?.weight : info.loraB?.weight
+    const floralW = options.subcategoryA === 'huiwen' ? info.loraB?.weight : info.loraA?.weight
+    // 1) 正向必需细边框句
+    const missing = HUIWEN_BORDER_PROMPT.requiredPositive.filter((t) => !info.prompt.includes(t))
+    // 2) 正向不得残留 maze / labyrinth（build 期已移除，这里复查）
+    const mazeLeaked = HUIWEN_BORDER_PROMPT.bannedPositive.filter((b) => info.prompt.toLowerCase().includes(b))
+    // 3) 负向固定压制词抽查（核心代表，防未来词表漂移）
     const negReq = [
+      'meander filling the whole image',
+      'labyrinth',
+      'maze background',
+      'nested meander',
+      'all-over greek key',
+      'dense maze',
+      'complex labyrinth medallion',
       'meander all-over pattern',
-      'huiwen filling whole background',
-      'borderless',
-      'inner meander frame',
-      'meander in the center',
-      'nested meander square',
       'huiwen inside',
     ]
     const negMissing = negReq.filter((t) => !info.negativePrompt.includes(t))
-    const huiwenW = options.subcategoryA === 'huiwen' ? info.loraA?.weight : info.loraB?.weight
-    const floralW = options.subcategoryA === 'huiwen' ? info.loraB?.weight : info.loraA?.weight
+    // 4) LoRA 权重区间：回纹 0.45–0.55（最高 0.6）、花卉 0.75–0.85
+    const [fwLo, fwHi] = HUIWEN_BORDER_PROMPT.floralWeightRange
+    const [hwLo, hwHi] = HUIWEN_BORDER_PROMPT.huiwenWeightRange
     const wOk =
-      huiwenW !== undefined &&
-      floralW !== undefined &&
-      huiwenW >= 0.7 &&
-      huiwenW <= 0.85 &&
-      floralW >= 0.55 &&
-      floralW <= 0.7
+      huiwenW !== undefined && floralW !== undefined && huiwenW >= hwLo && huiwenW <= hwHi && floralW >= fwLo && floralW <= fwHi
+    const pass = missing.length === 0 && mazeLeaked.length === 0 && negMissing.length === 0 && wOk
     console.log(
       '[patternGeneration] 回纹+花卉边框校验:',
-      missing.length === 0 && negMissing.length === 0 && wOk
-        ? `OK（回纹=${huiwenW}，花卉=${floralW}，边框正/负向词齐）`
-        : `${missing.length > 0 ? ` 正向缺: ${missing.join('/')}` : ''}${negMissing.length > 0 ? ` 负向缺: ${negMissing.join('/')}` : ''}${!wOk ? ` 权重越界(回纹=${huiwenW}, 花卉=${floralW})` : ''}`,
+      pass
+        ? `OK（回纹 weight=${huiwenW}≤0.6，花卉 weight=${floralW}，thin outermost border 词齐，无 maze/labyrinth 泄漏，负向压制齐）`
+        : `${missing.length > 0 ? ` 正向缺 thin border 词: ${missing.join('/')}` : ''}${mazeLeaked.length > 0 ? ` 正向 maze 泄漏: ${mazeLeaked.join('/')}` : ''}${negMissing.length > 0 ? ` 负向缺: ${negMissing.join('/')}` : ''}${!wOk ? ` 权重越界(回纹=${huiwenW}, 花卉=${floralW})` : ''}`,
     )
+    console.log(
+      '[patternGeneration] 回纹边框日志: 回纹比例=',
+      `${huiwenRatio}%`,
+      '| lora 权重: 回纹=',
+      huiwenW,
+      '花卉=',
+      floralW,
+      '| 正向含 thin outermost border:',
+      info.prompt.includes('thin single-line outermost border only'),
+      '| 正向含 maze/labyrinth:',
+      /labyrinth|maze/i.test(info.prompt),
+      '| 满铺回纹语义 -> 已降级为 border（比例>45% 时回纹权重仍 <=0.6）',
+    )
+    if (options.params?.arrangement === 'seamless') {
+      console.warn('[patternGeneration] 花卉+回纹：检测到 seamless 排布，已强制按 single（continuous tile 与边框模式冲突）')
+    }
   }
 
   try {
