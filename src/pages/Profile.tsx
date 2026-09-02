@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
+import { downloadImageViaProxy } from '../utils/downloadImage'
 
 export default function ProfilePage() {
   const navigate = useNavigate()
@@ -60,6 +61,16 @@ export default function ProfilePage() {
 
     fetchProfile()
   }, [navigate])
+
+  const handleDownload = async (generation: Generation) => {
+    try {
+      // fetch 中转 + Blob 二次校验（MIME / 大小 / PNG·JPEG 文件头），失败抛错不落盘
+      await downloadImageViaProxy(generation.image_url, `wenyun_pattern_${Date.now()}.png`)
+    } catch (e: any) {
+      console.error('[Profile] 下载失败:', e)
+      alert((e as Error)?.message || '下载失败，请稍后重试')
+    }
+  }
 
   const handlePublicToggle = async (generationId: string, currentPublic: boolean) => {
     const newValue = !currentPublic
@@ -401,15 +412,7 @@ export default function ProfilePage() {
                           </div>
                           <div className="flex gap-2">
                             <button
-                              onClick={() => {
-                                const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(generation.image_url)}`
-                                const link = document.createElement('a')
-                                link.href = proxyUrl
-                                link.download = `纹韵纹样_${generation.id}.png`
-                                document.body.appendChild(link)
-                                link.click()
-                                document.body.removeChild(link)
-                              }}
+                              onClick={() => handleDownload(generation)}
                               className="flex-1 py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
                             >
                               下载

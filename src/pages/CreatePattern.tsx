@@ -609,7 +609,10 @@ export default function CreatePattern() {
       showToastMessage('图片已开始下载')
     } catch (err) {
       console.error('[CreatePattern] 下载失败:', err)
-      showToastMessage('下载失败，请检查网络或图片链接后重试')
+      // 直接展示底层校验结果（如「占位图不可下载 / 图片数据异常（过小），请重新生成」），
+      // 而不是泛化的「下载失败」——让用户明确知道当前结果不能作为成图下载
+      const msg = (err as Error)?.message
+      showToastMessage(msg && /占位|数据异常|重新生成|格式|图片|请求失败/i.test(msg) ? msg : '下载失败，请检查网络或图片链接后重试')
     }
   }
 

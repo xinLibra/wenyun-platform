@@ -197,9 +197,36 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         b64 = images[0]
         # A1111 返回的 base64 字符串里有时会带 data: 前缀；统一剥掉再重新拼
+        if isinstance(b64, dict):
+            b64 = b64.get("image") or b64.get("b64_json") or ""
+        if not isinstance(b64, str) or not b64:
+            self._send_json(502, {"error": "WebUI returned empty image payload"})
+            return
         if "," in b64 and b64.startswith("data:"):
             b64 = b64.split(",", 1)[1]
+
+        # 解码并校验：只把有效的 PNG/JPEG 当成功返回；空/损坏/极小图一律 502
+        try:
+            img_bytes = base64.b64decode(b64, validate=True)
+        except Exception as e:  # noqa: BLE001
+            self._send_json(502, {"error": "WebUI image is not valid base64: %s" % e})
+            return
+        if len(img_bytes) < 10 * 1024:
+            self._send_json(502, {
+                "error": "WebUI image too small: %d bytes" % len(img_bytes),
+            })
+            return
+        is_png = img_bytes[:8] == b"\x89PNG\r\n\x1a\n"
+        is_jpeg = img_bytes[:3] == b"\xff\xd8\xff"
+        if not (is_png or is_jpeg):
+            self._send_json(502, {
+                "error": "WebUI image header invalid: %r" % img_bytes[:8].hex(),
+            })
+            return
+
         data_url = "data:image/png;base64," + b64
+        print("[sd_proxy] image ok: b64_len=%d decoded_bytes=%d header=%s"
+              % (len(b64), len(img_bytes), img_bytes[:8].hex()), flush=True)
 
         # 解析 info 里的 seed
         seed = -1

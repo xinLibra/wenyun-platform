@@ -14,6 +14,7 @@ import {
   fetchGenerationImage,
 } from '../lib/imageLoader'
 import WorkDetailModal from '../components/WorkDetailModal'
+import { downloadImageViaProxy } from '../utils/downloadImage'
 
 const SESSION_TIMEOUT_MS = 20000
 const DB_TIMEOUT_MS = 25000
@@ -465,23 +466,19 @@ export default function MyWorksPage() {
       }
     }
     try {
-      const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(imageUrl)}`
-      
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      
       if (isMobile) {
-        window.open(proxyUrl, '_blank')
-      } else {
-        const link = document.createElement('a')
-        link.href = proxyUrl
-        link.download = `wenyun_pattern_${Date.now()}.png`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+        // 移动端走新窗口：后端 download 函数已校验 Content-Type / 文件头 / 最小字节，
+        // 坏数据会返回非 200 JSON，不会落成伪 .png 文件
+        window.open(`/.netlify/functions/download?url=${encodeURIComponent(imageUrl)}`, '_blank')
+        return
       }
+      // 经 Netlify download 函数中转并二次校验（Blob MIME / 大小 / PNG·JPEG 文件头），
+      // 校验失败抛错中止，绝不把 JSON / SVG / 截断内容落成 .png
+      await downloadImageViaProxy(imageUrl, `wenyun_pattern_${Date.now()}.png`)
     } catch (error) {
-      console.error('下载失败:', error)
-      alert('下载失败，请尝试右键图片另存为')
+      console.error('[MyWorks] 下载失败:', error)
+      alert((error as Error)?.message || '下载失败，请尝试右键图片另存为')
     }
   }
 

@@ -6,6 +6,7 @@ import { mockPatternDna } from '../mock/patternDna'
 import { supabase } from '../lib/supabase'
 import { PATTERN_PLACEHOLDER, isPlaceholderUrl } from '../lib/imageLoader'
 import { Button } from './ui/Button'
+import { downloadImageViaProxy } from '../utils/downloadImage'
 
 export interface WorkDetailModalWork {
   id: string
@@ -107,23 +108,18 @@ export default function WorkDetailModal({
     }
     setDownloading(true)
     try {
-      const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(url)}`
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
         navigator.userAgent
       )
       if (isMobile) {
-        window.open(proxyUrl, '_blank')
-      } else {
-        const link = document.createElement('a')
-        link.href = proxyUrl
-        link.download = `wenyun_pattern_${work.id.slice(0, 8)}.png`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+        window.open(`/.netlify/functions/download?url=${encodeURIComponent(url)}`, '_blank')
+        return
       }
+      // 经 download 函数中转并校验文件头/大小，失败抛错不落盘
+      await downloadImageViaProxy(url, `wenyun_pattern_${(work.id || '').slice(0, 8) || Date.now()}.png`)
     } catch (error) {
-      console.error('下载失败:', error)
-      alert('下载失败，请尝试右键图片另存为')
+      console.error('[WorkDetailModal] 下载失败:', error)
+      alert((error as Error)?.message || '下载失败，请尝试右键图片另存为')
     } finally {
       setDownloading(false)
     }

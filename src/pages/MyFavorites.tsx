@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { useFavorites } from '../context/FavoriteContext'
+import { downloadImageViaProxy } from '../utils/downloadImage'
 
 interface FavoriteWork {
   id: string
@@ -102,23 +103,17 @@ export default function MyFavoritesPage() {
       return
     }
     try {
-      const proxyUrl = `/.netlify/functions/download?url=${encodeURIComponent(favorite.image_url)}`
-      
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      
       if (isMobile) {
-        window.open(proxyUrl, '_blank')
-      } else {
-        const link = document.createElement('a')
-        link.href = proxyUrl
-        link.download = `wenyun_pattern_${Date.now()}.png`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+        // 移动端新窗口：download 函数侧已校验 Content-Type / 文件头 / 最小字节
+        window.open(`/.netlify/functions/download?url=${encodeURIComponent(favorite.image_url)}`, '_blank')
+        return
       }
+      // fetch 中转 + Blob 二次校验后下载；校验失败抛错，绝不把坏数据落成 .png
+      await downloadImageViaProxy(favorite.image_url, `wenyun_pattern_${Date.now()}.png`)
     } catch (error) {
-      console.error('下载失败:', error)
-      alert('下载失败，请尝试右键图片另存为')
+      console.error('[MyFavorites] 下载失败:', error)
+      alert((error as Error)?.message || '下载失败，请尝试右键图片另存为')
     }
   }
 

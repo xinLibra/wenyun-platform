@@ -14,6 +14,7 @@ import { getLoraEntry, DEFAULT_LORA_WEIGHT, FANGSHENG_LORA_MAP } from '../config
 import { getPantoneForSubcategory } from '../config/generationPresets'
 import { getPantoneHex as getPantoneHexFromMap } from '../config/pantoneMap'
 import { mockGeneratePattern } from './mockGeneration'
+import { inspectDataUrl, MIN_IMAGE_BYTES } from '../utils/downloadImage'
 
 export interface PatternGenerationResult {
   imageUrl: string
@@ -873,21 +874,60 @@ async function callSdProxy(payload: {
       throw new Error(`SD proxy HTTP ${resp.status}: ${errText.slice(0, 200)}`)
     }
 
-    const data = (await resp.json()) as {
-      image_url?: string
-      generation_id?: string
-      seed?: number
-      elapsed_ms?: number
-      file_path?: string | null
-      error?: string
+    const data = await resp.json()
+
+    // —— 兼容 proxy / WebUI / 各版本后端的不同返回结构 ——
+    const pick = (v: unknown): unknown =>
+      typeof v === 'string' ? v : typeof v === 'object' && v !== null && 'image' in v ? (v as any).image : undefined
+    const rawImage: unknown =
+      pick(data?.image_url) ??
+      pick(data?.image) ??
+      pick(data?.url) ??
+      (Array.isArray(data?.images) ? pick(data.images[0]) : undefined) ??
+      (data?.data && typeof data.data === 'object' ? pick(data.data?.image_url) ?? pick(data.data?.image) ?? (Array.isArray(data.data.images) ? pick(data.data.images[0]) : undefined) : undefined) ??
+      (data?.result && typeof data.result === 'object' ? pick(data.result?.image_url) ?? pick(data.result?.image) : undefined)
+
+    if (typeof rawImage !== 'string' || rawImage.trim() === '') {
+      throw new Error(data?.error || 'SD proxy 未返回有效图片字段（images 为空）')
     }
-    if (!data.image_url) {
-      throw new Error(data.error || 'SD proxy returned no image_url')
+    const imageUrl = rawImage.trim()
+
+    // —— 图片有效性校验：真实链路绝不把空图/占位/坏图当作成功 ——
+    console.debug(
+      '[patternGeneration] images[0] typeof:',
+      typeof rawImage,
+      '| 是 data:image 前缀:',
+      imageUrl.startsWith('data:image/'),
+      '| 字符串长度:',
+      imageUrl.length,
+    )
+    if (imageUrl.startsWith('data:image/')) {
+      const inspected = inspectDataUrl(imageUrl)
+      console.debug(
+        '[patternGeneration] base64 解码: byteLength=',
+        inspected.byteLength,
+        '| 文件头 hex:',
+        inspected.headerHex || '(无)',
+        '| 有效:',
+        inspected.ok,
+      )
+      if (!inspected.ok || inspected.byteLength < MIN_IMAGE_BYTES) {
+        throw new Error(
+          inspected.ok
+            ? `SD 返回图片过小（${inspected.byteLength} 字节 < ${MIN_IMAGE_BYTES}），未拿到有效图片`
+            : (inspected.reason || 'SD 返回图片无效，未拿到有效图片'),
+        )
+      }
+    } else if (/^https?:\/\//.test(imageUrl)) {
+      console.debug('[patternGeneration] SD 返回远程 URL（下载时再做字节/文件头校验）')
+    } else {
+      throw new Error('SD 返回的图片字段既不是 data URL 也不是 http(s) URL，未拿到有效图片')
     }
+
     return {
-      imageUrl: data.image_url,
+      imageUrl,
       generationId: data.generation_id || `sd-${Date.now()}`,
-      seed: data.seed ?? -1,
+      seed: typeof data.seed === 'number' ? data.seed : -1,
       elapsedMs: typeof data.elapsed_ms === 'number' ? data.elapsed_ms : undefined,
       filePath: data.file_path || undefined,
     }
