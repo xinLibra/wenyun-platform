@@ -616,6 +616,7 @@ const GEOMETRIC_STRUCTURE_BOOST: Record<string, string[]> = {
   jindi: [
     // 2026-08-31 二次修订：按用户固定前缀顺序（龟背六角 / 套环 / 菱格），
     // decorative motif / flat pattern design / clean lines / no texture 并入前缀，确保出现在配色之前
+    // 2026-09-02：前四词为用户指定的正向固定锚点（防六角格网被画成横条纹布料）
     'hexagonal honeycomb lattice',
     'tortoiseshell pattern',
     'repeating regular hexagon grid',
@@ -776,6 +777,15 @@ function buildNegativePromptCore(
         'broken lattice',
         'random geometry',
         'physical object',
+        // 2026-09-02：禁止六角格网漂成横条纹布料——条纹词为锦地固定负向（用户指定四词 + 布料语境补充）。
+        // 注意这些词不含 hexagon/honeycomb/tortoiseshell/brocade 等结构锚点，不触发结构词泄漏检查。
+        'horizontal stripes',
+        'vertical stripes',
+        'stripe pattern',
+        'banded pattern',
+        'striped fabric',
+        'woven stripes',
+        'horizontal banding',
       )
     }
 
@@ -1030,7 +1040,7 @@ export async function generatePatternWithFallback(
     console.log('[patternGeneration] 回纹 final negative:\n' + negativePrompt)
   }
 
-  // 校验 6：锦地 negative 必含软边/抽象压制词，且不得含结构禁词
+  // 校验 6：锦地 negative 必含软边/抽象压制词与条纹压制词，且不得含结构禁词（2026-09-02 追加条纹词）
   if (subcategoryId === 'jindi') {
     const required = [
       'soft blob',
@@ -1043,6 +1053,11 @@ export async function generatePatternWithFallback(
       'broken lattice',
       'random geometry',
       'physical object',
+      // 2026-09-02：条纹固定负向（禁止横条纹布料漂移）
+      'horizontal stripes',
+      'vertical stripes',
+      'stripe pattern',
+      'banded pattern',
     ]
     const missing = required.filter((t) => !negativePrompt.includes(t))
     const forbidden = ['hexagon', 'honeycomb', 'tortoiseshell', 'brocade', 'jindi', 'geometric ground']
@@ -1053,8 +1068,19 @@ export async function generatePatternWithFallback(
     console.log(
       '[patternGeneration] 锦地负向校验:',
       ok
-        ? 'OK（压制词齐全，无 hexagon/honeycomb/tortoiseshell/brocade/jindi/geometric ground，lattice 仅以 broken lattice 刻意压制形式存在）'
+        ? 'OK（软边/抽象/stripes 压制词齐全，无 hexagon/honeycomb/tortoiseshell/brocade/jindi/geometric ground，lattice 仅以 broken lattice 刻意压制形式存在）'
         : `${missing.length > 0 ? `缺: ${missing.join('/')}` : ''}${leakedForbidden.length > 0 ? ` 泄漏: ${leakedForbidden.join('/')}` : ''}${latticeOnlyBroken ? ' lattice 泄漏' : ''}`,
+    )
+    const weightOk = loraWeight >= 0.85 && loraWeight <= 0.9
+    console.log(
+      '[patternGeneration] 锦地 LoRA/结构校验:',
+      weightOk ? `OK（weight=${loraWeight}，区间 0.85–0.9）` : `weight=${loraWeight} 越界（应为 0.85–0.9）`,
+      '| 正向固定四词:',
+      ['hexagonal honeycomb lattice', 'tortoiseshell pattern', 'repeating regular hexagon grid', 'geometric brocade ground'].every(
+        (t) => prompt.includes(t),
+      )
+        ? 'OK'
+        : '缺失',
     )
     console.log('[patternGeneration] 锦地 final prompt:\n' + prompt)
     console.log('[patternGeneration] 锦地 final negative:\n' + negativePrompt)
@@ -1631,6 +1657,29 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
     if (options.params?.arrangement === 'seamless') {
       console.warn('[patternGeneration] 花卉+回纹：检测到 seamless 排布，已强制按 single（continuous tile 与边框模式冲突）')
     }
+  }
+
+  // 锦地条纹压制校验（2026-09-02）：含锦地的融合（如 菊花+锦地 seamless）正向须带六角结构锚点、
+  // 负向须带 stripes 压制，防止六角格网漂成横条纹布料。
+  const hasJindiSide = options.subcategoryA === 'jindi' || options.subcategoryB === 'jindi'
+  if (hasJindiSide) {
+    const jindiPosReq = [
+      'hexagonal honeycomb lattice',
+      'tortoiseshell pattern',
+      'repeating regular hexagon grid',
+      'geometric brocade ground',
+    ]
+    const posMissing = jindiPosReq.filter((t) => !info.prompt.includes(t))
+    const stripeNeg = ['horizontal stripes', 'vertical stripes', 'stripe pattern', 'banded pattern'].filter(
+      (t) => !info.negativePrompt.includes(t),
+    )
+    const jindiW = options.subcategoryA === 'jindi' ? info.loraA?.weight : info.loraB?.weight
+    console.log(
+      '[patternGeneration] 锦地校验:',
+      posMissing.length === 0 && stripeNeg.length === 0
+        ? `OK（正向 hexagon/tortoiseshell/brocade ground 齐，负向含 stripes 压制，jindi weight=${jindiW}）`
+        : `${posMissing.length > 0 ? ` 正向缺: ${posMissing.join('/')}` : ''}${stripeNeg.length > 0 ? ` 负向缺 stripes: ${stripeNeg.join('/')}` : ''}`,
+    )
   }
 
   try {

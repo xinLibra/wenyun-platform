@@ -172,7 +172,7 @@ export const LORA_MAP: LoraMapEntry[] = [
     // 2026-08-31 专项：trigger 按交付约定写死 ichpattern_jindi（若实测触发弱，对照训练 caption 首词再调）
     trigger: 'ichpattern_jindi',
     loraFile: 'ICH_jindi_pattern_lora_v4-000004',
-    loraWeight: 0.85, // 锦地结构弱、易漂成软边抽象块面，固定 0.85（2026-08-31）
+    loraWeight: 0.9, // 锦地结构弱、易漂成软边抽象块面/横条纹布料，提到区间上限 0.9（用户要求默认 0.85–0.9，2026-09-02）
   },
   {
     subcategoryId: 'fangsheng',
