@@ -23,12 +23,20 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import os
 import time
 import uuid
+import math
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import request, error
+
+try:
+    from PIL import Image  # 仅用于「几何框 + 花卉」两段合成；缺失时退化返回框底图
+    _HAS_PIL = True
+except Exception:  # noqa: BLE001
+    _HAS_PIL = False
 
 # ---------- 配置 ----------
 SDAPI_URL = os.environ.get("SDAPI_URL", "http://127.0.0.1:7860").rstrip("/")
@@ -120,6 +128,145 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 return
         self._send_json(404, {"error": "not found", "path": self.path})
 
+    # ---------- 复用：单次 txt2img ----------
+    def _call_txt2img(self, body: dict) -> tuple[bytes, int, str, str]:
+        data = json.dumps(body).encode("utf-8")
+        req_obj = request.Request(
+            TXT2IMG_ENDPOINT,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        t0 = time.time()
+        try:
+            with request.urlopen(req_obj, timeout=10 * 60) as resp:
+                resp_bytes = resp.read()
+        except error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")[:500]
+            raise RuntimeError("WebUI HTTP %d: %s" % (e.code, detail)) from e
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError("WebUI unreachable: %s" % e) from e
+        elapsed = time.time() - t0
+        print("[sd_proxy] <- txt2img elapsed=%.1fs" % elapsed, flush=True)
+
+        payload = json.loads(resp_bytes.decode("utf-8"))
+        images = payload.get("images") or []
+        if not images:
+            raise RuntimeError("WebUI returned no images: %s" % str(payload)[:300])
+        b64 = images[0]
+        if isinstance(b64, dict):
+            b64 = b64.get("image") or b64.get("b64_json") or ""
+        if not isinstance(b64, str) or not b64:
+            raise RuntimeError("WebUI returned empty image payload")
+        if "," in b64 and b64.startswith("data:"):
+            b64 = b64.split(",", 1)[1]
+        img_bytes = base64.b64decode(b64, validate=True)
+        if len(img_bytes) < 10 * 1024:
+            raise RuntimeError("WebUI image too small: %d bytes" % len(img_bytes))
+
+        seed = -1
+        info = payload.get("info")
+        if isinstance(info, str):
+            try:
+                seed = int(json.loads(info).get("seed", -1))
+            except Exception:  # noqa: BLE001
+                pass
+        elif isinstance(info, dict):
+            seed = int(info.get("seed", -1))
+        return img_bytes, seed, json.dumps(info) if not isinstance(info, str) else (info or ""), b64
+
+    # ---------- 两段合成：框（几何）+ 花（花卉） ----------
+    def _composite_fusion(self, frame_bytes: bytes, flower_bytes: bytes) -> bytes:
+        frame = Image.open(io.BytesIO(frame_bytes)).convert("RGBA")
+        flower = Image.open(io.BytesIO(flower_bytes)).convert("RGBA")
+        w, h = frame.size
+        target = max(64, int(min(w, h) * 0.62))
+        # 花：等比缩放 + 中心裁方
+        fw, fh = flower.size
+        side = min(fw, fh)
+        left, top = (fw - side) // 2, (fh - side) // 2
+        flower = flower.crop((left, top, left + side, top + side)).resize(
+            (target, target), Image.LANCZOS
+        )
+        # 径向软边蒙版：中心不透明，边缘渐隐，让花像嵌进开窗里
+        mask = Image.new("L", (target, target), 0)
+        mpx = mask.load()
+        center = (target - 1) / 2.0
+        radius = target / 2.0
+        feather = max(1.0, radius * 0.22)
+        for y in range(target):
+            for x in range(target):
+                dist = math.hypot(x - center, y - center)
+                if dist <= radius - feather:
+                    mpx[x, y] = 255
+                elif dist <= radius:
+                    mpx[x, y] = int(255 * (radius - dist) / feather)
+        px = (w - target) // 2
+        py = (h - target) // 2
+        frame.paste(flower, (px, py), mask)
+        out = io.BytesIO()
+        frame.convert("RGB").save(out, format="PNG")
+        return out.getvalue()
+
+    def _handle_composite(self, req: dict) -> None:
+        if not _HAS_PIL:
+            self._send_json(502, {"error": "composite requires PIL (pip install pillow)"})
+            return
+        comp = req.get("composite") or {}
+        frame_cfg = comp.get("frame") or {}
+        flower_cfg = comp.get("flower") or {}
+        if not frame_cfg.get("prompt") or not flower_cfg.get("prompt"):
+            self._send_json(400, {"error": "composite needs frame.prompt and flower.prompt"})
+            return
+
+        base = dict(DEFAULT_BODY)
+        for k in ("width", "height", "steps", "cfg_scale", "sampler_name", "seed"):
+            if k in req:
+                base[k] = req[k]
+        frame_body = dict(base)
+        frame_body["prompt"] = frame_cfg["prompt"]
+        frame_body["negative_prompt"] = frame_cfg.get("negative_prompt", "")
+        flower_body = dict(base)
+        flower_body["prompt"] = flower_cfg["prompt"]
+        flower_body["negative_prompt"] = flower_cfg.get("negative_prompt", "")
+
+        try:
+            frame_bytes, _, _, _ = self._call_txt2img(frame_body)
+            flower_bytes, flower_seed, _, _ = self._call_txt2img(flower_body)
+        except Exception as e:  # noqa: BLE001
+            self._send_json(502, {"error": str(e)})
+            return
+
+        try:
+            merged = self._composite_fusion(frame_bytes, flower_bytes)
+        except Exception as e:  # noqa: BLE001
+            print("[sd_proxy] composite failed, fallback to frame: %s" % e, flush=True)
+            merged = frame_bytes
+
+        merged_b64 = base64.b64encode(merged).decode("ascii")
+        data_url = "data:image/png;base64," + merged_b64
+        gen_id = "sd-%d-%s" % (int(time.time() * 1000), uuid.uuid4().hex[:6])
+        print("[sd_proxy] composite ok: frame=%d flower=%d merged=%d" % (
+            len(frame_bytes), len(flower_bytes), len(merged)), flush=True)
+        file_path = None
+        if OUTPUT_DIR:
+            try:
+                os.makedirs(OUTPUT_DIR, exist_ok=True)
+                fpath = os.path.join(OUTPUT_DIR, "pattern_%s.png" % gen_id)
+                with open(fpath, "wb") as f:
+                    f.write(merged)
+                file_path = fpath
+            except Exception as e:  # noqa: BLE001
+                print("[sd_proxy] warn: save composite failed: %s" % e, flush=True)
+        self._send_json(200, {
+            "image_url": data_url,
+            "generation_id": gen_id,
+            "seed": flower_seed,
+            "elapsed_ms": None,
+            "file_path": file_path,
+            "info": "composite: frame + flower",
+        })
+
     def do_POST(self) -> None:
         if self.path != "/generate":
             self._send_json(404, {"error": "not found", "path": self.path})
@@ -139,6 +286,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
             req = json.loads(raw.decode("utf-8"))
         except Exception as e:  # noqa: BLE001
             self._send_json(400, {"error": "invalid json: %s" % e})
+            return
+
+        # 几何+花卉「两段合成」：frame + flower 分开出图再合成
+        if isinstance(req, dict) and req.get("composite"):
+            self._handle_composite(req)
             return
 
         # 合并默认值；前端可覆盖

@@ -859,8 +859,13 @@ export function buildNegativePrompt(params: GenerationParams): string {
  * 反而把 WebUI 队列堵死 → "一直 Generating"。
  */
 async function callSdProxy(payload: {
-  prompt: string
-  negative_prompt: string
+  prompt?: string
+  negative_prompt?: string
+  /** 几何+花卉两段合成：frame 与 flower 分开出图，由代理合成 */
+  composite?: {
+    frame: { prompt: string; negative_prompt: string }
+    flower: { prompt: string; negative_prompt: string }
+  }
   width: number
   height: number
   steps: number
@@ -1271,48 +1276,208 @@ export interface FusionPromptInfo {
  *     （2026-08-26 起兰花/芙蓉花/石榴花已挂载专属 LoRA，不再命中该分支。）
  */
 /**
- * 花卉+回纹融合双模式词表（2026-09-02 任务版，替代旧单一 border 词表）
+ * 几何+花卉「结构优先」融合词表（2026-09-03 统一版，替代仅回纹开窗）。
  *
- * 组合「任意花卉 + 回纹」不再用笼统 50/50 mixed pattern，按回纹比例分流两档：
- * - border（默认，回纹比例 ≤50%）：回纹仅最外一圈细边框、内区仅花卉。
- *   回纹权重强夹 0.35–0.50（即使滑条 50% 也不给到 0.7），花卉 0.75–0.90。
- * - overlay（回纹比例 >50%，回纹明显主导时才启用叠纹）：两纹皆可辨认。
- *   回纹 0.55–0.65、花卉 0.55–0.70。
- * 注意：验收二.1 明确「UI 滑条 50/50 仍走边框模式权重」，故 50/50 判 border
- * （不按字面 >45 切 overlay；需要叠纹就把回纹比例推到 >50%）。
+ * 几何+花卉融合的通病：几何 LoRA 权重低到不可见、花卉低权重又掉回基础模型写实、没有构图引导。
+ * 统一处理：几何侧权重抬到 0.80–0.95 保证形态可辨，花卉侧压到 0.50–0.62 避免盖满 + 强制居中；
+ * 构图分两类：
+ * - 回纹/盘长/方胜：几何作外圈「开窗型」边框带 + 四角角花，花卉居中央开窗内团花（对齐参考图 46/37）；
+ * - 锦地：几何作锦地底纹，花卉居中浮其上。
  */
-const HUIWEN_FUSION_PROMPT = {
-  /** 边框模式：回纹最外细框、内区仅花卉（默认） */
-  border: {
-    /** 花卉侧 LoRA 权重区间 0.75–0.90（内区主体） */
-    floralWeightRange: [0.75, 0.9] as const,
-    /** 回纹侧 LoRA 权重区间 0.35–0.50（细框，任何比例都不放权） */
-    huiwenWeightRange: [0.35, 0.5] as const,
-    /** 正向固定锚点句（回纹=细框、内区=花卉、平面 2d 介质） */
+
+/** 共用商品/写实/门板对联跑题压制词 */
+const HUIWEN_FUSION_NEGATIVE_CORE = [
+  'ruler',
+  'measuring tape',
+  'scale bar',
+  'product photo',
+  'fabric bolt',
+  'door panel',
+  'couplet',
+  'hanging scroll',
+  'vertical plaque',
+  'ornamental plate',
+  'decorative plate',
+  'badge',
+  'medal',
+  'commemorative coin',
+  'seal stamp',
+  'memorial plaque',
+  'landscape',
+  'temple',
+  'pagoda',
+  'architecture',
+  'mountain scene',
+  'calligraphic text',
+  'chinese characters in image',
+  'realistic photo',
+  '3d render',
+  'watermark',
+  'text',
+]
+
+/** 花卉防写实共用词：低权重花卉易掉回基础模型写实，统一压制 */
+const FLORAL_ANTI_REALISM = [
+  'photorealistic flower',
+  'real flower',
+  'flower photograph',
+  'flower photography',
+  'realistic petals',
+  'fresh flowers',
+  'botanical photo',
+  'depth of field',
+  'lifelike flower',
+  'naturalistic bloom',
+]
+
+const GEO_FLORAL_FUSION = {
+  huiwen: {
+    /** 回纹侧 LoRA 权重区间 0.70–0.75（对齐 WebUI 交付里 0.7 的开窗融合 recipe，避免 0.8+ 过重） */
+    geoWeightRange: [0.7, 0.75] as const,
+    /** 花卉侧 LoRA 权重区间 0.30–0.40（小朵居中，避免盖满边框/写实） */
+    floralWeightRange: [0.3, 0.4] as const,
+    /** 强制单独居中（连续平铺会破坏开窗构图） */
+    arrangement: 'single' as const,
     requiredPositive: [
-      'thin single-line outermost border only',
-      'one narrow greek key frame along the four outer edges',
-      'floral motifs filling the inner panel only',
+      'traditional Chinese huiwen key-fret border pattern',
+      'open center frame, square border frame',
+      'medium density, clean geometric lines, regular meander',
+      'single flower centered in the open frame, one single flower, empty space around the flower, minimal flat flower',
+      'flat pattern design, no texture, classic authentic traditional form',
+    ],
+    availablePositive: ['thin key-fret window frame, airy open center, corner key-fret squares'],
+    negative: [
+      'dense',
+      'overcrowded',
+      'filled',
+      'thick lines',
+      'messy',
+      'asymmetric',
+      'broken lines',
+      'blurry',
+      'plain blank border',
+      'empty border frame',
+      'floral filling the entire image',
+      'floral covering the border',
+      'repeating floral tile',
+      'all-over floral',
+      'seamless floral background',
+      'labyrinth',
+      'maze background',
+    ],
+    validateNegative: [
+      'dense',
+      'floral filling the entire image',
+      'labyrinth',
+      'maze background',
+    ],
+  },
+  panchang: {
+    geoWeightRange: [0.7, 0.75] as const,
+    floralWeightRange: [0.3, 0.4] as const,
+    arrangement: 'single' as const,
+    requiredPositive: [
+      'traditional Chinese panchang endless knot pattern',
+      'open center frame, square border frame',
+      'medium density, clean geometric lines',
+      'single flower centered in the open frame, one single flower, empty space around the flower, minimal flat flower',
+      'flat pattern design, no texture, classic authentic traditional form, auspicious endless knot',
+    ],
+    availablePositive: ['thin endless knot window frame, airy open center, corner knot ornaments'],
+    negative: [
+      'dense',
+      'overcrowded',
+      'filled',
+      'thick lines',
+      'messy',
+      'asymmetric',
+      'broken lines',
+      'blurry',
+      'plain blank border',
+      'empty border frame',
+      'floral filling the entire image',
+      'floral covering the border',
+      'repeating floral tile',
+      'all-over floral',
+      'seamless floral background',
+      'labyrinth',
+      'maze background',
+      'ribbon spool',
+      'roll of tape',
+    ],
+    validateNegative: [
+      'dense',
+      'floral filling the entire image',
+      'labyrinth',
+      'ribbon spool',
+    ],
+  },
+  fangsheng: {
+    geoWeightRange: [0.7, 0.75] as const,
+    floralWeightRange: [0.3, 0.4] as const,
+    arrangement: 'single' as const,
+    requiredPositive: [
+      'two overlapping diamonds interlocking, nested diamond lattice, geometric diamond cross',
+      'open center frame, square border frame',
+      'medium density, clean geometric lines',
+      'single flower centered in the open frame, one single flower, empty space around the flower, minimal flat flower',
+      'single motif only, large empty margin, no repeat, no tiling, flat pattern design, no texture, plain background',
+    ],
+    availablePositive: ['thin interlocking diamond window frame, airy open center, corner double diamond ornaments'],
+    negative: [
+      'dense',
+      'overcrowded',
+      'filled',
+      'thick lines',
+      'messy',
+      'asymmetric',
+      'broken lines',
+      'blurry',
+      'plain blank border',
+      'empty border frame',
+      'floral filling the entire image',
+      'floral covering the border',
+      'repeating floral tile',
+      'all-over floral',
+      'seamless floral background',
+      'labyrinth',
+      'maze background',
+      'diamond mesh',
+      'repeating diamond tile',
+    ],
+    validateNegative: [
+      'dense',
+      'floral filling the entire image',
+      'labyrinth',
+      'maze background',
+    ],
+  },
+  jindi: {
+    geoWeightRange: [0.7, 0.8] as const,
+    floralWeightRange: [0.3, 0.45] as const,
+    /** 锦地作底纹，沿用用户排布（含 seamless） */
+    arrangement: null,
+    requiredPositive: [
+      'geometric brocade ground background',
+      'hexagonal honeycomb lattice brocade ground',
+      'tortoiseshell pattern brocade ground',
+      'floral motif centered over the brocade ground',
       'flat pattern design, clean lines, 2d illustration, graphic design',
     ],
-    /** 允许的补充边框描述（thin border 宽度约束） */
-    availablePositive: ['simple rectangular meander border band', 'thin border width'],
-  },
-  /** 叠纹可见模式：两纹并存皆可辨（回纹比例 >50% 时启用） */
-  overlay: {
-    /** 花卉侧 LoRA 权重区间 0.55–0.70 */
-    floralWeightRange: [0.55, 0.7] as const,
-    /** 回纹侧 LoRA 权重区间 0.55–0.65 */
-    huiwenWeightRange: [0.55, 0.65] as const,
-    /** 正向固定锚点句（不强调细框，要求两纹都可辨认 + 平面 2d） */
-    requiredPositive: [
-      'huiwen geometric pattern with floral overlays',
-      'both patterns visible',
-      'flat 2d illustration',
+    availablePositive: ['floral medallion over geometric ground'],
+    negative: [
+      'floral filling the entire image',
+      'repeating floral tile',
+      'all-over floral',
+      'seamless floral background',
+      'horizontal stripes',
+      'vertical stripes',
+      'stripe pattern',
+      'banded pattern',
     ],
-    availablePositive: [] as string[],
+    validateNegative: ['floral filling the entire image', 'stripe pattern'],
   },
-  /** 正向禁止词（两模式共用）：maze / labyrinth 类，命中即从 prompt 移除 */
+  /** 正向禁止词（各几何共用）：maze / labyrinth 类，命中即从结构强化里移除 */
   bannedPositive: [
     'nested rectangular maze',
     'rectangular spiral meander',
@@ -1320,56 +1485,30 @@ const HUIWEN_FUSION_PROMPT = {
     'dense meander field',
     'full meander background',
   ],
-  /** 负向固定追加（两模式共用）：商品/写实/门板跑题 + 满铺迷宫 + 内框（叠加 buildNegativePromptCore 的结果） */
-  fixedNegative: [
-    // 纯商品图/写实布片/门板对联跑题（失败 1/3）
-    'ruler',
-    'measuring tape',
-    'scale bar',
-    'product photo',
-    'fabric bolt',
-    'door panel',
-    'couplet',
-    'hanging scroll',
-    'vertical plaque',
-    'realistic photo',
-    '3d render',
-    'watermark',
-    'text',
-    // 回纹满铺迷宫（失败 2）
-    'meander filling the whole image',
-    'labyrinth',
-    'maze background',
-    'nested meander',
-    'all-over greek key',
-    'huiwen all-over',
-    'dense maze',
-    'complex labyrinth medallion',
-    // 保留既有压制（去重后拼入）
-    'meander all-over pattern',
-    'huiwen filling whole background',
-    'borderless',
-    'inner meander frame',
-    'meander in the center',
-    'nested meander square',
-    'huiwen inside',
-  ],
 }
 
+/** 支持「几何+花卉」结构优先的几何子类 */
+const GEO_FLORAL_SUBS = ['huiwen', 'panchang', 'fangsheng', 'jindi'] as const
+type GeoFloralSub = (typeof GEO_FLORAL_SUBS)[number]
+type GeoFloralCfg = (typeof GEO_FLORAL_FUSION)[GeoFloralSub]
+
 /**
- * 花卉+回纹融合模式判定（build / 校验共用同一规则，避免两处漂移）。
- * - 命中组合且回纹比例 >50% → 'overlay'；其余（含 50/50、回纹 ≤50%）→ 'border'；
- * - 未命中组合（回纹不配花卉）→ null，走常规融合逻辑。
+ * 几何+花卉融合判定（build / 校验共用同一规则，避免两处漂移）。
+ * - 恰好一侧几何（回纹/盘长/方胜/锦地）、另一侧花卉 → 返回几何 id + 配置；
+ * - 其余（几何×几何、花卉×花卉、全非组合）→ null，走常规融合逻辑。
  */
-function resolveHuiwenFusionMode(
+function resolveGeoFloralFusion(
   subcategoryA: string,
   subcategoryB: string,
-  ratioA: number,
-  ratioB: number,
-): 'border' | 'overlay' | null {
+): { geoSub: GeoFloralSub; cfg: GeoFloralCfg } | null {
   const isFloral = (id: string) => getLoraEntry(id)?.themeId === 'floral'
-  if (subcategoryA === 'huiwen' && isFloral(subcategoryB)) return ratioA > 50 ? 'overlay' : 'border'
-  if (subcategoryB === 'huiwen' && isFloral(subcategoryA)) return ratioB > 50 ? 'overlay' : 'border'
+  const isGeo = (id: string): id is GeoFloralSub => (GEO_FLORAL_SUBS as readonly string[]).includes(id)
+  const aGeo = isGeo(subcategoryA)
+  const bGeo = isGeo(subcategoryB)
+  const aFloral = isFloral(subcategoryA)
+  const bFloral = isFloral(subcategoryB)
+  if (aGeo && bFloral) return { geoSub: subcategoryA, cfg: GEO_FLORAL_FUSION[subcategoryA] }
+  if (bGeo && aFloral) return { geoSub: subcategoryB, cfg: GEO_FLORAL_FUSION[subcategoryB] }
   return null
 }
 
@@ -1417,21 +1556,21 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   // 融合是否含方胜：任一槽为方胜时，按全局排布决定"单独/连续"语义与负向提示
   const hasFangsheng = subcategoryA === 'fangsheng' || subcategoryB === 'fangsheng'
 
-  // 花卉+回纹融合双模式（2026-09-02）：按回纹比例分流 border / overlay（resolveHuiwenFusionMode）。
-  // border=默认（回纹 ≤50%）：回纹权重强夹 0.35–0.50（即使 50% 也不给到 0.7）、花卉 0.75–0.90；
-  // overlay（回纹 >50%）：回纹 0.55–0.65、花卉 0.55–0.70（两纹叠印皆可辨，不再锁回纹作细框）。
-  const huiwenMode = resolveHuiwenFusionMode(subcategoryA, subcategoryB, ratioA, ratioB)
-  const huiwenCfg = huiwenMode ? HUIWEN_FUSION_PROMPT[huiwenMode] : null
-  if (huiwenMode && huiwenCfg) {
+  // 几何+花卉「结构优先」（2026-09-03 统一）：几何侧权重抬到 0.80–0.95 保证形态可辨，
+  // 花卉侧压到 0.50–0.62 避免盖满/写实，并强制几何外框开窗、花卉居中。
+  const geoFloral = resolveGeoFloralFusion(subcategoryA, subcategoryB)
+  const geoSub = geoFloral?.geoSub ?? null
+  const geoCfg = geoFloral?.cfg ?? null
+  if (geoFloral && geoCfg) {
     const clampRange = (w: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(w * 100) / 100))
-    const [fwLo, fwHi] = huiwenCfg.floralWeightRange
-    const [hwLo, hwHi] = huiwenCfg.huiwenWeightRange
-    if (subcategoryA === 'huiwen') {
-      weightA = clampRange(weightA, hwLo, hwHi)
-      weightB = clampRange(weightB, fwLo, fwHi)
+    const [floLo, floHi] = geoCfg.floralWeightRange
+    const [geoLo, geoHi] = geoCfg.geoWeightRange
+    if (subcategoryA === geoSub) {
+      weightA = clampRange(weightA, geoLo, geoHi)
+      weightB = clampRange(weightB, floLo, floHi)
     } else {
-      weightB = clampRange(weightB, hwLo, hwHi)
-      weightA = clampRange(weightA, fwLo, fwHi)
+      weightB = clampRange(weightB, geoLo, geoHi)
+      weightA = clampRange(weightA, floLo, floHi)
     }
   }
 
@@ -1459,16 +1598,23 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   }
 
   // 2.5) 几何结构强化（融合侧命中则并入，如 回纹+牡丹 时回纹补直角折线描述）。
-  // 2026-09-02：花卉+回纹边框模式下过滤回纹 maze/labyrinth 类结构词（nested rectangular maze /
-  // rectangular spiral meander 会把"回纹边框"诱发成满幅迷宫），以 border only 语义为准。
+  // 2026-09-03：几何+花卉模式下过滤会破坏「单独开窗构图」的几何结构词——
+  //   - maze / labyrinth 类（nested rectangular maze / rectangular spiral meander）会把外框诱成满幅迷宫；
+  //   - continuous / tileable / seamless 类（如盘长 continuous interwoven ribbon knot）会把单纹诱成满幅平铺；
+  // 以「几何外框开窗、花卉居中」的构图语义为准。
   const removedMazeWords: string[] = []
   ;[subcategoryA, subcategoryB].forEach((id) => {
     const boost = GEOMETRIC_STRUCTURE_BOOST[id]
     if (!boost) return
     boost.forEach((w) => {
-      if (huiwenMode && id === 'huiwen') {
-        const banned = HUIWEN_FUSION_PROMPT.bannedPositive.find((b) => w.toLowerCase().includes(b.toLowerCase()))
+      if (geoFloral && id === geoSub) {
+        const banned = GEO_FLORAL_FUSION.bannedPositive.find((b) => w.toLowerCase().includes(b.toLowerCase()))
         if (banned) {
+          removedMazeWords.push(w)
+          return
+        }
+        // 非锦地几何+花卉强制 single：剔除 continuous / tileable / seamless 词，避免单纹被诱成平铺
+        if (geoSub !== 'jindi' && /\b(continuous|tileable|seamless|repeat)\b/i.test(w)) {
           removedMazeWords.push(w)
           return
         }
@@ -1478,25 +1624,20 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   })
   if (removedMazeWords.length > 0) {
     console.debug(
-      '[patternGeneration] 花卉+回纹（mode=' + (huiwenMode ?? 'n/a') + '）：移除正向 maze 倾向词 =',
+      '[patternGeneration] 几何+花卉（geo=' + (geoSub ?? 'n/a') + '）：移除冲突几何结构词 =',
       removedMazeWords.join(' | '),
-      '（迷宫语义让位给 ' + (huiwenMode === 'overlay' ? '两纹皆可辨叠纹' : 'thin outermost border only') + '）',
+      '（maze/continuous 语义让位给结构优先：几何外框开窗、花卉居中）',
     )
   }
 
-  // 2.7) 花卉+回纹 双模式正向注入（2026-09-02 任务版）。
-  //      border：thin single-line / narrow greek key 精确词（替代旧 border frame only / square frame /
-  //      corner cloud ornaments——角花/方框词会叠加成多框或诱发迷宫）+ 内区仅花卉 + 平面 2d 介质；
-  //      overlay：不强调细框，写 huiwen geometric pattern with floral overlays / both patterns visible。
-  if (huiwenMode && huiwenCfg) {
-    for (const w of huiwenCfg.requiredPositive) parts.push(w)
-    for (const w of huiwenCfg.availablePositive) parts.push(w)
-    if (huiwenMode === 'border') {
-      parts.push('huiwen ONLY as outermost border, interior ONLY floral, no meander inside')
-      // 旋转对称 → 细圆形回纹环（仍是最外细边框）
-      if (params.symmetry === 'rotation') {
-        parts.push('thin circular meander ring along outer edge')
-      }
+  // 2.7) 几何+花卉 结构优先正向注入（2026-09-03 统一版）。
+  //      回纹/盘长/方胜作外圈开窗边框带 + 四角角花，花卉居中团花；锦地作底纹、花卉居中。
+  if (geoFloral && geoCfg) {
+    for (const w of geoCfg.requiredPositive) parts.push(w)
+    for (const w of geoCfg.availablePositive) parts.push(w)
+    // 旋转对称 → 外圈圆形开窗环（中央开窗 + 花卉，仍保留外圈方框）
+    if (params.symmetry === 'rotation' && geoSub !== 'jindi') {
+      parts.push('circular frame ring framing a central floral window')
     }
   }
 
@@ -1523,7 +1664,11 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
 
   // 6) 疏密：complexity 0–100
   const cmp = params.complexity ?? 50
-  if (cmp < 30) {
+  // 几何+花卉非锦地：参考图为细线开窗外框 + 大留白，即使 complexity 拉高也收束为
+  // 「中心有细节、外框细而少」，避免 "dense elaborate full pattern" 引成满幅/繁复。
+  if (geoFloral && geoSub !== 'jindi') {
+    parts.push(cmp < 40 ? 'simple sparse detail, airy center' : 'balanced detail, clean negative space, minimal border ornament')
+  } else if (cmp < 30) {
     parts.push('minimal geometric, simple sparse detail')
   } else if (cmp < 70) {
     parts.push('medium detail, balanced density')
@@ -1532,19 +1677,32 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   }
 
   // 7) 排布：arrangement
-  // 2026-09-02：花卉+回纹 border 模式强制 single——continuous tile 语义会要求"满铺可平铺"，
-  // 与"回纹仅最外细边框"冲突，会把回纹融回满铺。overlay 叠纹可沿用用户排布（含 seamless）。
-  const arrangementUsed = huiwenMode === 'border' ? ('single' as const) : params.arrangement
+  // 2026-09-03：几何+花卉「结构优先」——回纹/盘长/方胜强制 single（开窗外框），
+  // 锦地沿用用户排布（可 seamless 满铺底纹）。其他组合不变。
+  const arrangementUsed = geoCfg?.arrangement ? geoCfg.arrangement : params.arrangement
   switch (arrangementUsed) {
     case 'single':
-      parts.push('single motif, centered medallion')
+      // 几何+花卉：花卉在中央开窗/底纹上，几何作外框；不走"孤立图章"语义
+      if (geoFloral) {
+        if (geoSub === 'jindi') {
+          parts.push('single floral motif centered over the geometric brocade ground')
+        } else {
+          parts.push('single flower centered in the open frame, empty space around the flower')
+        }
+        parts.push('no repeat, no tiling, single centered composition, airy negative space')
+      } else {
+        parts.push('single motif, centered medallion')
+      }
       // 融合含方胜/盘长/回纹且排布=单独：强化"单个纹样"语义，避免退化成连续网
-      // （花卉+回纹融合除外：border=回纹作边框、花卉居中，overlay=两纹叠印，均不由 isolated emblem 语义接管）
+      // （几何+花卉融合除外：已在上方按其构图强化，不走"孤立图章"语义）
       if (
+        !geoFloral &&
+        (
         hasFangsheng ||
         subcategoryA === 'panchang' ||
         subcategoryB === 'panchang' ||
-        ((subcategoryA === 'huiwen' || subcategoryB === 'huiwen') && !huiwenMode)
+        (subcategoryA === 'huiwen' || subcategoryB === 'huiwen')
+        )
       ) {
         parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
       }
@@ -1554,16 +1712,15 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
       }
       break
     case 'seamless':
-      // 花卉+回纹融合：border 模式已被上方强制 single 到不了这里；overlay 可 seamless（两纹叠印平铺）。
-      // 但 overlay 不再写 "repeating greek key border" 句（那是 border 语义，会与叠纹意图打架）。
-      if (huiwenMode !== 'border') {
+      // 几何+花卉：回纹/盘长/方胜已被上方强制 single 到不了这里；锦地/其他组合可 seamless。
+      if (!geoFloral || geoSub === 'jindi') {
         parts.push('seamless repeat, tileable continuous pattern')
         // 盘长连续版（融合侧命中则补）：交织结连续语义，避免退化成菱形网
         if (subcategoryA === 'panchang' || subcategoryB === 'panchang') {
           parts.push('continuous interlocking knot pattern')
         }
         // 回纹连续版（仅非花卉+回纹组合，如 回纹+盘长 seamless）：显式 meander / greek key border
-        if (!huiwenMode && (subcategoryA === 'huiwen' || subcategoryB === 'huiwen')) {
+        if (!geoFloral && (subcategoryA === 'huiwen' || subcategoryB === 'huiwen')) {
           parts.push('tileable continuous meander pattern, repeating greek key border')
         }
       }
@@ -1609,9 +1766,9 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
 
   const prompt = parts.join(', ')
   let negativePrompt = buildNegativePromptCore([subcategoryA, subcategoryB], params.colorScheme, arrangementUsed)
-  // 花卉+回纹融合（border / overlay 双模式共用词表）：固定追加商品/写实/门板对联跑题 + 满铺迷宫 + 内框压制
-  if (huiwenMode) {
-    negativePrompt += ', ' + HUIWEN_FUSION_PROMPT.fixedNegative.join(', ')
+  // 几何+花卉融合：固定追加商品/写实/门板跑题（共用核心）+ 花卉防写实 + 该几何专属压制词
+  if (geoFloral && geoCfg) {
+    negativePrompt += ', ' + [...HUIWEN_FUSION_NEGATIVE_CORE, ...FLORAL_ANTI_REALISM, ...geoCfg.negative].join(', ')
   }
 
   return {
@@ -1627,10 +1784,177 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
 }
 
 /**
+ * 几何+花卉「两段合成」prompt 拆分（2026-09-04）：
+ *   单次双 LoRA 融合在 SD1.5 下不稳定（几何会被花卉吞 / 花卉掉回写实 / 抽签）。
+ *   这里把「开窗几何边框」与「居中一朵花」各自独立出图，再由 sd_proxy 合成，
+ *   稳定得到：纤细回纹/盘长/方胜边框 + 正中央一朵花（对齐参考图 46/37）。
+ *   锦地(jindi)仍走单次融合（底纹+花叠放，不需要拆框）。
+ * @returns 非几何+花卉 / 含 jindi / 缺 LoRA 时返回 null，走原单次融合。
+ */
+export function buildGeoFloralCompositeParts(options: FusionGenerationOptions): {
+  framePrompt: string
+  frameNegative: string
+  flowerPrompt: string
+  flowerNegative: string
+  geoSub: GeoFloralSub
+  geoWeight: number
+  floralWeight: number
+  geoLabelEn: string
+  floralLabelEn: string
+} | null {
+  const geoFloral = resolveGeoFloralFusion(options.subcategoryA, options.subcategoryB)
+  if (!geoFloral) return null
+  const geoSub = geoFloral.geoSub
+  if (geoSub === 'jindi') return null // 锦地=底纹，不用拆框
+  const cfg = geoFloral.cfg
+  const floralSub = options.subcategoryA === geoSub ? options.subcategoryB : options.subcategoryA
+  const geoEntry = getLoraEntry(geoSub)
+  const floralEntry = getLoraEntry(floralSub)
+  if (!geoEntry?.loraFile || !floralEntry?.loraFile) return null
+
+  const clampRange = (w: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(w * 100) / 100))
+  const [geoLo, geoHi] = cfg.geoWeightRange
+  const [floLo, floHi] = cfg.floralWeightRange
+  const geoRatio = options.subcategoryA === geoSub ? options.ratioA : options.ratioB
+  const floRatio = options.subcategoryA === floralSub ? options.ratioA : options.ratioB
+  const geoWeight = clampRange((geoEntry.loraWeight * geoRatio) / 100, geoLo, geoHi)
+  const floralWeight = clampRange((floralEntry.loraWeight * floRatio) / 100, floLo, floHi)
+
+  // 方胜 frame → single LoRA
+  let geoFile = geoEntry.loraFile
+  let geoTrigger = geoEntry.trigger
+  if (geoSub === 'fangsheng') {
+    const fs = FANGSHENG_LORA_MAP.single
+    geoFile = fs.loraFile
+    geoTrigger = fs.trigger
+  }
+
+  // 框：几何结构词（剔除「花居中」句）+ 留白无花 + 平面介质
+  const frameHints = cfg.requiredPositive.filter((t) => !/flower|floral/i.test(t))
+  const pseudoParams: GenerationParams = {
+    ...options.params,
+    dimension: { ...options.params.dimension, subcategory: geoSub },
+  }
+  const framePrompt = [
+    ...geoTrigger.split(',').map((t) => t.trim()).filter(Boolean),
+    `Chinese traditional ${geoEntry.subLabelEn} openwork frame pattern`,
+    ...frameHints,
+    ...cfg.availablePositive,
+    'leave the large center empty, no flower in the frame',
+    'flat pattern design, no texture, classic authentic traditional form',
+    buildColorClause(pseudoParams),
+    'traditional ICH style',
+    `<lora:${geoFile}:${geoWeight}>`,
+  ].join(', ')
+
+  const frameNegative = [
+    buildNegativePromptCore([geoSub, floralSub], options.params.colorScheme, 'single'),
+    ...HUIWEN_FUSION_NEGATIVE_CORE,
+    ...FLORAL_ANTI_REALISM,
+    ...cfg.negative,
+    'flower in the frame',
+    'floral border',
+    'floral filling the frame',
+    'bloom',
+  ].join(', ')
+
+  // 花：单朵居中、平面插画、素底
+  const flowerPrompt = [
+    ...floralEntry.trigger.split(',').map((t) => t.trim()).filter(Boolean),
+    `single ${floralEntry.subLabelEn} flower, one flower centered, flat illustration, plain background, minimal, single motif`,
+    `<lora:${floralEntry.loraFile}:${floralWeight}>`,
+  ].join(', ')
+
+  const flowerNegative = [
+    ...FLORAL_ANTI_REALISM,
+    ...HUIWEN_FUSION_NEGATIVE_CORE,
+    'multiple flowers',
+    'all-over floral',
+    'flower background',
+    'seamless floral',
+    'repeating floral tile',
+    'flower branch',
+    'bouquet',
+    'calligraphy',
+    'chinese characters',
+  ].join(', ')
+
+  return {
+    framePrompt,
+    frameNegative,
+    flowerPrompt,
+    flowerNegative,
+    geoSub,
+    geoWeight,
+    floralWeight,
+    geoLabelEn: geoEntry.subLabelEn,
+    floralLabelEn: floralEntry.subLabelEn,
+  }
+}
+
+/**
  * 融合生成入口（真实链路与单纹样一致：sd_proxy → A1111 txt2img）
  * 失败降级 mock 保证页面不白屏；控制台打印完整 prompt，便于验收核对 lora 权重
  */
 export async function generateFusionWithFallback(options: FusionGenerationOptions): Promise<PatternGenerationResult> {
+  // 几何+花卉（回纹/盘长/方胜）：两段合成，稳定出「开窗框+居中花」
+  const composite = buildGeoFloralCompositeParts(options)
+  if (composite) {
+    console.log('[patternGeneration] ===== 几何+花卉 两段合成 =====')
+    console.log(
+      '[patternGeneration] geo=', composite.geoSub,
+      `(${composite.geoLabelEn}) | floral=${composite.floralLabelEn}`,
+      '| geoWeight=', composite.geoWeight,
+      '| floralWeight=', composite.floralWeight,
+    )
+    console.log('[patternGeneration] framePrompt:', composite.framePrompt)
+    console.log('[patternGeneration] flowerPrompt:', composite.flowerPrompt)
+    try {
+      const result = await callSdProxy({
+        composite: {
+          frame: { prompt: composite.framePrompt, negative_prompt: composite.frameNegative },
+          flower: { prompt: composite.flowerPrompt, negative_prompt: composite.flowerNegative },
+        },
+        width: SD_DEFAULTS.width,
+        height: SD_DEFAULTS.height,
+        steps: SD_DEFAULTS.steps,
+        cfg_scale: SD_DEFAULTS.cfgScale,
+        sampler_name: SD_DEFAULTS.samplerName,
+        seed: SD_DEFAULTS.seed,
+      })
+      console.log('[patternGeneration] ===== 两段合成成功 ===== | seed:', result.seed, '| fallback: false')
+      return {
+        imageUrl: result.imageUrl,
+        generationId: result.generationId,
+        prompt: `frame: ${composite.framePrompt} || flower: ${composite.flowerPrompt}`,
+        negativePrompt: `frame: ${composite.frameNegative} || flower: ${composite.flowerNegative}`,
+        fallback: false,
+        seed: result.seed,
+        elapsedMs: result.elapsedMs,
+        filePath: result.filePath,
+      }
+    } catch (err: any) {
+      const reason = err?.name === 'AbortError'
+        ? 'SD 生成超时（CPU 推理较慢，10 分钟仍未返回）'
+        : (err?.message || String(err))
+      console.warn('[patternGeneration] ===== 两段合成失败，降级 mock ===== | reason:', reason)
+      const mockParams: GenerationParams = {
+        ...options.params,
+        dimension: { ...options.params.dimension, subcategory: composite.geoSub },
+      }
+      const mock = await mockGeneratePattern(mockParams)
+      return {
+        imageUrl: mock.imageUrl,
+        generationId: mock.generationId,
+        prompt: `frame: ${composite.framePrompt} || flower: ${composite.flowerPrompt}`,
+        negativePrompt: `frame: ${composite.frameNegative} || flower: ${composite.flowerNegative}`,
+        fallback: true,
+        fallbackReason: reason,
+        seed: -1,
+      }
+    }
+  }
+
   const info = buildFusionPromptParts(options)
 
   console.log('[patternGeneration] ===== 融合生成请求 =====')
@@ -1659,64 +1983,50 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
     'size=', `${SD_DEFAULTS.width}x${SD_DEFAULTS.height}`,
   )
 
-  // 花卉+回纹融合双模式校验（2026-09-02）：mode 打印、模式锚点词、正向无 maze 泄漏、负向压制、
-  // 双 LoRA 权重区间。build 与校验共用 resolveHuiwenFusionMode，保证口径一致。
-  const huiwenMode = resolveHuiwenFusionMode(options.subcategoryA, options.subcategoryB, options.ratioA, options.ratioB)
-  if (huiwenMode) {
-    const cfg = HUIWEN_FUSION_PROMPT[huiwenMode]
-    const huiwenRatio = options.subcategoryA === 'huiwen' ? options.ratioA : options.ratioB
-    const huiwenW = options.subcategoryA === 'huiwen' ? info.loraA?.weight : info.loraB?.weight
-    const floralW = options.subcategoryA === 'huiwen' ? info.loraB?.weight : info.loraA?.weight
-    // 1) 正向必需锚点句（border=细框四句；overlay=叠纹可见句）
+  // 几何+花卉「结构优先」校验（2026-09-03）：geo 打印、锚点词、正向无 maze 泄漏、负向压制、
+  // 双 LoRA 权重区间。build 与校验共用 resolveGeoFloralFusion，保证口径一致。
+  const geoFloral = resolveGeoFloralFusion(options.subcategoryA, options.subcategoryB)
+  if (geoFloral) {
+    const geoSub = geoFloral.geoSub
+    const cfg = geoFloral.cfg
+    const geoRatio = options.subcategoryA === geoSub ? options.ratioA : options.ratioB
+    const geoW = options.subcategoryA === geoSub ? info.loraA?.weight : info.loraB?.weight
+    const floralW = options.subcategoryA === geoSub ? info.loraB?.weight : info.loraA?.weight
+    // 1) 正向必需锚点句
     const missing = cfg.requiredPositive.filter((t) => !info.prompt.includes(t))
     // 2) 正向不得残留 maze / labyrinth（build 期已移除，这里复查）
-    const mazeLeaked = HUIWEN_FUSION_PROMPT.bannedPositive.filter((b) => info.prompt.toLowerCase().includes(b))
-    // 3) 负向固定压制词抽查（核心代表 + 商品/门板跑题，防未来词表漂移）
-    const negReq = [
-      'meander filling the whole image',
-      'labyrinth',
-      'maze background',
-      'nested meander',
-      'all-over greek key',
-      'dense maze',
-      'complex labyrinth medallion',
-      'meander all-over pattern',
-      'huiwen inside',
-      'ruler',
-      'product photo',
-      'door panel',
-      'hanging scroll',
-      'watermark',
-    ]
+    const mazeLeaked = GEO_FLORAL_FUSION.bannedPositive.filter((b) => info.prompt.toLowerCase().includes(b))
+    // 3) 负向压制词抽查：共用核心（商品/写实/门板）+ 花卉防写实 + 该几何专属压制词
+    const negReq = [...HUIWEN_FUSION_NEGATIVE_CORE, ...FLORAL_ANTI_REALISM, ...cfg.validateNegative]
     const negMissing = negReq.filter((t) => !info.negativePrompt.includes(t))
-    // 4) LoRA 权重区间（按 mode）：border=花卉 0.75–0.90 / 回纹 0.35–0.50；overlay=花卉 0.55–0.70 / 回纹 0.55–0.65
-    const [fwLo, fwHi] = cfg.floralWeightRange
-    const [hwLo, hwHi] = cfg.huiwenWeightRange
+    // 4) LoRA 权重区间：几何侧 0.80–0.95 / 花卉侧 0.50–0.62
+    const [floLo, floHi] = cfg.floralWeightRange
+    const [geoLo, geoHi] = cfg.geoWeightRange
     const wOk =
-      huiwenW !== undefined && floralW !== undefined && huiwenW >= hwLo && huiwenW <= hwHi && floralW >= fwLo && floralW <= fwHi
+      geoW !== undefined && floralW !== undefined && geoW >= geoLo && geoW <= geoHi && floralW >= floLo && floralW <= floHi
     const pass = missing.length === 0 && mazeLeaked.length === 0 && negMissing.length === 0 && wOk
     console.log(
-      '[patternGeneration] 花卉+回纹融合校验:',
+      '[patternGeneration] 几何+花卉融合校验:',
       pass
-        ? `OK（mode=${huiwenMode}，回纹 weight=${huiwenW}，花卉 weight=${floralW}，锚点词齐，无 maze/labyrinth 泄漏，负向压制齐）`
-        : `${missing.length > 0 ? ` 正向缺锚点词: ${missing.join('/')}` : ''}${mazeLeaked.length > 0 ? ` 正向 maze 泄漏: ${mazeLeaked.join('/')}` : ''}${negMissing.length > 0 ? ` 负向缺: ${negMissing.join('/')}` : ''}${!wOk ? ` 权重越界(回纹=${huiwenW}, 花卉=${floralW})` : ''}`,
+        ? `OK（geo=${geoSub}，几何 weight=${geoW}，花卉 weight=${floralW}，锚点词齐，无 maze/labyrinth 泄漏，负向压制齐）`
+        : `${missing.length > 0 ? ` 正向缺锚点词: ${missing.join('/')}` : ''}${mazeLeaked.length > 0 ? ` 正向 maze 泄漏: ${mazeLeaked.join('/')}` : ''}${negMissing.length > 0 ? ` 负向缺: ${negMissing.join('/')}` : ''}${!wOk ? ` 权重越界(几何=${geoW}, 花卉=${floralW})` : ''}`,
     )
     console.log(
-      '[patternGeneration] 花卉+回纹日志: mode=',
-      huiwenMode === 'border' ? 'border（回纹≤50%：最外细框、内区花卉）' : 'overlay（回纹>50%：两纹叠印可见）',
-      '| 回纹比例=',
-      `${huiwenRatio}%`,
-      '| lora 权重: 回纹=',
-      huiwenW,
+      '[patternGeneration] 几何+花卉日志: geo=',
+      geoSub,
+      '| 几何比例=',
+      `${geoRatio}%`,
+      '| lora 权重: 几何=',
+      geoW,
       '花卉=',
       floralW,
-      '| 正向含 thin outermost border:',
-      info.prompt.includes('thin single-line outermost border only'),
+      '| 正向含 openwork window frame:',
+      info.prompt.includes('openwork window frame composition'),
       '| 正向含 maze/labyrinth:',
       /labyrinth|maze/i.test(info.prompt),
     )
-    if (huiwenMode === 'border' && options.params?.arrangement === 'seamless') {
-      console.warn('[patternGeneration] 花卉+回纹边框模式：检测到 seamless 排布，已强制按 single（continuous tile 与细框冲突）')
+    if (cfg.arrangement === 'single' && options.params?.arrangement === 'seamless') {
+      console.warn('[patternGeneration] 几何+花卉：检测到 seamless 排布，已强制按 single（continuous tile 与开窗边框语义冲突）')
     }
   }
 

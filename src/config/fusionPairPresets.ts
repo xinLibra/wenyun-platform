@@ -15,7 +15,6 @@ import type { GenerationParams } from '../types/pattern'
 import { findPantoneEntry } from './pantoneMap'
 import { DEFAULT_PRESET, GENERATION_PRESETS } from './generationPresets'
 import { getDualPantoneRecommendations } from './fusionRecommendations'
-import { getLoraEntry } from './loraMap'
 
 export interface FusionPairPreset {
   /** 排布（layoutMode）：single / seamless / adapted */
@@ -38,14 +37,6 @@ export interface FusionPairPreset {
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
 const round = (v: number) => Math.round(v)
-
-/** 花卉+回纹组合判定（2026-09-02）：回纹作最外细边框、花卉作内区主体，排布固定 single */
-function isHuiwenFloralPair(a: string, b: string): boolean {
-  return (
-    (a === 'huiwen' && getLoraEntry(b)?.themeId === 'floral') ||
-    (b === 'huiwen' && getLoraEntry(a)?.themeId === 'floral')
-  )
-}
 
 /** 精选组合表（key 已排序，与顺序无关） */
 export const FUSION_PAIR_PRESETS: Record<string, FusionPairPreset> = {
@@ -84,15 +75,16 @@ const GEOMETRIC_SUBCATEGORY_IDS = new Set(['huiwen', 'panchang', 'jindi', 'fangs
 
 /** 组合 → 默认预设。无精选表项时按两个子类的生成预设派生通用默认。 */
 export function getFusionPairPreset(a: string, b: string): FusionPairPreset {
-  const key = [a, b].sort().join('__')
-  const curated = FUSION_PAIR_PRESETS[key]
+  // 精选表 key：注释约定为「排序后」，但表中部分历史 key 未按字典序书写
+  // （如 lotus__huiwen / plum__huiwen / peony__panchang）。这里同时尝试排序 key
+  // 与两种原始顺序，确保精选色/参数不被静默绕开。
+  const sortKey = [a, b].sort().join('__')
+  const curated = FUSION_PAIR_PRESETS[sortKey] ?? FUSION_PAIR_PRESETS[`${a}__${b}`] ?? FUSION_PAIR_PRESETS[`${b}__${a}`]
   if (curated) {
     // 兜底：即使精选表出现笔误，也保证色号可查
     return {
       ...curated,
       pantoneCode: resolvePantoneCode(curated.pantoneCode),
-      // 2026-09-02：花卉+回纹边框融合固定 single（continuous tile 会把回纹融回满铺迷宫）
-      arrangement: isHuiwenFloralPair(a, b) ? 'single' : curated.arrangement,
     }
   }
 
@@ -121,10 +113,6 @@ export function getFusionPairPreset(a: string, b: string): FusionPairPreset {
     pantoneCode: defaultColor,
     lightness: 50,
     fusionRatio: 50,
-  }
-  // 2026-09-02：花卉+回纹（边框融合）固定 single，不用 continuous tile 去融回纹边框
-  if (isHuiwenFloralPair(a, b)) {
-    preset.arrangement = 'single'
   }
   return preset
 }
