@@ -14,7 +14,7 @@ import {
   fetchGenerationImage,
 } from '../lib/imageLoader'
 import WorkDetailModal from '../components/WorkDetailModal'
-import { downloadImageViaProxy } from '../utils/downloadImage'
+import { downloadImageAsFormat, downloadImageViaProxy } from '../utils/downloadImage'
 
 const SESSION_TIMEOUT_MS = 20000
 const DB_TIMEOUT_MS = 25000
@@ -454,7 +454,7 @@ export default function MyWorksPage() {
     return data.image_url
   }
 
-  const handleDownload = async (generation: Generation) => {
+  const handleDownload = async (generation: Generation, format: 'png' | 'jpg') => {
     let imageUrl = generation.image_url
     if (isPlaceholderUrl(imageUrl)) {
       try {
@@ -465,17 +465,43 @@ export default function MyWorksPage() {
         return
       }
     }
+
+    const filename = `wenyun_pattern_${(generation.id || '').slice(0, 8) || Date.now()}.${format === 'png' ? 'png' : 'jpg'}`
     try {
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
       if (isMobile) {
-        // 移动端走新窗口：后端 download 函数已校验 Content-Type / 文件头 / 最小字节，
-        // 坏数据会返回非 200 JSON，不会落成伪 .png 文件
-        window.open(`/.netlify/functions/download?url=${encodeURIComponent(imageUrl)}`, '_blank')
+        window.open(
+          format === 'png'
+            ? `/.netlify/functions/download?url=${encodeURIComponent(imageUrl)}`
+            : imageUrl,
+          '_blank'
+        )
         return
       }
-      // 经 Netlify download 函数中转并二次校验（Blob MIME / 大小 / PNG·JPEG 文件头），
-      // 校验失败抛错中止，绝不把 JSON / SVG / 截断内容落成 .png
-      await downloadImageViaProxy(imageUrl, `wenyun_pattern_${Date.now()}.png`)
+
+      try {
+        // 优先直接下载：支持 data: / blob: / http(s)，PNG 带校验，JPG 经 Canvas 白底转换
+        await downloadImageAsFormat(imageUrl, filename, format)
+      } catch (directErr) {
+        console.warn('[MyWorks] direct download failed, fallback to proxy/open:', directErr)
+        if (format === 'png') {
+          try {
+            // 生产环境若跨域受限，经 Netlify download 函数中转
+            await downloadImageViaProxy(imageUrl, filename)
+          } catch (proxyErr) {
+            // 本地 dev 未部署 Netlify 函数时，/functions/download 会返回 index.html(text/html)，
+            // 直接打开原图让用户另存为，避免继续报「图源类型异常」。
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+              window.open(imageUrl, '_blank')
+            } else {
+              throw proxyErr
+            }
+          }
+        } else {
+          // JPG 转换需要跨域原图；直接下载失败时只能打开原图让用户自行保存
+          window.open(imageUrl, '_blank')
+        }
+      }
     } catch (error) {
       console.error('[MyWorks] 下载失败:', error)
       alert((error as Error)?.message || '下载失败，请尝试右键图片另存为')
@@ -779,12 +805,20 @@ export default function MyWorksPage() {
                           </label>
                         </div>
                         <div className="flex gap-2">
-                          <button
-                            onClick={() => handleDownload(generation)}
-                            className="flex-1 py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
-                          >
-                            下载
-                          </button>
+                          <div className="flex flex-1 gap-1">
+                            <button
+                              onClick={() => handleDownload(generation, 'png')}
+                              className="flex-1 py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
+                            >
+                              PNG
+                            </button>
+                            <button
+                              onClick={() => handleDownload(generation, 'jpg')}
+                              className="flex-1 py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
+                            >
+                              JPG
+                            </button>
+                          </div>
                           <button
                             onClick={() => handleViewDetail(generation)}
                             className="flex-1 py-1.5 bg-deep-blue-50 border border-deep-blue-200 rounded-sm font-song text-xs text-deep-blue hover:bg-deep-blue-100 transition-colors"
