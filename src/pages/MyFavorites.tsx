@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { useFavorites } from '../context/FavoriteContext'
-import { downloadImageViaProxy } from '../utils/downloadImage'
+import { downloadImageAsFormat, downloadImageViaProxy } from '../utils/downloadImage'
+import { isPlaceholderUrl } from '../lib/imageLoader'
 import WorkDetailModal from '../components/WorkDetailModal'
 
 interface FavoriteWork {
@@ -25,6 +26,21 @@ export default function MyFavoritesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [detailWork, setDetailWork] = useState<FavoriteWork | null>(null)
+  const [openDownloadMenuId, setOpenDownloadMenuId] = useState<string | null>(null)
+  const downloadMenuRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  // 点击卡片下载菜单外部时收起格式选项
+  useEffect(() => {
+    if (!openDownloadMenuId) return
+    const onClick = (e: MouseEvent) => {
+      const menuEl = downloadMenuRefs.current[openDownloadMenuId]
+      if (menuEl && !menuEl.contains(e.target as Node)) {
+        setOpenDownloadMenuId(null)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [openDownloadMenuId])
 
   useEffect(() => {
     const fetchFavorites = async () => {
@@ -96,16 +112,66 @@ export default function MyFavoritesPage() {
     }
   }
 
-  const handleDownload = async (favorite: FavoriteWork) => {
+  const handleDownload = async (favorite: FavoriteWork, format: 'png' | 'jpg') => {
+    let imageUrl = favorite.image_url
+    if (isPlaceholderUrl(imageUrl)) {
+      try {
+        const { data, error } = await supabase
+          .from('generations')
+          .select('image_url')
+          .eq('id', favorite.id)
+          .eq('is_deleted', false)
+          .single()
+        if (error) throw error
+        imageUrl = data?.image_url || ''
+      } catch (e: any) {
+        console.error('[MyFavorites] fetch image for download failed:', e?.message ?? e, e)
+        alert('获取图片失败，请稍后重试')
+        return
+      }
+    }
+    if (!imageUrl) {
+      alert('该作品没有可下载的图片')
+      return
+    }
+
+    const filename = `wenyun_pattern_${(favorite.id || '').slice(0, 8) || Date.now()}.${format === 'png' ? 'png' : 'jpg'}`
+    setOpenDownloadMenuId(null)
     try {
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
       if (isMobile) {
-        // 移动端新窗口：download 函数侧已校验 Content-Type / 文件头 / 最小字节
-        window.open(`/.netlify/functions/download?url=${encodeURIComponent(favorite.image_url)}`, '_blank')
+        window.open(
+          format === 'png'
+            ? `/.netlify/functions/download?url=${encodeURIComponent(imageUrl)}`
+            : imageUrl,
+          '_blank'
+        )
         return
       }
-      // fetch 中转 + Blob 二次校验后下载；校验失败抛错，绝不把坏数据落成 .png
-      await downloadImageViaProxy(favorite.image_url, `wenyun_pattern_${Date.now()}.png`)
+
+      try {
+        // 优先直接下载：支持 data: / blob: / http(s)，PNG 带校验，JPG 经 Canvas 白底转换
+        await downloadImageAsFormat(imageUrl, filename, format)
+      } catch (directErr) {
+        console.warn('[MyFavorites] direct download failed, fallback to proxy/open:', directErr)
+        if (format === 'png') {
+          try {
+            // 生产环境若跨域受限，经 Netlify download 函数中转
+            await downloadImageViaProxy(imageUrl, filename)
+          } catch (proxyErr) {
+            // 本地 dev 未部署 Netlify 函数时，/functions/download 会返回 index.html(text/html)，
+            // 直接打开原图让用户另存为，避免继续报「图源类型异常」。
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+              window.open(imageUrl, '_blank')
+            } else {
+              throw proxyErr
+            }
+          }
+        } else {
+          // JPG 转换需要跨域原图；直接下载失败时只能打开原图让用户自行保存
+          window.open(imageUrl, '_blank')
+        }
+      }
     } catch (error) {
       console.error('[MyFavorites] 下载失败:', error)
       alert((error as Error)?.message || '下载失败，请尝试右键图片另存为')
@@ -197,12 +263,37 @@ export default function MyFavoritesPage() {
                       </span>
                     </div>
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => handleDownload(favorite)}
-                        className="flex-1 py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
+                      <div
+                        className="relative flex-1"
+                        ref={(el) => {
+                          downloadMenuRefs.current[favorite.id] = el
+                        }}
                       >
-                        下载
-                      </button>
+                        <button
+                          onClick={() =>
+                            setOpenDownloadMenuId(openDownloadMenuId === favorite.id ? null : favorite.id)
+                          }
+                          className="w-full py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
+                        >
+                          下载
+                        </button>
+                        {openDownloadMenuId === favorite.id && (
+                          <div className="absolute left-0 right-0 bottom-full mb-1 flex flex-col gap-1 bg-rice-paper-light border border-deep-blue-200 rounded-sm shadow-lg p-1 z-50">
+                            <button
+                              onClick={() => handleDownload(favorite, 'png')}
+                              className="w-full py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
+                            >
+                              PNG
+                            </button>
+                            <button
+                              onClick={() => handleDownload(favorite, 'jpg')}
+                              className="w-full py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
+                            >
+                              JPG
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       <button
                         onClick={() => handleViewDetail(favorite)}
                         className="flex-1 py-1.5 bg-deep-blue-50 border border-deep-blue-200 rounded-sm font-song text-xs text-deep-blue hover:bg-deep-blue-100 transition-colors"
