@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FrameDecorations } from './decorations/CornerDecorations'
 import { PatternDnaRadar } from './PatternDnaRadar'
@@ -42,6 +42,8 @@ export default function WorkDetailModal({
   const [imgSrc, setImgSrc] = useState('')
   const [showDna, setShowDna] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false)
+  const downloadMenuRef = useRef<HTMLDivElement>(null)
 
   // 打开弹窗时按需取图：列表已带图（http 短链或 data:）直接用，否则按 id 单条取
   useEffect(() => {
@@ -49,9 +51,11 @@ export default function WorkDetailModal({
     if (!work) {
       setImgSrc('')
       setShowDna(false)
+      setDownloadMenuOpen(false)
       return
     }
     setShowDna(false)
+    setDownloadMenuOpen(false)
     if (work.image && work.image !== '') {
       setImgSrc(work.image)
       return
@@ -86,6 +90,18 @@ export default function WorkDetailModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [work, onClose])
 
+  // 点击下载菜单外部时收起格式选项
+  useEffect(() => {
+    if (!downloadMenuOpen) return
+    const onClick = (e: MouseEvent) => {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(e.target as Node)) {
+        setDownloadMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [downloadMenuOpen])
+
   const handleDownload = async (format: 'png' | 'jpg') => {
     if (!work) return
     let url = imgSrc || work.image || ''
@@ -112,6 +128,7 @@ export default function WorkDetailModal({
     }
 
     const filename = `wenyun_pattern_${(work.id || '').slice(0, 8) || Date.now()}.${format === 'png' ? 'png' : 'jpg'}`
+    setDownloadMenuOpen(false)
     setDownloading(true)
     try {
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
@@ -242,23 +259,37 @@ export default function WorkDetailModal({
                       {isFavorite ? '已收藏' : '收藏'} · {favoriteCount}
                     </Button>
                   )}
-                  <div className="flex items-center gap-2">
+                  <div className="relative" ref={downloadMenuRef}>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleDownload('png')}
+                      onClick={() => setDownloadMenuOpen((v) => !v)}
                       disabled={downloading}
                     >
-                      PNG
+                      下载
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDownload('jpg')}
-                      disabled={downloading}
-                    >
-                      JPG
-                    </Button>
+                    {downloadMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 flex flex-col gap-1 bg-rice-paper-light border border-deep-blue-200 rounded-sm shadow-lg p-1 z-20">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDownload('png')}
+                          disabled={downloading}
+                          className="whitespace-nowrap"
+                        >
+                          PNG
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDownload('jpg')}
+                          disabled={downloading}
+                          className="whitespace-nowrap"
+                        >
+                          JPG
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   {shareUrl && (
                     <Button variant="outline" size="sm" onClick={handleShare}>
