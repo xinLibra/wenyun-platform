@@ -331,6 +331,85 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     fg += 1
         return fa, fg / tot
 
+    # ---------- 统一色调配色：框线色/内区地色从主题色派生 ----------
+    @staticmethod
+    def _parse_hex_color(text):
+        """'#RRGGBB' → (r,g,b)；非法返回 None。"""
+        if isinstance(text, (tuple, list)) and len(text) == 3:
+            return tuple(int(x) for x in text)
+        if not isinstance(text, str):
+            return None
+        s = text.strip().lstrip("#")
+        if len(s) != 6:
+            return None
+        try:
+            return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _make_frame_palette(rgb):
+        """主题色 → 统一色调框色板：{line 纹样线色, ground 内区地色}。
+
+        保证同色系开光构图：line = 主题色深调（可识别的“框”），ground = 主题色浅调
+        （花层近白底会染成它，避免白心贴纸感）。低饱和/近黑主题退化为墨线宣纸底。
+        """
+        from colorsys import rgb_to_hls, hls_to_rgb
+
+        r, g, b = rgb
+        if r == g == b:
+            h, s = 0.0, 0.0
+        else:
+            h, _, s = rgb_to_hls(r / 255.0, g / 255.0, b / 255.0)
+
+        def to_rgb(l_, s_):
+            rr, gg, bb = hls_to_rgb(h, max(0.0, min(1.0, l_)), max(0.0, min(1.0, s_)))
+            return (int(round(rr * 255)), int(round(gg * 255)), int(round(bb * 255)))
+
+        # 线色：压深亮度（保色相，稍提饱和）
+        line_l = 0.30
+        if s < 0.10:
+            # 近无色相（墨黑/黑白）→ 墨线灰 + 宣纸浅底，不用强行染色相
+            line = (int(round(0.27 * 255)),) * 3
+            ground = (int(round(0.90 * 255)),) * 3
+            return {"line": line, "ground": ground, "base": rgb}
+        line_s = min(0.85, max(0.30, s * 1.15 + 0.08))
+        line = to_rgb(line_l, line_s)
+        # 地色：同色相高亮浅调（轻微降饱和）—— 浅而带色，不纯白
+        ground = to_rgb(0.90, min(0.26, max(0.05, s * 0.55)))
+        return {"line": line, "ground": ground, "base": rgb}
+
+    @staticmethod
+    def _replace_background(flower_rgb, bg, target):
+        """把花图里接近其浅背景的像素染成 target（内区地色），消除自带白底。
+
+        与 color-key 抠透明不同：这里背景像素直接改色（保留 alpha 不透明），花色保留；
+        染出的色块与 frame 内区地色一致 → 贴上去无白心、无灰边、无贴纸感。
+        中间过渡像素在 target 与原色间线性插值，花瓣边缘柔和。
+        """
+        t1 = 100 * 100
+        t2 = 340 * 340
+        out = flower_rgb.copy()
+        opx = out.load()
+        tw, th = out.size
+        bg_r, bg_g, bg_b = bg
+        tr, tg, tb = target
+        for y in range(th):
+            for x in range(tw):
+                r, g, b = opx[x, y]
+                dr, dg, db = r - bg_r, g - bg_g, b - bg_b
+                d = dr * dr + dg * dg + db * db
+                if d <= t1:
+                    opx[x, y] = (tr, tg, tb)
+                elif d < t2:
+                    f = (d - t1) / (t2 - t1)
+                    opx[x, y] = (
+                        int(round(tr + (r - tr) * f)),
+                        int(round(tg + (g - tg) * f)),
+                        int(round(tb + (b - tb) * f)),
+                    )
+        return out
+
     # ---------- 两段合成：框（本地绘制）+ 花（花卉） ----------
     @staticmethod
     def _meander_uv(dep: float, half: float, length: float, style: str = "snake"):
@@ -364,62 +443,63 @@ class ProxyHandler(BaseHTTPRequestHandler):
         return pts
 
     @staticmethod
-    def _draw_geo_frame(geo: str = "huiwen", size: int = 512):
-        """程序化绘制「红地开窗几何框」（可靠方案：不依赖几何 LoRA 出框）。
+    def _draw_geo_frame(geo: str = "huiwen", size: int = 512, palette: dict = None):
+        """程序化绘制「主题色开窗几何框」v4（2026-09-04 统一色调版，不依赖几何 LoRA）。
 
-        构图：整幅宫墙红内区色地 + 四边带内墨色回折纹样 + 外墨线/内金线描边。
-        frame 必定存在且内区永远空心 → 两段合成的“框可见”由本地绘制保证。
-
-        geo: huiwen(回纹方波钩链) | panchang(盘长双层编带) | fangsheng(方胜菱峰带)
-        返回 (RGB Image, inner_rect)。
+        palette（None → 宫墙红系默认）派生自融合主题色：{line 线色, ground 内区地色}。
+        构图：整幅 ground + 四边带内 line 色回折纹样（细线宽 2、几何密度降低）+ 两条同色细描边。
+        无墨线/描金硬色块 → 框与内区同一色系，无“蓝框白心贴纸感”。
+        frame 必定存在且内区永远空心 → “框可见”由本地绘制保证。
         """
         from PIL import ImageDraw
 
+        if palette is None:
+            palette = ProxyHandler._make_frame_palette((168, 44, 46))
+        line = palette["line"]
+        ground = palette["ground"]
+
         S = int(size)
-        bf = max(30, int(S * 0.14))  # 边框带厚度 ≈ 14%
+        bf = max(22, int(S * 0.10))  # 边框带厚度 ≈ 10%（比 v3 更细）
         inner = (bf, bf, S - bf, S - bf)
-        INK = (36, 27, 18)       # 墨
-        RED = (168, 44, 46)      # 宫墙红（内区色地）
-        GOLD = (205, 163, 90)    # 描金
-        img = Image.new("RGB", (S, S), RED)
+        img = Image.new("RGB", (S, S), ground)
         dr = ImageDraw.Draw(img)
 
-        # 1) 外缘墨线 + 内区分隔描金线（开窗层次）
-        dr.rectangle((5, 5, S - 6, S - 6), outline=INK, width=2)
-        g0 = bf - 7
-        dr.rectangle((g0, g0, S - 1 - g0, S - 1 - g0), outline=GOLD, width=2)
+        # 1) 外细线 + 开窗内沿细线（同色细窄，开窗层次）
+        dr.rectangle((4, 4, S - 5, S - 5), outline=line, width=1)
+        g0 = bf - 6
+        dr.rectangle((g0, g0, S - 1 - g0, S - 1 - g0), outline=line, width=1)
 
-        # 2) 纹样通道：[v0, v1]（v0 靠外、v1 靠内）
-        v0, v1 = 16, bf - 16
+        # 2) 纹样细带通道 [v0, v1]
+        v0, v1 = 10, bf - 11
         dep = v1 - v0
-        pad = 13
+        pad = 9
         length = S - 2 * pad
 
-        # 3) 按几何类型生成纹样线组
+        # 3) 按几何类型生成纹样线组（half 加大 → 周期变长、密度降低）
         if geo == "fangsheng":
-            half = dep * 0.55
+            half = dep * 0.9
             uv_a = ProxyHandler._meander_uv(dep, half, length, "diamond")
-            uv_b = ProxyHandler._meander_uv(dep, half, length - half, "diamond")
-            uv_b = [(u + half / 2.0, v) for (u, v) in uv_b]
+            uv_b = [(u + half / 2.0, v) for (u, v) in ProxyHandler._meander_uv(dep, half, length - half, "diamond")]
             lines = [uv_a, uv_b]
         elif geo == "panchang":
-            half = dep * 0.45
-            uv_a = ProxyHandler._meander_uv(dep, half, length, "snake")
-            uv_b = [(u + half, v + 8) for (u, v) in ProxyHandler._meander_uv(max(1, dep - 16), half, length - half, "snake")]
+            half = dep * 0.8
+            dep1 = max(4, int(dep * 0.42))
+            dep2 = max(4, dep - dep1 - 7)
+            uv_a = ProxyHandler._meander_uv(dep1, half, length, "snake")
+            uv_b = [
+                (u + half / 2.0, v + dep1 + 7)
+                for (u, v) in ProxyHandler._meander_uv(dep2, half, length - half, "snake")
+            ]
             lines = [uv_a, uv_b]
-        else:  # huiwen
-            half = max(10, int(dep * 0.42))
+        else:  # huiwen：钩链横段拉长 → 每边钩数变少（疏朗）
+            half = max(10, int(dep * 0.72))
             lines = [ProxyHandler._meander_uv(dep, half, length, "snake")]
 
-        # 4) 沿四边铺纹样
+        # 4) 沿四边铺纹样（细线 2px）
         edges = [
-            # 顶边
             (pad, v0, 1, 0, 0, 1),
-            # 底边（v 朝上 = 负 y）
             (pad, S - 1 - v0, 1, 0, 0, -1),
-            # 左边（u 沿 +y，v 朝 +x）
             (v0, pad, 0, 1, 1, 0),
-            # 右边（u 沿 +y，v 朝 -x）
             (S - 1 - v0, pad, 0, 1, -1, 0),
         ]
         for sx, sy, udx, udy, vdx, vdy in edges:
@@ -427,10 +507,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 pts = [
                     (sx + int(round(u * udx + v * vdx)), sy + int(round(u * udy + v * vdy)))
                     for (u, v) in uv
-                    if 6 <= sx + u * udx + v * vdx <= S - 7 and 6 <= sy + u * udy + v * vdy <= S - 7
+                    if 4 <= sx + u * udx + v * vdx <= S - 5 and 4 <= sy + u * udy + v * vdy <= S - 5
                 ]
                 if len(pts) > 1:
-                    dr.line(pts, fill=INK, width=3)
+                    dr.line(pts, fill=line, width=2)
         return img, inner
 
     def _composite_fusion(
@@ -439,15 +519,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
         flower_bytes: bytes,
         inner: tuple = None,
         flower_fill: float = 0.9,
+        ground_color: tuple = None,
     ) -> bytes:
-        """两段合成 v3（2026-09-04 可靠开窗版）：本地几何框 + 中心花。
+        """两段合成 v4（2026-09-04 统一色调版）：本地几何框 + 中心花。
 
-        local-frame 模式：frame 为 PIL 程序化红地开窗框（必含空心内区），inner 由
-        _draw_geo_frame 直给，本函数不再依赖「检测」。AI-frame 模式：inner=None 时
-        探测空心矩形（失败退默认 72% 内区）。
-        1) 花层等比放进内区 flower_fill（0.9=贴满中心、四周留一圈红地边）；
-        2) 色键抠底（挖浅素背景）→ 露出 frame 内区色地（无灰补丁）；
-        3) 边框像素原样保留。
+        ground_color 非空：花图近白背景直接染成内区地色（同色系替换 → 无白心/无灰边），
+        适合 local-frame（frame 内区地 == ground_color，整幅实色贴入无缝）；
+        ground_color=None（AI-frame）：沿用旧 color-key 透明抠底。
         """
         try:
             frame = Image.open(io.BytesIO(frame_bytes)).convert("RGB")
@@ -481,18 +559,25 @@ class ProxyHandler(BaseHTTPRequestHandler):
         tw, th = max(8, int(fw * ratio)), max(8, int(fh * ratio))
         flower2 = flower.resize((tw, th), Image.LANCZOS)
 
-        # 3) 背景色键抠底
+        # 3) 背景处理：统一色调（染成地色）或 color-key 透明（AI-frame）
         bg = self._ring_median(flower2)
         if bg is None:
             bg = (245, 245, 245)
-        try:
-            flower_a, fg_ratio = self._color_key_mask(flower2, bg)
-        except Exception as exc:  # noqa: BLE001
-            print("[sd_proxy] composite failed: color-key error %r" % (exc,), flush=True)
-            return None
+        fg_ratio = None
+        if ground_color is not None:
+            overlay = ProxyHandler._replace_background(flower2, bg, ground_color)
+            mode = "ground-replace"
+        else:
+            try:
+                overlay, fg_ratio = self._color_key_mask(flower2, bg)
+            except Exception as exc:  # noqa: BLE001
+                print("[sd_proxy] composite failed: color-key error %r" % (exc,), flush=True)
+                return None
+            mode = "color-key"
         print(
-            "[sd_proxy] composite: inner=(%d,%d,%d,%d) flower_fill=%.2f flower %dx%d -> %dx%d bg=%s fg_ratio=%.2f"
-            % (l0, t0, r0, b0, flower_fill, fw, fh, tw, th, str(bg), fg_ratio),
+            "[sd_proxy] composite: inner=(%d,%d,%d,%d) flower_fill=%.2f flower %dx%d -> %dx%d bg=%s mode=%s%s"
+            % (l0, t0, r0, b0, flower_fill, fw, fh, tw, th, str(bg), mode,
+               (" ground=%s" % str(ground_color)) if ground_color else (" fg_ratio=%.2f" % fg_ratio)),
             flush=True,
         )
 
@@ -500,7 +585,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
         out = frame.convert("RGBA")
         ox = l0 + (iw - tw) // 2
         oy = t0 + (ih - th) // 2
-        if fg_ratio < 0.12:
+        if ground_color is not None:
+            # 花图背景已染成地色 → 整幅实色贴入，与内区地无缝衔接
+            out.paste(overlay, (ox, oy))
+        elif fg_ratio < 0.12:
             # 花层几乎被抠空（背景不匀 / 花图异常）→ 明确日志 + 退化为内区软矩形贴图，
             # 不再退回「只有框底图糊弄」：花图仍以羽化矩形叠进内区。
             print(
@@ -519,7 +607,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     rp[xx, yy] = int(255 * min(a, 0.92))
             out.paste(flower2, (ox, oy), rect)
         else:
-            out.paste(flower_a, (ox, oy), flower_a)
+            out.paste(overlay, (ox, oy), overlay)
 
         print("[sd_proxy] composite ok: inner=%s flower->%s" % (str(inner), str((tw, th))), flush=True)
         buf = io.BytesIO()
@@ -531,7 +619,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         frame.mode:
           local（默认）—— 不请求几何 LoRA，frame 由 _draw_geo_frame 本地绘制
-            （geo: huiwen/panchang/fangsheng），必然空心有框；flower 单段 txt2img。
+            （geo: huiwen/panchang/fangsheng），必然空心有框；flower 单段 txt2img；
+            frame.color = 融合主题色 hex（#RRGGBB）→ 框线色/内区地色同色系派生，
+            花层近白底染成地色（统一色调开光）。缺省默认宫墙红系。
           ai —— 保留旧两段 txt2img（frame + flower 都 AI 出图，内区靠检测）。
         comp.debug（默认 true）：frame/flower/final 三张落盘 DEBUG_DIR 便于排查。
         """
@@ -560,6 +650,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         inner = None
         frame_src = "txt2img"
+        palette = None
         try:
             if mode == "ai":
                 frame_body = dict(base)
@@ -571,7 +662,18 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 if geo not in ("huiwen", "panchang", "fangsheng"):
                     geo = "huiwen"
                     print("[sd_proxy] warn: unknown frame.geo, fallback huiwen", flush=True)
-                frame_img, inner = self._draw_geo_frame(geo, int(base.get("width", 512)))
+                # 统一色调：frame.color（融合主题色 hex）→ 线色/地色同色系；缺省默认宫墙红系
+                rgb = ProxyHandler._parse_hex_color(frame_cfg.get("color"))
+                if rgb is None:
+                    rgb = (168, 44, 46)
+                    print("[sd_proxy] composite: no frame.color, default palace-red theme", flush=True)
+                palette = ProxyHandler._make_frame_palette(rgb)
+                print(
+                    "[sd_proxy] composite palette: base=%s line=%s ground=%s"
+                    % (str(rgb), str(palette["line"]), str(palette["ground"])),
+                    flush=True,
+                )
+                frame_img, inner = self._draw_geo_frame(geo, int(base.get("width", 512)), palette=palette)
                 fbuf = io.BytesIO()
                 frame_img.save(fbuf, format="PNG")
                 frame_bytes = fbuf.getvalue()
@@ -590,7 +692,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            merged = self._composite_fusion(frame_bytes, flower_bytes, inner=inner)
+            merged = self._composite_fusion(
+                frame_bytes,
+                flower_bytes,
+                inner=inner,
+                ground_color=palette["ground"] if palette else None,
+            )
         except Exception as e:  # noqa: BLE001
             print("[sd_proxy] composite FAILED, fallback to frame-only (flower lost): %s" % e, flush=True)
             merged = frame_bytes

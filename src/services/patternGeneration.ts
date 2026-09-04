@@ -466,6 +466,48 @@ function hexToColorName(hex: string): string {
   return hueToColorName(h)
 }
 
+/** HSL → '#rrggbb'（hue 0-360, s/l 0-1） */
+function hslToHex(hue: number, sat: number, light: number): string {
+  const hh = (((hue % 360) + 360) % 360) / 60
+  const c = (1 - Math.abs(2 * light - 1)) * sat
+  const x = c * (1 - Math.abs((hh % 2) - 1))
+  let rr = 0, gg = 0, bb = 0
+  if (hh < 1) { rr = c; gg = x }
+  else if (hh < 2) { rr = x; gg = c }
+  else if (hh < 3) { gg = c; bb = x }
+  else if (hh < 4) { gg = x; bb = c }
+  else if (hh < 5) { rr = x; bb = c }
+  else { rr = c; bb = x }
+  const m = light - c / 2
+  const hex = (v: number) => {
+    const n = Math.max(0, Math.min(255, Math.round((v + m) * 255)))
+    return n.toString(16).padStart(2, '0')
+  }
+  return `#${hex(rr)}${hex(gg)}${hex(bb)}`
+}
+
+/**
+ * 融合主题色 → 主色 HEX（几何×花卉开窗合成的"框色"来源，sd_proxy 据此派生
+ * 框线色/内区地色并统一花层背景；取不到返回 null → sd_proxy 默认宫墙红系）
+ */
+function resolveCompositeAccentHex(params: GenerationParams | undefined): string | null {
+  if (!params) return null
+  const cs = params.colorScheme
+  if (!cs) return null
+  if (cs.mode === 'image' && Array.isArray(cs.colors) && cs.colors[0]) {
+    return cs.colors[0].toLowerCase()
+  }
+  if (cs.mode === 'pantone' && cs.pantone) {
+    return getPantoneHexFromMap(cs.pantone)?.toLowerCase() ?? null
+  }
+  if (cs.mode === 'hue' && typeof cs.hue === 'number') {
+    const b = (typeof cs.brightness === 'number' ? cs.brightness : 50) / 100
+    const light = Math.max(0.2, Math.min(0.5, 0.16 + b * 0.62))
+    return hslToHex(cs.hue, 0.62, light)
+  }
+  return null
+}
+
 /**
  * 根据主色 hue 返回应抑制的"抢色背景"列表
  *
@@ -861,9 +903,16 @@ export function buildNegativePrompt(params: GenerationParams): string {
 async function callSdProxy(payload: {
   prompt?: string
   negative_prompt?: string
-  /** 几何+花卉「可靠开窗合成」：local-frame(默认，sd_proxy 本地绘制框 + 仅 flower 出图) / ai(两段都出图) */
+  /** 几何+花卉「可靠开窗合成」：local-frame(默认，sd_proxy 本地绘制框+配色 + 仅 flower 出图) / ai(两段都出图) */
   composite?: {
-    frame: { prompt: string; negative_prompt: string; mode?: 'local' | 'ai'; geo?: string }
+    frame: {
+      prompt: string
+      negative_prompt: string
+      mode?: 'local' | 'ai'
+      geo?: string
+      /** 融合主题色 hex（#rrggbb），sd_proxy 派生框线色/内区地色并统一花层背景 */
+      color?: string
+    }
     flower: { prompt: string; negative_prompt: string }
   }
   width: number
@@ -2015,12 +2064,15 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
   // 几何+花卉（回纹/盘长/方胜）：两段合成 v2（2026-09-04），开窗边框 + 中心枝态花，合成见 sd_proxy
   const composite = buildGeoFloralCompositeParts(options)
   if (composite) {
+    // 统一色调：主题色（用户选色）→ frame.color → sd_proxy 派生框线色/内区地色
+    const accentHex = resolveCompositeAccentHex(options.params)
     console.log('[patternGeneration] ===== 几何×花卉 可靠开窗合成（local-frame 本地绘制框 + flower 单段出图）=====')
     console.log(
       '[patternGeneration] frame.mode=local geo=', composite.geoSub,
       `(${composite.geoLabelEn}) | floral=${composite.floralLabelEn}`,
       '| floralWeight=', composite.floralWeight,
-      '（frame 由 sd_proxy 用 PIL 本地绘制，不调用几何 LoRA txt2img → 框必可见）',
+      '| frame.color=', accentHex ?? '(null → 默认宫墙红)',
+      '（frame 由 sd_proxy 用 PIL 本地绘制并配色，不调用几何 LoRA txt2img → 框必可见）',
     )
     console.log('[patternGeneration] flowerPrompt:', composite.flowerPrompt)
     try {
@@ -2031,6 +2083,7 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
             negative_prompt: composite.frameNegative,
             mode: 'local',
             geo: composite.geoSub,
+            color: accentHex ?? undefined,
           },
           flower: { prompt: composite.flowerPrompt, negative_prompt: composite.flowerNegative },
         },
