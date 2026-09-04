@@ -175,38 +175,244 @@ class ProxyHandler(BaseHTTPRequestHandler):
             seed = int(info.get("seed", -1))
         return img_bytes, seed, json.dumps(info) if not isinstance(info, str) else (info or ""), b64
 
+    # ---------- 两段合成辅助：内区检测 / 背景采样 / 色键抠底 ----------
+    @staticmethod
+    def _ring_median(img, edge_frac: float = 0.03):
+        """取图像四周边带（默认 3%）抽样像素的各通道中位数，作为背景色参考。
+
+        用于定位 flower 层背景（浅素底）。返回 (r,g,b)；无样本返回 None。
+        """
+        w, h = img.size
+        edge = max(3, int(min(w, h) * edge_frac))
+        rs, gs, bs = [], [], []
+        step = 5
+        for y in range(0, h, step):
+            for x in range(0, w, step):
+                if x < edge or y < edge or x >= w - edge or y >= h - edge:
+                    p = img.getpixel((x, y))
+                    rs.append(p[0])
+                    gs.append(p[1])
+                    bs.append(p[2])
+        if not rs:
+            return None
+        n = len(rs) // 2
+        rs.sort()
+        gs.sort()
+        bs.sort()
+        return (rs[n], gs[n], bs[n])
+
+    @staticmethod
+    def _detect_inner_rect(img):
+        """检测「空心开窗」frame 图里的大面积留白内区，返回原图坐标 (l, t, r, b)。
+
+        思路：128px 缩略图做边缘检测；在排除四角的中心带内，沿上下左右四方向从图像中心
+        向外扫描「高纹理 run（允许 ≤2px 缝隙，容忍双层框间隙）」，run 的最内侧起点即边框
+        内缘。四方向中 ≥2 个方向找不到框 → 判定不是空心开窗图，返回 None。
+        """
+        try:
+            from PIL import ImageFilter
+        except Exception:  # noqa: BLE001
+            return None
+        W, H = img.size
+        gwh = 128
+        small = img.convert("L").resize((gwh, gwh), Image.BILINEAR)
+        edges = small.filter(ImageFilter.FIND_EDGES)
+        ed = edges.load()
+        band = max(6, int(0.2 * gwh))  # 中心带半宽（排除四角装饰）
+        cx = cy = gwh // 2
+        th = 30
+
+        def col_tex(x, y0, y1):
+            n = y1 - y0
+            if n <= 0:
+                return 0.0
+            cnt = 0
+            for y in range(y0, y1):
+                if ed[x, y] > th:
+                    cnt += 1
+            return cnt / n
+
+        def row_tex(y, x0, x1):
+            n = x1 - x0
+            if n <= 0:
+                return 0.0
+            cnt = 0
+            for x in range(x0, x1):
+                if ed[x, y] > th:
+                    cnt += 1
+            return cnt / n
+
+        def scan(start, step, measure, lo, hi):
+            """从中心向外扫：返回高纹理 run 的起点（= 边框带内侧边缘）；找不到返回 None。"""
+            run_start = None
+            gap = 0
+            x = start
+            while lo <= x <= hi:
+                if measure(x) > 0.28:
+                    if run_start is None:
+                        run_start = x
+                    gap = 0
+                elif run_start is not None:
+                    gap += 1
+                    if gap > 2:
+                        run_start = None
+                        gap = 0
+                x += step
+            return run_start
+
+        y0b, y1b = cy - band, cy + band  # 竖中心带（测左右框）
+        x0b, x1b = cx - band, cx + band  # 横中心带（测上下框）
+        left = scan(cx, -1, lambda x: col_tex(x, y0b, y1b), 0, cx)
+        right = scan(cx, 1, lambda x: col_tex(x, y0b, y1b), cx, gwh - 1)
+        top = scan(cy, -1, lambda y: row_tex(y, x0b, x1b), 0, cy)
+        bottom = scan(cy, 1, lambda y: row_tex(y, x0b, x1b), cy, gwh - 1)
+        found = sum(1 for v in (left, right, top, bottom) if v is not None)
+        if found < 2:
+            return None
+
+        # 缺某一方向边框时按对称默认补齐（边框厚 ≈ 全图 9%）
+        dfl = int(gwh * 0.09)
+        if left is None:
+            left = dfl
+        if right is None:
+            right = gwh - 1 - dfl
+        if top is None:
+            top = dfl
+        if bottom is None:
+            bottom = gwh - 1 - dfl
+        if right < left + 2:
+            right = left + 2
+        if bottom < top + 2:
+            bottom = top + 2
+
+        # 缩回原图并各向内收 1.5% 防切到边框描边
+        mx = max(2, W // 64)
+        my = max(2, H // 64)
+        l = max(0, int(left * W / gwh) + mx)
+        t = max(0, int(top * H / gwh) + my)
+        r = min(W - 1, int(right * W / gwh) - mx)
+        b = min(H - 1, int(bottom * H / gwh) - my)
+        if r <= l or b <= t:
+            return None
+        return (l, t, r, b)
+
+    @staticmethod
+    def _color_key_mask(flower_rgb, bg):
+        """色键抠底：把与背景色接近的像素 alpha 置 0（浅素底 → 挖空），
+        花/枝/叶（与 bg 色距大）保留，中间态线性过渡（无灰圆补丁）。
+        返回 (RGBA 图, 前景像素占比)。
+        """
+        fa = flower_rgb.convert("RGBA")
+        fpx = fa.load()
+        tw, th = fa.size
+        t1 = 90 * 90  # 距 bg 欧氏平方 ≤ t1 → 全透明
+        t2 = 320 * 320  # ≥ t2 → 全保留
+        bg_r, bg_g, bg_b = bg
+        fg = 0
+        tot = max(1, tw * th)
+        for y in range(th):
+            for x in range(tw):
+                r, g, b, a = fpx[x, y]
+                dr = r - bg_r
+                dg = g - bg_g
+                db = b - bg_b
+                d = dr * dr + dg * dg + db * db
+                if d <= t1:
+                    av = 0
+                elif d >= t2:
+                    av = 255
+                else:
+                    av = int(255 * (d - t1) / (t2 - t1))
+                fpx[x, y] = (r, g, b, av)
+                if av > 96:
+                    fg += 1
+        return fa, fg / tot
+
     # ---------- 两段合成：框（几何）+ 花（花卉） ----------
     def _composite_fusion(self, frame_bytes: bytes, flower_bytes: bytes) -> bytes:
-        frame = Image.open(io.BytesIO(frame_bytes)).convert("RGBA")
-        flower = Image.open(io.BytesIO(flower_bytes)).convert("RGBA")
+        """两段合成 v2（2026-09-04 开窗版）：开窗几何框 + 内区色地 + 中心枝态花。
+
+        不再用「小半径圆形径向软边把花缩成圆牌」：
+        1) 检测 frame 图内区留白矩形，找不到用默认中心 72% 矩形并打 warning；
+        2) flower 图等比放进内区 70–85%（取 0.78）中心——形状跟花图，不裁正圆徽章；
+        3) 色键抠底（挖浅素背景）→ 露出的全是 frame 内区色地（无灰补丁）；
+        4) 边框像素原样保留。
+        """
+        try:
+            frame = Image.open(io.BytesIO(frame_bytes)).convert("RGB")
+            flower = Image.open(io.BytesIO(flower_bytes)).convert("RGB")
+        except Exception:  # noqa: BLE001
+            print("[sd_proxy] composite failed: cannot decode frame/flower", flush=True)
+            return None
         w, h = frame.size
-        target = max(64, int(min(w, h) * 0.62))
-        # 花：等比缩放 + 中心裁方
+
+        # 1) 内区矩形（开窗留白区）
+        inner = self._detect_inner_rect(frame)
+        if inner is None:
+            print("[sd_proxy] warn: no empty inner field detected, use default 72% center rect", flush=True)
+            mg = int(min(w, h) * 0.14)
+            inner = (mg, mg, w - mg, h - mg)
+        l0, t0, r0, b0 = inner
+        iw, ih = r0 - l0, b0 - t0
+        if iw < 16 or ih < 16:
+            print("[sd_proxy] composite failed: inner rect too small %s" % (inner,), flush=True)
+            return None
+
+        # 2) 花层等比放进内区 78%（宁可小一圈也不裁切边框）
         fw, fh = flower.size
-        side = min(fw, fh)
-        left, top = (fw - side) // 2, (fh - side) // 2
-        flower = flower.crop((left, top, left + side, top + side)).resize(
-            (target, target), Image.LANCZOS
+        if fw < 8 or fh < 8:
+            print("[sd_proxy] composite failed: flower image too small", flush=True)
+            return None
+        box_w = max(16, int(iw * 0.78))
+        box_h = max(16, int(ih * 0.78))
+        ratio = min(box_w / fw, box_h / fh)
+        tw, th = max(8, int(fw * ratio)), max(8, int(fh * ratio))
+        flower2 = flower.resize((tw, th), Image.LANCZOS)
+
+        # 3) 背景色键抠底
+        bg = self._ring_median(flower2)
+        if bg is None:
+            bg = (245, 245, 245)
+        try:
+            flower_a, fg_ratio = self._color_key_mask(flower2, bg)
+        except Exception as exc:  # noqa: BLE001
+            print("[sd_proxy] composite failed: color-key error %r" % (exc,), flush=True)
+            return None
+        print(
+            "[sd_proxy] composite: inner=(%d,%d,%d,%d) flower %dx%d -> %dx%d bg=%s fg_ratio=%.2f"
+            % (l0, t0, r0, b0, fw, fh, tw, th, str(bg), fg_ratio),
+            flush=True,
         )
-        # 径向软边蒙版：中心不透明，边缘渐隐，让花像嵌进开窗里
-        mask = Image.new("L", (target, target), 0)
-        mpx = mask.load()
-        center = (target - 1) / 2.0
-        radius = target / 2.0
-        feather = max(1.0, radius * 0.22)
-        for y in range(target):
-            for x in range(target):
-                dist = math.hypot(x - center, y - center)
-                if dist <= radius - feather:
-                    mpx[x, y] = 255
-                elif dist <= radius:
-                    mpx[x, y] = int(255 * (radius - dist) / feather)
-        px = (w - target) // 2
-        py = (h - target) // 2
-        frame.paste(flower, (px, py), mask)
-        out = io.BytesIO()
-        frame.convert("RGB").save(out, format="PNG")
-        return out.getvalue()
+
+        # 4) 贴进内区中心（保留边框像素）
+        out = frame.convert("RGBA")
+        ox = l0 + (iw - tw) // 2
+        oy = t0 + (ih - th) // 2
+        if fg_ratio < 0.12:
+            # 花层几乎被抠空（背景不匀 / 花图异常）→ 明确日志 + 退化为内区软矩形贴图，
+            # 不再退回「只有框底图糊弄」：花图仍以羽化矩形叠进内区。
+            print(
+                "[sd_proxy] warn: color-key cleared most flower pixels (fg=%.2f), fallback to soft-rect overlay" % fg_ratio,
+                flush=True,
+            )
+            rect = Image.new("L", (tw, th), 0)
+            fx = max(4, tw // 40)
+            fy = max(4, th // 40)
+            rp = rect.load()
+            for yy in range(th):
+                for xx in range(tw):
+                    axx = min(xx, tw - 1 - xx) / fx
+                    ayy = min(yy, th - 1 - yy) / fy
+                    a = min(axx, ayy, 1.0)
+                    rp[xx, yy] = int(255 * min(a, 0.92))
+            out.paste(flower2, (ox, oy), rect)
+        else:
+            out.paste(flower_a, (ox, oy), flower_a)
+
+        print("[sd_proxy] composite ok: inner=%s flower->%s" % (str(inner), str((tw, th))), flush=True)
+        buf = io.BytesIO()
+        out.convert("RGB").save(buf, format="PNG")
+        return buf.getvalue()
 
     def _handle_composite(self, req: dict) -> None:
         if not _HAS_PIL:
@@ -240,7 +446,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         try:
             merged = self._composite_fusion(frame_bytes, flower_bytes)
         except Exception as e:  # noqa: BLE001
-            print("[sd_proxy] composite failed, fallback to frame: %s" % e, flush=True)
+            print("[sd_proxy] composite FAILED, fallback to frame-only (flower lost): %s" % e, flush=True)
             merged = frame_bytes
 
         merged_b64 = base64.b64encode(merged).decode("ascii")

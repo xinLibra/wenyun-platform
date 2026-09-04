@@ -1342,7 +1342,8 @@ const GEO_FLORAL_FUSION = {
       'traditional Chinese huiwen key-fret border pattern',
       'open center frame, square border frame',
       'medium density, clean geometric lines, regular meander',
-      'single flower centered in the open frame, one single flower, empty space around the flower, minimal flat flower',
+      // 2026-09-04 开窗 v2：单融兜底不再写「正中央一朵」语义，花以枝态居中
+      'floral branch motif in the open window, blossoms on twigs, no round medallion',
       'flat pattern design, no texture, classic authentic traditional form',
     ],
     availablePositive: ['thin key-fret window frame, airy open center, corner key-fret squares'],
@@ -1380,7 +1381,8 @@ const GEO_FLORAL_FUSION = {
       'traditional Chinese panchang endless knot pattern',
       'open center frame, square border frame',
       'medium density, clean geometric lines',
-      'single flower centered in the open frame, one single flower, empty space around the flower, minimal flat flower',
+      // 2026-09-04 开窗 v2：单融兜底不再写「正中央一朵」语义，花以枝态居中
+      'floral branch motif in the open window, blossoms on twigs, no round medallion',
       'flat pattern design, no texture, classic authentic traditional form, auspicious endless knot',
     ],
     availablePositive: ['thin endless knot window frame, airy open center, corner knot ornaments'],
@@ -1420,7 +1422,8 @@ const GEO_FLORAL_FUSION = {
       'two overlapping diamonds interlocking, nested diamond lattice, geometric diamond cross',
       'open center frame, square border frame',
       'medium density, clean geometric lines',
-      'single flower centered in the open frame, one single flower, empty space around the flower, minimal flat flower',
+      // 2026-09-04 开窗 v2：单融兜底不再写「正中央一朵」语义，花以枝态居中
+      'floral branch motif in the open window, blossoms on twigs, no round medallion',
       'single motif only, large empty margin, no repeat, no tiling, flat pattern design, no texture, plain background',
     ],
     availablePositive: ['thin interlocking diamond window frame, airy open center, corner double diamond ornaments'],
@@ -1511,6 +1514,115 @@ function resolveGeoFloralFusion(
   if (bGeo && aFloral) return { geoSub: subcategoryB, cfg: GEO_FLORAL_FUSION[subcategoryB] }
   return null
 }
+
+/**
+ * 几何+花卉「两段合成」配置（2026-09-04 开窗版 v2，替代旧「中央单朵」两段）。
+ * 目标构图 = 参考图：外圈几何开窗框 + 内区大面积色地 + 中央枝态花（不是圆牌贴图）。
+ * - frame 段只出空心开窗边框：framePositive 强调 square open center / wide empty inner panel /
+ *   thin border bands；frameNegative 禁迷宫/满铺/3D 绳/写实布/框内花；
+ * - flower 段只出中心花层（三个几何共用 COMPOSITE_FLOWER）：枝干自然伸展、多花头、平面插画浅底，
+ *   便于 sd_proxy 用 color-key 把浅底剥离后贴进内区；
+ * - 权重两段独立（各自只挂一个 LoRA，不共存竞争）：几何 0.65–0.80 细框、花卉 0.70–0.85 主体；
+ * - 合成逻辑见 scripts/sd_proxy.py `_composite_fusion`（内区矩形 + color-key，不再用圆形径向软边）。
+ */
+type GeoFloralCompositeSub = Exclude<GeoFloralSub, 'jindi'>
+const GEO_FLORAL_COMPOSITE = {
+  huiwen: {
+    /** 框段几何 LoRA 权重区间 0.65–0.80（细线 greek key 框；0.8+ 易粗/满铺） */
+    geoWeightRange: [0.65, 0.8] as const,
+    framePositive: [
+      'square open center, wide empty inner panel',
+      'thin greek-key meander border bands along the four outer edges, double-line frame',
+      'neat regular key-fret border, continuous clean meander line',
+      'frame only, blank inner field, no pattern in the center',
+    ],
+    frameNegative: [
+      'labyrinth filling center',
+      'pattern filling the center',
+      'filled center',
+      'all-over meander',
+      'full meander background',
+      'dense mesh',
+      'mesh background',
+      '3d rope',
+      'photoreal fabric',
+      'flower in the frame',
+      'floral filling the frame',
+      'bloom',
+    ],
+  },
+  panchang: {
+    geoWeightRange: [0.65, 0.8] as const,
+    framePositive: [
+      'square open center, wide empty inner panel',
+      'border of interlocking endless knots, knot ornaments only along the frame edges',
+      'thin continuous geometric knot border band',
+      'frame only, blank inner field, no pattern in the center',
+    ],
+    frameNegative: [
+      'all-over endless knot',
+      'endless knot filling the center',
+      'pattern filling the center',
+      'filled center',
+      'dense knotwork',
+      '3d rope',
+      'photoreal fabric',
+      'ribbon spool',
+      'roll of tape',
+      'flower in the frame',
+      'floral filling the frame',
+      'bloom',
+    ],
+  },
+  fangsheng: {
+    geoWeightRange: [0.65, 0.8] as const,
+    framePositive: [
+      'square open center, wide empty inner panel',
+      'diamond border frame, interlocking diamond band along the four edges',
+      'thin diamond key pattern border, double-line diamond frame',
+      'frame only, blank inner field, no pattern in the center',
+    ],
+    frameNegative: [
+      'all-over diamond lattice',
+      'diamond mesh',
+      'diamond pattern filling the center',
+      'repeating diamond tile',
+      'pattern filling the center',
+      'filled center',
+      '3d rope',
+      'photoreal fabric',
+      'flower in the frame',
+      'floral filling the frame',
+      'bloom',
+    ],
+  },
+} as const
+
+/** 两段合成 flower 段（三个几何共用）：权重 + 正向/负向。{label} 会被替换为花卉 subLabelEn（如 "peony"） */
+const COMPOSITE_FLOWER = {
+  /** 花段花卉 LoRA 权重区间 0.70–0.85（枝态花为画面主体） */
+  floralWeightRange: [0.7, 0.85] as const,
+  positive: [
+    '{label} branch spray, blossoms on spreading twigs, natural branching floral stems',
+    'multi-blossom branch composition filling the central area',
+    'flowers growing on slender curved branches, leaves along the stems',
+    'flat traditional illustration, plain light background, 2d graphic ornament',
+  ],
+  /** 禁止「单朵特写 / 圆牌徽章 / 灰圆补丁」语境 */
+  negative: [
+    'single flower',
+    'one flower only',
+    'single bloom',
+    'centered medallion',
+    'sticker',
+    'badge',
+    'round emblem',
+    'grey circle vignette',
+    'circular gradient',
+    'circle background',
+    'vignette',
+  ],
+} as const
 
 export function buildFusionPromptParts(options: FusionGenerationOptions): FusionPromptInfo {
   const { subcategoryA, subcategoryB, ratioA, ratioB, params } = options
@@ -1682,12 +1794,13 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   const arrangementUsed = geoCfg?.arrangement ? geoCfg.arrangement : params.arrangement
   switch (arrangementUsed) {
     case 'single':
-      // 几何+花卉：花卉在中央开窗/底纹上，几何作外框；不走"孤立图章"语义
+      // 几何+花卉：花卉在中央开窗/底纹上，几何作外框；不走"孤立图章"语义。
+      // 2026-09-04 开窗 v2：非锦地兜底改为枝态花居中（与两段合成构图一致），不写「一朵/圆牌」
       if (geoFloral) {
         if (geoSub === 'jindi') {
           parts.push('single floral motif centered over the geometric brocade ground')
         } else {
-          parts.push('single flower centered in the open frame, empty space around the flower')
+          parts.push('floral branch composition in the open window, blossoms on twigs')
         }
         parts.push('no repeat, no tiling, single centered composition, airy negative space')
       } else {
@@ -1784,10 +1897,13 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
 }
 
 /**
- * 几何+花卉「两段合成」prompt 拆分（2026-09-04）：
- *   单次双 LoRA 融合在 SD1.5 下不稳定（几何会被花卉吞 / 花卉掉回写实 / 抽签）。
- *   这里把「开窗几何边框」与「居中一朵花」各自独立出图，再由 sd_proxy 合成，
- *   稳定得到：纤细回纹/盘长/方胜边框 + 正中央一朵花（对齐参考图 46/37）。
+ * 几何+花卉「两段合成」prompt 拆分（2026-09-04 开窗版 v2）：
+ *   frame 段只生成「空心开窗边框」——细线几何边带 + 大面积留白中心（square open center / wide empty
+ *   inner panel / thin border bands），盘长/方胜用「边框化」描述，禁止整图盘长/菱形地纹与迷宫；
+ *   flower 段只生成「可合成的中心枝态花层」——branching spray / 多花头 / 枝叶伸展 / 平面插画浅底，
+ *   便于 sd_proxy color-key 剥离浅底后贴进内区；不再强制「正中央一朵特写圆牌」。
+ *   两段各自只挂一个 LoRA（互不竞争），权重直接钳到区间：几何 0.65–0.80、花卉 0.70–0.85。
+ *   方胜无默认 LoRA：frame 走 FANGSHENG_LORA_MAP.single（先解析再判空）。
  *   锦地(jindi)仍走单次融合（底纹+花叠放，不需要拆框）。
  * @returns 非几何+花卉 / 含 jindi / 缺 LoRA 时返回 null，走原单次融合。
  */
@@ -1806,41 +1922,41 @@ export function buildGeoFloralCompositeParts(options: FusionGenerationOptions): 
   if (!geoFloral) return null
   const geoSub = geoFloral.geoSub
   if (geoSub === 'jindi') return null // 锦地=底纹，不用拆框
-  const cfg = geoFloral.cfg
+  const cfg = GEO_FLORAL_COMPOSITE[geoSub as GeoFloralCompositeSub]
   const floralSub = options.subcategoryA === geoSub ? options.subcategoryB : options.subcategoryA
   const geoEntry = getLoraEntry(geoSub)
   const floralEntry = getLoraEntry(floralSub)
-  if (!geoEntry?.loraFile || !floralEntry?.loraFile) return null
+  if (!geoEntry || !floralEntry?.loraFile) return null
 
-  const clampRange = (w: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(w * 100) / 100))
-  const [geoLo, geoHi] = cfg.geoWeightRange
-  const [floLo, floHi] = cfg.floralWeightRange
-  const geoRatio = options.subcategoryA === geoSub ? options.ratioA : options.ratioB
-  const floRatio = options.subcategoryA === floralSub ? options.ratioA : options.ratioB
-  const geoWeight = clampRange((geoEntry.loraWeight * geoRatio) / 100, geoLo, geoHi)
-  const floralWeight = clampRange((floralEntry.loraWeight * floRatio) / 100, floLo, floHi)
-
-  // 方胜 frame → single LoRA
-  let geoFile = geoEntry.loraFile
+  // 方胜 frame → single LoRA（loraMap 方胜默认无 LoRA，先解析再判空，否则方胜+花卉进不了两段合成）
+  let geoFile: string | null = geoEntry.loraFile
   let geoTrigger = geoEntry.trigger
+  let geoWeightRecommended = geoEntry.loraWeight
   if (geoSub === 'fangsheng') {
     const fs = FANGSHENG_LORA_MAP.single
     geoFile = fs.loraFile
     geoTrigger = fs.trigger
+    geoWeightRecommended = 0.9 // 与回纹/盘长一致（训练 caption 结构弱，需较高权保形）
   }
+  if (!geoFile || !geoTrigger) return null
 
-  // 框：几何结构词（剔除「花居中」句）+ 留白无花 + 平面介质
-  const frameHints = cfg.requiredPositive.filter((t) => !/flower|floral/i.test(t))
+  // 两段各自独立出图（LoRA 不共存），权重按推荐权重钳到区间即可，不再乘融合比例均摊。
+  const clampRange = (w: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(w * 100) / 100))
+  const [geoLo, geoHi] = cfg.geoWeightRange
+  const geoWeight = clampRange(geoWeightRecommended, geoLo, geoHi)
+  const [floLo, floHi] = COMPOSITE_FLOWER.floralWeightRange
+  const floralWeight = clampRange(floralEntry.loraWeight, floLo, floHi)
+
   const pseudoParams: GenerationParams = {
     ...options.params,
     dimension: { ...options.params.dimension, subcategory: geoSub },
   }
+  // 框段：空心开窗 + 细线几何边带 + 大片留白内区；不写旧 cfg.requiredPositive（内含「中央单花」语义）
   const framePrompt = [
     ...geoTrigger.split(',').map((t) => t.trim()).filter(Boolean),
     `Chinese traditional ${geoEntry.subLabelEn} openwork frame pattern`,
-    ...frameHints,
-    ...cfg.availablePositive,
-    'leave the large center empty, no flower in the frame',
+    ...cfg.framePositive,
+    'leave the large center empty, blank color field inside, no flower in the frame',
     'flat pattern design, no texture, classic authentic traditional form',
     buildColorClause(pseudoParams),
     'traditional ICH style',
@@ -1851,30 +1967,26 @@ export function buildGeoFloralCompositeParts(options: FusionGenerationOptions): 
     buildNegativePromptCore([geoSub, floralSub], options.params.colorScheme, 'single'),
     ...HUIWEN_FUSION_NEGATIVE_CORE,
     ...FLORAL_ANTI_REALISM,
-    ...cfg.negative,
-    'flower in the frame',
-    'floral border',
-    'floral filling the frame',
-    'bloom',
+    ...GEO_FLORAL_FUSION[geoSub].negative, // 旧结构优先压制词（dense / thick lines / floral covering 等）保留兜底
+    ...cfg.frameNegative,
   ].join(', ')
 
-  // 花：单朵居中、平面插画、素底
+  // 花段：枝干伸展、多花头、平面插画浅底（浅底便于 sd_proxy color-key 抠底后贴进内区色地）
   const flowerPrompt = [
     ...floralEntry.trigger.split(',').map((t) => t.trim()).filter(Boolean),
-    `single ${floralEntry.subLabelEn} flower, one flower centered, flat illustration, plain background, minimal, single motif`,
+    ...COMPOSITE_FLOWER.positive.map((w) => w.replace('{label}', floralEntry.subLabelEn)),
     `<lora:${floralEntry.loraFile}:${floralWeight}>`,
   ].join(', ')
 
   const flowerNegative = [
     ...FLORAL_ANTI_REALISM,
     ...HUIWEN_FUSION_NEGATIVE_CORE,
-    'multiple flowers',
-    'all-over floral',
+    ...COMPOSITE_FLOWER.negative,
     'flower background',
     'seamless floral',
+    'all-over floral',
     'repeating floral tile',
-    'flower branch',
-    'bouquet',
+    'bouquet arrangement',
     'calligraphy',
     'chinese characters',
   ].join(', ')
@@ -1897,10 +2009,10 @@ export function buildGeoFloralCompositeParts(options: FusionGenerationOptions): 
  * 失败降级 mock 保证页面不白屏；控制台打印完整 prompt，便于验收核对 lora 权重
  */
 export async function generateFusionWithFallback(options: FusionGenerationOptions): Promise<PatternGenerationResult> {
-  // 几何+花卉（回纹/盘长/方胜）：两段合成，稳定出「开窗框+居中花」
+  // 几何+花卉（回纹/盘长/方胜）：两段合成 v2（2026-09-04），开窗边框 + 中心枝态花，合成见 sd_proxy
   const composite = buildGeoFloralCompositeParts(options)
   if (composite) {
-    console.log('[patternGeneration] ===== 几何+花卉 两段合成 =====')
+    console.log('[patternGeneration] ===== 几何+花卉 两段合成（开窗框+中心枝态花）=====')
     console.log(
       '[patternGeneration] geo=', composite.geoSub,
       `(${composite.geoLabelEn}) | floral=${composite.floralLabelEn}`,
