@@ -836,7 +836,7 @@ export default function MyWorksPage() {
                               下载
                             </button>
                             {openDownloadMenuId === generation.id && (
-                              <div className="absolute left-0 right-0 top-full mt-1 flex flex-col gap-1 bg-rice-paper-light border border-deep-blue-200 rounded-sm shadow-lg p-1 z-20">
+                              <div className="absolute left-0 right-0 bottom-full mb-1 flex flex-col gap-1 bg-rice-paper-light border border-deep-blue-200 rounded-sm shadow-lg p-1 z-50">
                                 <button
                                   onClick={() => handleDownload(generation, 'png')}
                                   className="w-full py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
