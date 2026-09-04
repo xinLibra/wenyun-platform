@@ -103,6 +103,8 @@ export default function MyWorksPage() {
   const [detailWork, setDetailWork] = useState<Generation | null>(null)
   const [failedIds, setFailedIds] = useState<Set<string>>(() => new Set())
   const [retryTick, setRetryTick] = useState(0)
+  const [openDownloadMenuId, setOpenDownloadMenuId] = useState<string | null>(null)
+  const downloadMenuRefs = useRef<Record<string, HTMLDivElement | null>>({})
   // failedIds 只作补图过滤依据，不进 effect 依赖：失败后不重跑补图（避免重试风暴），手动重试由 retryTick 触发
   const failedIdsRef = useRef(failedIds)
   failedIdsRef.current = failedIds
@@ -111,6 +113,19 @@ export default function MyWorksPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   // 当前用户 id 存入 ref：loadMore 复用，无需重新取会话
   const userIdRef = useRef<string | null>(null)
+
+  // 点击卡片下载菜单外部时收起格式选项
+  useEffect(() => {
+    if (!openDownloadMenuId) return
+    const onClick = (e: MouseEvent) => {
+      const menuEl = downloadMenuRefs.current[openDownloadMenuId]
+      if (menuEl && !menuEl.contains(e.target as Node)) {
+        setOpenDownloadMenuId(null)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [openDownloadMenuId])
 
   useEffect(() => {
     let mounted = true
@@ -467,6 +482,7 @@ export default function MyWorksPage() {
     }
 
     const filename = `wenyun_pattern_${(generation.id || '').slice(0, 8) || Date.now()}.${format === 'png' ? 'png' : 'jpg'}`
+    setOpenDownloadMenuId(null)
     try {
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
       if (isMobile) {
@@ -805,19 +821,36 @@ export default function MyWorksPage() {
                           </label>
                         </div>
                         <div className="flex gap-2">
-                          <div className="flex flex-1 gap-1">
+                          <div
+                            className="relative flex-1"
+                            ref={(el) => {
+                              downloadMenuRefs.current[generation.id] = el
+                            }}
+                          >
                             <button
-                              onClick={() => handleDownload(generation, 'png')}
-                              className="flex-1 py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
+                              onClick={() =>
+                                setOpenDownloadMenuId(openDownloadMenuId === generation.id ? null : generation.id)
+                              }
+                              className="w-full py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
                             >
-                              PNG
+                              下载
                             </button>
-                            <button
-                              onClick={() => handleDownload(generation, 'jpg')}
-                              className="flex-1 py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
-                            >
-                              JPG
-                            </button>
+                            {openDownloadMenuId === generation.id && (
+                              <div className="absolute left-0 right-0 top-full mt-1 flex flex-col gap-1 bg-rice-paper-light border border-deep-blue-200 rounded-sm shadow-lg p-1 z-20">
+                                <button
+                                  onClick={() => handleDownload(generation, 'png')}
+                                  className="w-full py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
+                                >
+                                  PNG
+                                </button>
+                                <button
+                                  onClick={() => handleDownload(generation, 'jpg')}
+                                  className="w-full py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
+                                >
+                                  JPG
+                                </button>
+                              </div>
+                            )}
                           </div>
                           <button
                             onClick={() => handleViewDetail(generation)}
