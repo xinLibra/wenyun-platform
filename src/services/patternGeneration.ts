@@ -1266,10 +1266,18 @@ export interface FusionPromptInfo {
  *   - 50/50 时两侧约 0.55–0.75（几何/花卉推荐权重 0.8–0.9 时），保证双纹样同时可见；
  *   - ratio=100 → 取推荐权重；ratio=0 → 取 w_floor。
  * 说明：
- *   - 几何×花卉与其它双主题融合共用同一套单次 txt2img：prompt 同时带两个 trigger 与两个 <lora:...>。
- *   - 几何×花卉不再做「开窗框 + 中央花」两段合成，允许整体纹样风格的混合。
+ *   - 所有融合（含回纹×花卉）都是单次 txt2img 双 LoRA 融合（mode=dual_lora_fusion）：
+ *     prompt 同时带两个 trigger 与两个 <lora:...>，允许整体纹样风格的混合。
+ *   - 回纹×花卉（方案 C，2026-09-04）：不做 frame/flower 两段合成、无 PIL 贴图、
+ *     无 flowerFill/bandScale 合成参数（两段合成已下线）；只在单次 prompt 内软引导
+ *     「回纹作外框 + 花卉居中」，权重略偏回纹（50/50 → 回纹≈0.75、花卉≈0.60），
+ *     见函数内 huiwenSide 分支。产品预期：有一定概率出现边框感+中心花，失败时整图
+ *     混合也可接受（避免"花 P 上去"的贴图观感）。
  *   - loraMap 中 loraFile 为 null 的子类：不加 lora 标签，只写 trigger，不崩溃。
  */
+
+/** 花卉子类判定（themeId === 'floral'，几何×花卉分流用） */
+const isFloralSubcategory = (id: string): boolean => getLoraEntry(id)?.themeId === 'floral'
 
 /** 共用商品/写实/门板对联跑题压制词 */
 const HUIWEN_FUSION_NEGATIVE_CORE = [
@@ -1316,6 +1324,25 @@ const FLORAL_ANTI_REALISM = [
   'naturalistic bloom',
 ]
 
+/**
+ * 回纹×花卉（方案 C，2026-09-04）专用负向词
+ * 方案 C = 单次 txt2img 双 LoRA（mode=dual_lora_fusion，两段合成/贴图已下线，
+ * 不再出现 flowerFill/bandScale 等合成参数），仅靠 prompt 软引导「回纹外框 + 中心花」。
+ * 压制四格窗/十字棂条贴画、P 图拼贴、圆徽章贴片的观感；花卉本体不压（勿过度抑制花）。
+ */
+const HUIWEN_FLORAL_C_NEGATIVE = [
+  'four-pane window',
+  'cross muntin',
+  'divided window frame',
+  'photoreal collage',
+  'photo collage',
+  'sticker',
+  'circular vignette paste',
+  'pasted circular emblem',
+  'round badge sticker',
+  'full-image floral only',
+  'floral pattern without any geometric border',
+]
 
 export function buildFusionPromptParts(options: FusionGenerationOptions): FusionPromptInfo {
   const { subcategoryA, subcategoryB, ratioA, ratioB, params } = options
@@ -1361,6 +1388,23 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     Math.round(clampW(FUSION_WEIGHT_FLOOR + (ratio / 100) * Math.max(0, recommended - FUSION_WEIGHT_FLOOR)) * 100) / 100
   let weightA = calcWeight(subA?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioA)
   let weightB = calcWeight(subB?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioB)
+
+  // 回纹×花卉（方案 C，2026-09-04）：单次双 LoRA、不做两段合成。
+  // 权重整体略偏回纹：50/50 → 回纹≈0.75、花卉≈0.60（回纹带 0.60–0.90、花带 0.50–0.70，
+  // 随滑条浮动，任一侧都不会被压没）；构图由 huiwenSide 分支在正向/负向里软引导。
+  const huiwenSide =
+    subcategoryA === 'huiwen' && isFloralSubcategory(subcategoryB)
+      ? ('A' as const)
+      : subcategoryB === 'huiwen' && isFloralSubcategory(subcategoryA)
+        ? ('B' as const)
+        : null
+  if (huiwenSide === 'A') {
+    weightA = Math.round(Math.max(0.6, Math.min(0.9, 0.6 + 0.3 * (ratioA / 100))) * 100) / 100
+    weightB = Math.round(Math.max(0.5, Math.min(0.7, 0.5 + 0.2 * (ratioB / 100))) * 100) / 100
+  } else if (huiwenSide === 'B') {
+    weightB = Math.round(Math.max(0.6, Math.min(0.9, 0.6 + 0.3 * (ratioB / 100))) * 100) / 100
+    weightA = Math.round(Math.max(0.5, Math.min(0.7, 0.5 + 0.2 * (ratioA / 100))) * 100) / 100
+  }
 
   // 融合是否含方胜：任一槽为方胜时，按全局排布决定"单独/连续"语义与负向提示
   const hasFangsheng = subcategoryA === 'fangsheng' || subcategoryB === 'fangsheng'
@@ -1430,15 +1474,24 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   const arrangementUsed = params.arrangement
   switch (arrangementUsed) {
     case 'single':
-      parts.push('single motif, centered medallion')
-      // 融合含方胜/盘长/回纹且排布=单独：强化"单个纹样"语义，避免退化成连续网
-      if (
-        hasFangsheng ||
-        subcategoryA === 'panchang' ||
-        subcategoryB === 'panchang' ||
-        (subcategoryA === 'huiwen' || subcategoryB === 'huiwen')
-      ) {
-        parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
+      if (huiwenSide) {
+        // 回纹×花卉（方案 C，2026-09-04）：单次 txt2img 内软引导构图 —— 回纹作外框、花卉居中。
+        // 不写 border only / empty panel（会把花抹掉或引向合成思维），
+        // 也不用 medallion / emblem 措辞（容易画成圆形徽章贴片观感）。
+        parts.push('huiwen meander as outer border frame')
+        parts.push('floral motif in the center, open panel composition, central floral arrangement')
+        parts.push('flat pattern design, decorative textile style, no seamless tile')
+      } else {
+        parts.push('single motif, centered medallion')
+        // 融合含方胜/盘长/回纹且排布=单独：强化"单个纹样"语义，避免退化成连续网
+        if (
+          hasFangsheng ||
+          subcategoryA === 'panchang' ||
+          subcategoryB === 'panchang' ||
+          (subcategoryA === 'huiwen' || subcategoryB === 'huiwen')
+        ) {
+          parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
+        }
       }
       // 锦地单独：large empty margin / no seamless tile（2026-08-31）
       if (subcategoryA === 'jindi' || subcategoryB === 'jindi') {
@@ -1496,14 +1549,17 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
 
   const prompt = parts.join(', ')
   let negativePrompt = buildNegativePromptCore([subcategoryA, subcategoryB], params.colorScheme, arrangementUsed)
-  // 几何×花卉融合：追加通用质量负向（商品/写实/门板 + 花卉防写实），不再含开窗边框类极端词
-  const isFloraSub = (id: string) => getLoraEntry(id)?.themeId === 'floral'
+  // 几何×花卉融合：追加通用质量负向（商品/写实/门板 + 花卉防写实）
   const isGeoFusionSide = (id: string) => id === 'huiwen' || id === 'panchang' || id === 'fangsheng' || id === 'jindi'
   const geoFloralFusion =
-    (isGeoFusionSide(subcategoryA) && isFloraSub(subcategoryB)) ||
-    (isGeoFusionSide(subcategoryB) && isFloraSub(subcategoryA))
+    (isGeoFusionSide(subcategoryA) && isFloralSubcategory(subcategoryB)) ||
+    (isGeoFusionSide(subcategoryB) && isFloralSubcategory(subcategoryA))
   if (geoFloralFusion) {
     negativePrompt += ', ' + [...HUIWEN_FUSION_NEGATIVE_CORE, ...FLORAL_ANTI_REALISM].join(', ')
+  }
+  // 回纹×花卉（方案 C）追加：防四格窗贴画/十字棂条/圆徽章贴片观感；花卉本体不压
+  if (huiwenSide) {
+    negativePrompt += ', ' + HUIWEN_FLORAL_C_NEGATIVE.join(', ')
   }
 
   return {
@@ -1518,15 +1574,23 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   }
 }
 
-
 /**
  * 融合生成入口（真实链路与单纹样一致：sd_proxy → A1111 txt2img）
- * 失败降级 mock 保证页面不白屏；控制台打印完整 prompt，便于验收核对 lora 权重
+ * - 所有融合（含回纹×花卉）一律单次 txt2img 双 LoRA（mode=dual_lora_fusion）。
+ *   回纹×花卉（方案 C）仅通过 buildFusionPromptParts 内的 prompt 构图语义软引导
+ *   「回纹作外框 + 花卉居中」，不保证稳定开光；无两段合成 / 无 PIL 贴图 / 无素材框。
+ * - 失败降级 mock 保证页面不白屏；控制台打印完整 prompt，便于验收核对 lora 权重。
  */
 export async function generateFusionWithFallback(options: FusionGenerationOptions): Promise<PatternGenerationResult> {
   const info = buildFusionPromptParts(options)
 
-  console.log('[patternGeneration] ===== 融合生成请求 =====')
+  // 回纹×花卉（方案 C）：与其它融合同为单次 txt2img 双 LoRA（mode=dual_lora_fusion）。
+  // 仅用于日志提示，无任何分次/贴图逻辑。
+  const isHuiwenFloralPair =
+    (options.subcategoryA === 'huiwen' && isFloralSubcategory(options.subcategoryB)) ||
+    (options.subcategoryB === 'huiwen' && isFloralSubcategory(options.subcategoryA))
+
+  console.log('[patternGeneration] ===== 融合生成请求 mode=dual_lora_fusion =====')
   console.log(
     '[patternGeneration] 子类A:',
     options.subcategoryA,
@@ -1536,6 +1600,7 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
     `(${info.subLabelEnB ?? 'n/a'})`,
     '| 比例:',
     `${options.ratioA}/${options.ratioB}`,
+    isHuiwenFloralPair ? '| 回纹×花卉 方案C：单次双 LoRA（构图软引导，两段合成已下线）' : '',
   )
   console.log(
     '[patternGeneration] loraA:',
