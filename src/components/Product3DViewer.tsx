@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, useGLTF, Center } from '@react-three/drei'
 import * as THREE from 'three'
 import type { PatternAreaKey } from '../config/product3D'
@@ -24,7 +24,7 @@ interface Product3DViewerProps {
   modelRotation?: [number, number, number]
   modelScale?: number
   patternArea?: PatternAreaKey
-  captureRef?: React.MutableRefObject<(() => string | null) | null>
+  captureRef?: React.MutableRefObject<((() => string | null) | (() => Promise<string | null>)) | null>
   className?: string
   /** patternArea=full 时，不贴图的材质列表（用于兜底 full 配置不全） */
   excludeFromPatternAreaFull?: string[]
@@ -450,6 +450,27 @@ function LoaderFallback() {
   )
 }
 
+/** 注册截图函数：截图前先强制渲染一帧，确保 colorMap/material 变更已经落到画布 */
+function CaptureManager({
+  captureRef,
+}: {
+  captureRef?: React.MutableRefObject<((() => string | null) | (() => Promise<string | null>)) | null>
+}) {
+  const { gl, scene, camera } = useThree()
+  useEffect(() => {
+    if (!captureRef) return
+    captureRef.current = async () => {
+      try {
+        gl.render(scene, camera)
+        return gl.domElement.toDataURL('image/png')
+      } catch {
+        return null
+      }
+    }
+  }, [captureRef, gl, scene, camera])
+  return null
+}
+
 export function Product3DViewer({
   modelUrl,
   textureTargetMaterial,
@@ -469,20 +490,8 @@ export function Product3DViewer({
   const rot = modelRotation ?? [0, 0, 0]
   const scl = modelScale ?? 0.35
   const cam = cameraPosition ?? [0, 0.12, 1.7]
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
-
   const handleCreated = ({ gl }: { gl: THREE.WebGLRenderer }) => {
-    rendererRef.current = gl
     gl.setClearColor(0x000000, 0)
-    if (captureRef) {
-      captureRef.current = () => {
-        try {
-          return gl.domElement.toDataURL('image/png')
-        } catch {
-          return null
-        }
-      }
-    }
   }
 
   return (
@@ -518,6 +527,7 @@ export function Product3DViewer({
             excludeFromPatternAreaFull={excludeFromPatternAreaFull}
             patternOpacity={patternOpacity}
           />
+          <CaptureManager captureRef={captureRef} />
         </Suspense>
 
         <OrbitControls

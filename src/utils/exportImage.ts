@@ -770,7 +770,7 @@ function isUniformPreviewImage(dataUrl: string): Promise<boolean> {
  */
 export async function buildProductPreviewDataUrl(opts: {
   productId: string
-  tryCapture3D?: (() => string | null) | null
+  tryCapture3D?: (() => string | null) | (() => Promise<string | null>) | null
   patternImage?: string | null
   layoutMode?: LayoutMode
   scale?: number
@@ -783,7 +783,10 @@ export async function buildProductPreviewDataUrl(opts: {
   // 1) 3D 截图优先
   if (opts.tryCapture3D) {
     try {
-      const shot = opts.tryCapture3D()
+      const raw = opts.tryCapture3D()
+      const shot = raw && typeof (raw as Promise<unknown>).then === 'function'
+        ? await (raw as Promise<string | null>)
+        : (raw as string | null)
       if (shot) {
         if (/^data:/i.test(shot) && (await isUniformPreviewImage(shot))) {
           console.warn('[Preview] 3D 截图空白/未贴纹样，改用产品轮廓合成图')

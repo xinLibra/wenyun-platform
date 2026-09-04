@@ -240,7 +240,7 @@ export function useCart() {
   /** 关闭弱提示（不中断后台同步，也不影响本地数据） */
   const dismissNotice = useCallback(() => setNotice(null), [])
 
-  const COMPARE_FIELDS = ['scale', 'rotation', 'positionX', 'positionY', 'blendMode', 'patternOpacity']
+  const COMPARE_FIELDS = ['scale', 'rotation', 'positionX', 'positionY', 'blendMode', 'patternOpacity', 'patternImage', 'colors']
 
   const saveToDB = useCallback(async (currentItems: CartItem[]) => {
     // 无论是否登录，先把当前购物车写入 localStorage，保证刷新后仍能读出

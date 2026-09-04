@@ -514,7 +514,7 @@ export default function CustomizeProduct() {
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [orderPreviewImg, setOrderPreviewImg] = useState<string>('')
   const [orderPreviewLoading, setOrderPreviewLoading] = useState(false)
-  const viewerCaptureRef = useRef<(() => string | null) | null>(null)
+  const viewerCaptureRef = useRef<((() => string | null) | (() => Promise<string | null>)) | null>(null)
   // 订单预览：用 ref + Promise 避免「弹窗内异步生成」与「用户提交」之间的竞态，
   // 提交订单时一定能拿到已生成（或生成失败）的最终值
   const orderPreviewRef = useRef<string>('')
@@ -1002,7 +1002,10 @@ export default function CustomizeProduct() {
     setPosterMainVisual(null)
     let main: string | null = null
     if (product3DConfig?.modelUrl && viewerCaptureRef.current) {
-      main = viewerCaptureRef.current()
+      const raw = viewerCaptureRef.current()
+      main = raw && typeof (raw as Promise<unknown>).then === 'function'
+        ? await (raw as Promise<string | null>)
+        : (raw as string | null)
     }
     if (!main) {
       try {
@@ -1092,7 +1095,7 @@ export default function CustomizeProduct() {
         name: cartProduct?.name,
         price: cartProduct?.price,
         image: cartProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, patternImage: selectedPatternImage, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, previewImage, previewImageUrl: previewImage },
+        customization: { scale, rotation, positionX, positionY, blendMode, patternImage: selectedPatternImage, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, colors: productColors, previewImage, previewImageUrl: previewImage },
         quantity: quantity
       })
       alert('已加入购物车')
@@ -1202,7 +1205,7 @@ export default function CustomizeProduct() {
         // image_url = 定制效果预览短链（3D 截图或产品轮廓+纹样合成图），禁止写纹样原图/平面纹样
         image_url: previewShort || undefined,
         product_image: currentProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, patternImage: patternShort || undefined, previewImage: previewShort || undefined, previewImageUrl: previewShort || undefined },
+        customization: { scale, rotation, positionX, positionY, blendMode, layoutMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, colors: productColors, patternImage: patternShort || undefined, previewImage: previewShort || undefined, previewImageUrl: previewShort || undefined },
         quantity: quantity,
         status: 'demo',
         created_at: new Date().toISOString(),
