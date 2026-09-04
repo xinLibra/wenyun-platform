@@ -861,9 +861,9 @@ export function buildNegativePrompt(params: GenerationParams): string {
 async function callSdProxy(payload: {
   prompt?: string
   negative_prompt?: string
-  /** 几何+花卉两段合成：frame 与 flower 分开出图，由代理合成 */
+  /** 几何+花卉「可靠开窗合成」：local-frame(默认，sd_proxy 本地绘制框 + 仅 flower 出图) / ai(两段都出图) */
   composite?: {
-    frame: { prompt: string; negative_prompt: string }
+    frame: { prompt: string; negative_prompt: string; mode?: 'local' | 'ai'; geo?: string }
     flower: { prompt: string; negative_prompt: string }
   }
   width: number
@@ -1516,14 +1516,16 @@ function resolveGeoFloralFusion(
 }
 
 /**
- * 几何+花卉「两段合成」配置（2026-09-04 开窗版 v2，替代旧「中央单朵」两段）。
+ * 几何+花卉「可靠开窗合成」配置（2026-09-04 v3：本地绘制框主路径）。
  * 目标构图 = 参考图：外圈几何开窗框 + 内区大面积色地 + 中央枝态花（不是圆牌贴图）。
- * - frame 段只出空心开窗边框：framePositive 强调 square open center / wide empty inner panel /
- *   thin border bands；frameNegative 禁迷宫/满铺/3D 绳/写实布/框内花；
- * - flower 段只出中心花层（三个几何共用 COMPOSITE_FLOWER）：枝干自然伸展、多花头、平面插画浅底，
- *   便于 sd_proxy 用 color-key 把浅底剥离后贴进内区；
- * - 权重两段独立（各自只挂一个 LoRA，不共存竞争）：几何 0.65–0.80 细框、花卉 0.70–0.85 主体；
- * - 合成逻辑见 scripts/sd_proxy.py `_composite_fusion`（内区矩形 + color-key，不再用圆形径向软边）。
+ * - 默认 local-frame 模式：frame 不请求几何 LoRA，改由 sd_proxy `_draw_geo_frame`
+ *   PIL 程序化绘制（回纹方波钩链/盘长双带/方胜菱峰，红地空心必现框）；flower 单段 txt2img；
+ * - frame.mode='ai' 备用旧两段：frame 段仍出空心开窗边框（下方 framePositive/frameNegative
+ *   词表为该模式保留），内区可靠度依赖 sd_proxy 的空心矩形检测；
+ * - flower 段（三个几何共用 COMPOSITE_FLOWER）：枝干自然伸展、多花头、可延展近满幅、
+ *   浅素底 → sd_proxy color-key 剥离浅底后贴进内区；
+ * - flower 权重独立挂一个 LoRA（不共存竞争）：0.70–0.85；
+ * - 合成逻辑见 scripts/sd_proxy.py `_composite_fusion`（inner 直给 + color-key，不用圆形径向软边）。
  */
 type GeoFloralCompositeSub = Exclude<GeoFloralSub, 'jindi'>
 const GEO_FLORAL_COMPOSITE = {
@@ -1604,7 +1606,7 @@ const COMPOSITE_FLOWER = {
   floralWeightRange: [0.7, 0.85] as const,
   positive: [
     '{label} branch spray, blossoms on spreading twigs, natural branching floral stems',
-    'multi-blossom branch composition filling the central area',
+    'multi-blossom branch spray, branches and blossoms spreading across most of the picture, open arrangement, plain light margin at the edges',
     'flowers growing on slender curved branches, leaves along the stems',
     'flat traditional illustration, plain light background, 2d graphic ornament',
   ],
@@ -1897,13 +1899,14 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
 }
 
 /**
- * 几何+花卉「两段合成」prompt 拆分（2026-09-04 开窗版 v2）：
- *   frame 段只生成「空心开窗边框」——细线几何边带 + 大面积留白中心（square open center / wide empty
- *   inner panel / thin border bands），盘长/方胜用「边框化」描述，禁止整图盘长/菱形地纹与迷宫；
- *   flower 段只生成「可合成的中心枝态花层」——branching spray / 多花头 / 枝叶伸展 / 平面插画浅底，
- *   便于 sd_proxy color-key 剥离浅底后贴进内区；不再强制「正中央一朵特写圆牌」。
- *   两段各自只挂一个 LoRA（互不竞争），权重直接钳到区间：几何 0.65–0.80、花卉 0.70–0.85。
- *   方胜无默认 LoRA：frame 走 FANGSHENG_LORA_MAP.single（先解析再判空）。
+ * 几何+花卉「可靠开窗合成」prompt 拆分（2026-09-04 v3）：
+ *   默认 local-frame：frame 不生成（由 sd_proxy 本地绘制），本函数主要产出 flower 段 prompt——
+ *   branching spray / 多花头 / 可延展近满幅 / 平面插画浅底，便于 sd_proxy color-key 剥离浅底后
+ *   贴进内区；不再强制「正中央一朵特写圆牌」。
+ *   framePrompt/frameNegative/geoWeight 为 ai-mode 备用（frame 段生成空心开窗边框：细线几何边带 +
+ *   大面积留白中心，盘长/方胜用「边框化」描述，禁止整图盘长/菱形地纹与迷宫）。
+ *   flower 权重独立挂一个 LoRA（不共存竞争），钳到 0.70–0.85；方胜无默认 LoRA：ai-mode 时
+ *   frame 走 FANGSHENG_LORA_MAP.single（先解析再判空）。
  *   锦地(jindi)仍走单次融合（底纹+花叠放，不需要拆框）。
  * @returns 非几何+花卉 / 含 jindi / 缺 LoRA 时返回 null，走原单次融合。
  */
@@ -2012,19 +2015,23 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
   // 几何+花卉（回纹/盘长/方胜）：两段合成 v2（2026-09-04），开窗边框 + 中心枝态花，合成见 sd_proxy
   const composite = buildGeoFloralCompositeParts(options)
   if (composite) {
-    console.log('[patternGeneration] ===== 几何+花卉 两段合成（开窗框+中心枝态花）=====')
+    console.log('[patternGeneration] ===== 几何×花卉 可靠开窗合成（local-frame 本地绘制框 + flower 单段出图）=====')
     console.log(
-      '[patternGeneration] geo=', composite.geoSub,
+      '[patternGeneration] frame.mode=local geo=', composite.geoSub,
       `(${composite.geoLabelEn}) | floral=${composite.floralLabelEn}`,
-      '| geoWeight=', composite.geoWeight,
       '| floralWeight=', composite.floralWeight,
+      '（frame 由 sd_proxy 用 PIL 本地绘制，不调用几何 LoRA txt2img → 框必可见）',
     )
-    console.log('[patternGeneration] framePrompt:', composite.framePrompt)
     console.log('[patternGeneration] flowerPrompt:', composite.flowerPrompt)
     try {
       const result = await callSdProxy({
         composite: {
-          frame: { prompt: composite.framePrompt, negative_prompt: composite.frameNegative },
+          frame: {
+            prompt: composite.framePrompt,
+            negative_prompt: composite.frameNegative,
+            mode: 'local',
+            geo: composite.geoSub,
+          },
           flower: { prompt: composite.flowerPrompt, negative_prompt: composite.flowerNegative },
         },
         width: SD_DEFAULTS.width,
@@ -2034,7 +2041,13 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
         sampler_name: SD_DEFAULTS.samplerName,
         seed: SD_DEFAULTS.seed,
       })
-      console.log('[patternGeneration] ===== 两段合成成功 ===== | seed:', result.seed, '| fallback: false')
+      console.log(
+        '[patternGeneration] ===== local-frame 合成成功（框为本地绘制，flower 单段出图）===== | seed:',
+        result.seed,
+        '| composite_mode:',
+        (result as any).compositeMode ?? 'local',
+        '| fallback: false',
+      )
       return {
         imageUrl: result.imageUrl,
         generationId: result.generationId,

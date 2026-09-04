@@ -26,6 +26,7 @@ import base64
 import io
 import json
 import os
+import tempfile
 import time
 import uuid
 import math
@@ -46,6 +47,8 @@ try:
 except ValueError:
     PORT = 8787
 OUTPUT_DIR = os.environ.get("SD_PROXY_OUTPUT_DIR", "")
+# 两段合成调试落盘目录（frame / flower / final 三张），默认系统临时目录；可用 SD_FUSION_DEBUG_DIR 覆盖
+DEBUG_DIR = os.environ.get("SD_FUSION_DEBUG_DIR", os.path.join(tempfile.gettempdir(), "aic_fusion_debug"))
 TXT2IMG_ENDPOINT = SDAPI_URL + "/sdapi/v1/txt2img"
 OPTIONS_ENDPOINT = SDAPI_URL + "/sdapi/v1/options"
 LORAS_ENDPOINT = SDAPI_URL + "/sdapi/v1/loras"
@@ -328,15 +331,123 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     fg += 1
         return fa, fg / tot
 
-    # ---------- 两段合成：框（几何）+ 花（花卉） ----------
-    def _composite_fusion(self, frame_bytes: bytes, flower_bytes: bytes) -> bytes:
-        """两段合成 v2（2026-09-04 开窗版）：开窗几何框 + 内区色地 + 中心枝态花。
+    # ---------- 两段合成：框（本地绘制）+ 花（花卉） ----------
+    @staticmethod
+    def _meander_uv(dep: float, half: float, length: float, style: str = "snake"):
+        """在带内生成回折纹样的 (u,v) 点列（u 沿带，v 垂直带内深度 0..dep）。
 
-        不再用「小半径圆形径向软边把花缩成圆牌」：
-        1) 检测 frame 图内区留白矩形，找不到用默认中心 72% 矩形并打 warning；
-        2) flower 图等比放进内区 70–85%（取 0.78）中心——形状跟花图，不裁正圆徽章；
-        3) 色键抠底（挖浅素背景）→ 露出的全是 frame 内区色地（无灰补丁）；
-        4) 边框像素原样保留。
+        style:
+          snake     —— 方波蛇形单线（回纹：连续直角回折钩链，竖细横短）
+          knot      —— 双行错位蛇形（盘长：上下两层回环编带）
+          diamond   —— 45° 锯齿峰链（方胜：菱形山形带）
+        """
+        pts = [(0.0, 0.0)]
+        u = 0.0
+        y = 0.0
+        if style == "diamond":
+            # 菱形峰：每 half 步到对侧（45° 需 half≈dep，否则斜）
+            while True:
+                u += half
+                if u > length:
+                    break
+                y = dep if y == 0 else 0
+                pts.append((u, y))
+            return pts
+        while True:
+            # 竖：同 u 翻转 y
+            y = dep if y == 0 else 0
+            pts.append((u, y))
+            u += half
+            if u > length:
+                break
+            pts.append((u, y))  # 横：同 y 前进 half
+        return pts
+
+    @staticmethod
+    def _draw_geo_frame(geo: str = "huiwen", size: int = 512):
+        """程序化绘制「红地开窗几何框」（可靠方案：不依赖几何 LoRA 出框）。
+
+        构图：整幅宫墙红内区色地 + 四边带内墨色回折纹样 + 外墨线/内金线描边。
+        frame 必定存在且内区永远空心 → 两段合成的“框可见”由本地绘制保证。
+
+        geo: huiwen(回纹方波钩链) | panchang(盘长双层编带) | fangsheng(方胜菱峰带)
+        返回 (RGB Image, inner_rect)。
+        """
+        from PIL import ImageDraw
+
+        S = int(size)
+        bf = max(30, int(S * 0.14))  # 边框带厚度 ≈ 14%
+        inner = (bf, bf, S - bf, S - bf)
+        INK = (36, 27, 18)       # 墨
+        RED = (168, 44, 46)      # 宫墙红（内区色地）
+        GOLD = (205, 163, 90)    # 描金
+        img = Image.new("RGB", (S, S), RED)
+        dr = ImageDraw.Draw(img)
+
+        # 1) 外缘墨线 + 内区分隔描金线（开窗层次）
+        dr.rectangle((5, 5, S - 6, S - 6), outline=INK, width=2)
+        g0 = bf - 7
+        dr.rectangle((g0, g0, S - 1 - g0, S - 1 - g0), outline=GOLD, width=2)
+
+        # 2) 纹样通道：[v0, v1]（v0 靠外、v1 靠内）
+        v0, v1 = 16, bf - 16
+        dep = v1 - v0
+        pad = 13
+        length = S - 2 * pad
+
+        # 3) 按几何类型生成纹样线组
+        if geo == "fangsheng":
+            half = dep * 0.55
+            uv_a = ProxyHandler._meander_uv(dep, half, length, "diamond")
+            uv_b = ProxyHandler._meander_uv(dep, half, length - half, "diamond")
+            uv_b = [(u + half / 2.0, v) for (u, v) in uv_b]
+            lines = [uv_a, uv_b]
+        elif geo == "panchang":
+            half = dep * 0.45
+            uv_a = ProxyHandler._meander_uv(dep, half, length, "snake")
+            uv_b = [(u + half, v + 8) for (u, v) in ProxyHandler._meander_uv(max(1, dep - 16), half, length - half, "snake")]
+            lines = [uv_a, uv_b]
+        else:  # huiwen
+            half = max(10, int(dep * 0.42))
+            lines = [ProxyHandler._meander_uv(dep, half, length, "snake")]
+
+        # 4) 沿四边铺纹样
+        edges = [
+            # 顶边
+            (pad, v0, 1, 0, 0, 1),
+            # 底边（v 朝上 = 负 y）
+            (pad, S - 1 - v0, 1, 0, 0, -1),
+            # 左边（u 沿 +y，v 朝 +x）
+            (v0, pad, 0, 1, 1, 0),
+            # 右边（u 沿 +y，v 朝 -x）
+            (S - 1 - v0, pad, 0, 1, -1, 0),
+        ]
+        for sx, sy, udx, udy, vdx, vdy in edges:
+            for uv in lines:
+                pts = [
+                    (sx + int(round(u * udx + v * vdx)), sy + int(round(u * udy + v * vdy)))
+                    for (u, v) in uv
+                    if 6 <= sx + u * udx + v * vdx <= S - 7 and 6 <= sy + u * udy + v * vdy <= S - 7
+                ]
+                if len(pts) > 1:
+                    dr.line(pts, fill=INK, width=3)
+        return img, inner
+
+    def _composite_fusion(
+        self,
+        frame_bytes: bytes,
+        flower_bytes: bytes,
+        inner: tuple = None,
+        flower_fill: float = 0.9,
+    ) -> bytes:
+        """两段合成 v3（2026-09-04 可靠开窗版）：本地几何框 + 中心花。
+
+        local-frame 模式：frame 为 PIL 程序化红地开窗框（必含空心内区），inner 由
+        _draw_geo_frame 直给，本函数不再依赖「检测」。AI-frame 模式：inner=None 时
+        探测空心矩形（失败退默认 72% 内区）。
+        1) 花层等比放进内区 flower_fill（0.9=贴满中心、四周留一圈红地边）；
+        2) 色键抠底（挖浅素背景）→ 露出 frame 内区色地（无灰补丁）；
+        3) 边框像素原样保留。
         """
         try:
             frame = Image.open(io.BytesIO(frame_bytes)).convert("RGB")
@@ -346,25 +457,26 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return None
         w, h = frame.size
 
-        # 1) 内区矩形（开窗留白区）
-        inner = self._detect_inner_rect(frame)
+        # 1) 内区矩形（local 直给；AI 模式检测，失败退默认）
         if inner is None:
-            print("[sd_proxy] warn: no empty inner field detected, use default 72% center rect", flush=True)
-            mg = int(min(w, h) * 0.14)
-            inner = (mg, mg, w - mg, h - mg)
+            inner = self._detect_inner_rect(frame)
+            if inner is None:
+                print("[sd_proxy] warn: no empty inner field detected, use default 72% center rect", flush=True)
+                mg = int(min(w, h) * 0.14)
+                inner = (mg, mg, w - mg, h - mg)
         l0, t0, r0, b0 = inner
         iw, ih = r0 - l0, b0 - t0
         if iw < 16 or ih < 16:
             print("[sd_proxy] composite failed: inner rect too small %s" % (inner,), flush=True)
             return None
 
-        # 2) 花层等比放进内区 78%（宁可小一圈也不裁切边框）
+        # 2) 花层等比放进内区 flower_fill（足够覆盖中心，四周仍留红地边）
         fw, fh = flower.size
         if fw < 8 or fh < 8:
             print("[sd_proxy] composite failed: flower image too small", flush=True)
             return None
-        box_w = max(16, int(iw * 0.78))
-        box_h = max(16, int(ih * 0.78))
+        box_w = max(16, int(iw * flower_fill))
+        box_h = max(16, int(ih * flower_fill))
         ratio = min(box_w / fw, box_h / fh)
         tw, th = max(8, int(fw * ratio)), max(8, int(fh * ratio))
         flower2 = flower.resize((tw, th), Image.LANCZOS)
@@ -379,8 +491,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
             print("[sd_proxy] composite failed: color-key error %r" % (exc,), flush=True)
             return None
         print(
-            "[sd_proxy] composite: inner=(%d,%d,%d,%d) flower %dx%d -> %dx%d bg=%s fg_ratio=%.2f"
-            % (l0, t0, r0, b0, fw, fh, tw, th, str(bg), fg_ratio),
+            "[sd_proxy] composite: inner=(%d,%d,%d,%d) flower_fill=%.2f flower %dx%d -> %dx%d bg=%s fg_ratio=%.2f"
+            % (l0, t0, r0, b0, flower_fill, fw, fh, tw, th, str(bg), fg_ratio),
             flush=True,
         )
 
@@ -415,45 +527,93 @@ class ProxyHandler(BaseHTTPRequestHandler):
         return buf.getvalue()
 
     def _handle_composite(self, req: dict) -> None:
+        """几何×花卉「可靠开窗合成」。
+
+        frame.mode:
+          local（默认）—— 不请求几何 LoRA，frame 由 _draw_geo_frame 本地绘制
+            （geo: huiwen/panchang/fangsheng），必然空心有框；flower 单段 txt2img。
+          ai —— 保留旧两段 txt2img（frame + flower 都 AI 出图，内区靠检测）。
+        comp.debug（默认 true）：frame/flower/final 三张落盘 DEBUG_DIR 便于排查。
+        """
         if not _HAS_PIL:
             self._send_json(502, {"error": "composite requires PIL (pip install pillow)"})
             return
         comp = req.get("composite") or {}
         frame_cfg = comp.get("frame") or {}
         flower_cfg = comp.get("flower") or {}
-        if not frame_cfg.get("prompt") or not flower_cfg.get("prompt"):
-            self._send_json(400, {"error": "composite needs frame.prompt and flower.prompt"})
+        mode = (frame_cfg.get("mode") or "local").strip().lower()
+        geo = (frame_cfg.get("geo") or "huiwen").strip().lower()
+        if mode not in ("local", "ai"):
+            mode = "local"
+        if not flower_cfg.get("prompt"):
+            self._send_json(400, {"error": "composite needs flower.prompt"})
+            return
+        if mode == "ai" and not frame_cfg.get("prompt"):
+            self._send_json(400, {"error": "ai-frame composite needs frame.prompt"})
             return
 
         base = dict(DEFAULT_BODY)
         for k in ("width", "height", "steps", "cfg_scale", "sampler_name", "seed"):
             if k in req:
                 base[k] = req[k]
-        frame_body = dict(base)
-        frame_body["prompt"] = frame_cfg["prompt"]
-        frame_body["negative_prompt"] = frame_cfg.get("negative_prompt", "")
-        flower_body = dict(base)
-        flower_body["prompt"] = flower_cfg["prompt"]
-        flower_body["negative_prompt"] = flower_cfg.get("negative_prompt", "")
+        gen_id = "sd-%d-%s" % (int(time.time() * 1000), uuid.uuid4().hex[:6])
 
+        inner = None
+        frame_src = "txt2img"
         try:
-            frame_bytes, _, _, _ = self._call_txt2img(frame_body)
+            if mode == "ai":
+                frame_body = dict(base)
+                frame_body["prompt"] = frame_cfg["prompt"]
+                frame_body["negative_prompt"] = frame_cfg.get("negative_prompt", "")
+                print("[sd_proxy] composite mode=two-pass-ai-frame (frame via txt2img)", flush=True)
+                frame_bytes, _, _, _ = self._call_txt2img(frame_body)
+            else:
+                if geo not in ("huiwen", "panchang", "fangsheng"):
+                    geo = "huiwen"
+                    print("[sd_proxy] warn: unknown frame.geo, fallback huiwen", flush=True)
+                frame_img, inner = self._draw_geo_frame(geo, int(base.get("width", 512)))
+                fbuf = io.BytesIO()
+                frame_img.save(fbuf, format="PNG")
+                frame_bytes = fbuf.getvalue()
+                frame_src = "local-draw"
+                print(
+                    "[sd_proxy] composite mode=local-frame geo=%s inner=%s (frame drawn locally, NO frame txt2img)"
+                    % (geo, str(inner)),
+                    flush=True,
+                )
+            flower_body = dict(base)
+            flower_body["prompt"] = flower_cfg["prompt"]
+            flower_body["negative_prompt"] = flower_cfg.get("negative_prompt", "")
             flower_bytes, flower_seed, _, _ = self._call_txt2img(flower_body)
         except Exception as e:  # noqa: BLE001
             self._send_json(502, {"error": str(e)})
             return
 
         try:
-            merged = self._composite_fusion(frame_bytes, flower_bytes)
+            merged = self._composite_fusion(frame_bytes, flower_bytes, inner=inner)
         except Exception as e:  # noqa: BLE001
             print("[sd_proxy] composite FAILED, fallback to frame-only (flower lost): %s" % e, flush=True)
             merged = frame_bytes
 
         merged_b64 = base64.b64encode(merged).decode("ascii")
         data_url = "data:image/png;base64," + merged_b64
-        gen_id = "sd-%d-%s" % (int(time.time() * 1000), uuid.uuid4().hex[:6])
-        print("[sd_proxy] composite ok: frame=%d flower=%d merged=%d" % (
-            len(frame_bytes), len(flower_bytes), len(merged)), flush=True)
+        print("[sd_proxy] composite ok: mode=%s frame_src=%s frame=%dB flower=%dB merged=%dB"
+              % (mode, frame_src, len(frame_bytes), len(flower_bytes), len(merged)), flush=True)
+
+        # 排查落盘：frame / flower / final 三张（默认开，可用 composite.debug=false 关）
+        debug_files = {}
+        if comp.get("debug", True) is not False and DEBUG_DIR:
+            try:
+                os.makedirs(DEBUG_DIR, exist_ok=True)
+                for tag, data in (("frame", frame_bytes), ("flower", flower_bytes), ("final", merged)):
+                    p = os.path.join(DEBUG_DIR, "%s_%s.png" % (tag, gen_id))
+                    with open(p, "wb") as f:
+                        f.write(data)
+                    debug_files[tag] = p
+                print("[sd_proxy] composite debug: " + "; ".join("%s=%s" % (k, v) for k, v in debug_files.items()), flush=True)
+            except Exception as e:  # noqa: BLE001
+                print("[sd_proxy] warn: debug save failed: %s" % e, flush=True)
+
         file_path = None
         if OUTPUT_DIR:
             try:
@@ -470,7 +630,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
             "seed": flower_seed,
             "elapsed_ms": None,
             "file_path": file_path,
-            "info": "composite: frame + flower",
+            "composite_mode": mode,
+            "composite_geo": geo,
+            "debug_files": debug_files,
+            "info": "composite mode=%s (%s) + flower" % (mode, frame_src),
         })
 
     def do_POST(self) -> None:
@@ -494,7 +657,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "invalid json: %s" % e})
             return
 
-        # 几何+花卉「两段合成」：frame + flower 分开出图再合成
+        # 几何×花卉「可靠开窗合成」：默认 local-frame（本地绘制框）+ flower 单段出图；见 _handle_composite
         if isinstance(req, dict) and req.get("composite"):
             self._handle_composite(req)
             return
