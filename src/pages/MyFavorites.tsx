@@ -6,6 +6,7 @@ import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
 import { useFavorites } from '../context/FavoriteContext'
 import { downloadImageViaProxy } from '../utils/downloadImage'
+import WorkDetailModal from '../components/WorkDetailModal'
 
 interface FavoriteWork {
   id: string
@@ -15,8 +16,6 @@ interface FavoriteWork {
   is_public: boolean
   created_at: string
   params: Record<string, any>
-  /** 作者已软删除（软删除不物理移除，收藏条目保留，UI 显示「已被作者删除」） */
-  is_deleted?: boolean
 }
 
 export default function MyFavoritesPage() {
@@ -25,6 +24,7 @@ export default function MyFavoritesPage() {
   const [favorites, setFavorites] = useState<FavoriteWork[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [detailWork, setDetailWork] = useState<FavoriteWork | null>(null)
 
   useEffect(() => {
     const fetchFavorites = async () => {
@@ -60,12 +60,12 @@ export default function MyFavoritesPage() {
           .from('generations')
           .select('*')
           .in('id', generationIds)
+          .eq('is_deleted', false)
 
         if (generationsError) {
           console.error('Fetch generations error:', generationsError)
           setError('获取收藏失败，请稍后重试')
         } else {
-          // 不过滤 is_deleted：作者软删除的作品在收藏中仍保留条目，由 UI 显示「已被作者删除」
           setFavorites(
             (generationsData || []).map((row: any) => ({
               id: row.id,
@@ -75,7 +75,6 @@ export default function MyFavoritesPage() {
               is_public: !!row.is_public,
               created_at: row.created_at,
               params: row.params || {},
-              is_deleted: row.is_deleted === true,
             }))
           )
         }
@@ -98,10 +97,6 @@ export default function MyFavoritesPage() {
   }
 
   const handleDownload = async (favorite: FavoriteWork) => {
-    if (favorite.is_deleted) {
-      alert('该纹样已被作者删除，无法下载')
-      return
-    }
     try {
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
       if (isMobile) {
@@ -118,11 +113,7 @@ export default function MyFavoritesPage() {
   }
 
   const handleViewDetail = (favorite: FavoriteWork) => {
-    if (favorite.is_deleted) {
-      alert('该纹样已被作者删除，无法查看')
-      return
-    }
-    navigate(`/gallery/${favorite.id}`)
+    setDetailWork(favorite)
   }
 
   return (
@@ -166,93 +157,88 @@ export default function MyFavoritesPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {favorites.map((favorite, index) => {
-              const isRemovedByAuthor = favorite.is_deleted === true
-              return (
-                <motion.div
-                  key={favorite.id}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <FrameDecorations className="bg-rice-paper p-3">
-                    <div className="aspect-square bg-rice-paper-dark mb-3 overflow-hidden">
-                      {isRemovedByAuthor ? (
-                        <div className="w-full h-full flex flex-col items-center justify-center px-4">
-                          <svg className="w-8 h-8 text-deep-blue-light mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                          </svg>
-                          <span className="font-shufa text-sm text-deep-blue">纹样已被作者删除</span>
-                          <span className="font-song text-xs text-deep-blue-light mt-1">无法查看或下载</span>
-                        </div>
-                      ) : (
-                        <img
-                          src={favorite.image_url}
-                          alt={favorite.params?.title || '纹样'}
-                          className="w-full h-full object-cover"
-                        />
-                      )}
-                    </div>
-                    <div className="p-3">
-                      <h3 className="font-shufa text-sm text-deep-blue mb-1 truncate" title={favorite.params?.title}>
-                        {isRemovedByAuthor
-                          ? '已删除的作品'
-                          : favorite.params?.title || `纹样作品 #${favorite.id.slice(0, 8)}`}
-                      </h3>
-                      {!isRemovedByAuthor && favorite.params?.tags && favorite.params.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {favorite.params.tags.slice(0, 3).map((tag: string, index: number) => (
-                            <span
-                              key={index}
-                              className="px-1.5 py-0.5 bg-deep-blue-50 text-deep-blue-light text-xs font-song rounded-sm"
-                            >
-                              #{tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="font-song text-xs text-deep-blue-light">
-                          {new Date(favorite.created_at).toLocaleDateString('zh-CN')}
-                        </span>
+            {favorites.map((favorite, index) => (
+              <motion.div
+                key={favorite.id}
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+              >
+                <FrameDecorations className="bg-rice-paper p-3">
+                  <div
+                    className="aspect-square bg-rice-paper-dark mb-3 overflow-hidden cursor-pointer"
+                    onClick={() => handleViewDetail(favorite)}
+                  >
+                    <img
+                      src={favorite.image_url}
+                      alt={favorite.params?.title || '纹样'}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="p-3">
+                    <h3 className="font-shufa text-sm text-deep-blue mb-1 truncate" title={favorite.params?.title}>
+                      {favorite.params?.title || `纹样作品 #${favorite.id.slice(0, 8)}`}
+                    </h3>
+                    {favorite.params?.tags && favorite.params.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {favorite.params.tags.slice(0, 3).map((tag: string, index: number) => (
+                          <span
+                            key={index}
+                            className="px-1.5 py-0.5 bg-deep-blue-50 text-deep-blue-light text-xs font-song rounded-sm"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
                       </div>
-                      {isRemovedByAuthor ? (
-                        <button
-                          onClick={() => handleRemoveFavorite(favorite.id)}
-                          className="w-full py-1.5 bg-palace-red/10 border border-palace-red/20 rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
-                        >
-                          取消收藏
-                        </button>
-                      ) : (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleDownload(favorite)}
-                            className="flex-1 py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
-                          >
-                            下载
-                          </button>
-                          <button
-                            onClick={() => handleViewDetail(favorite)}
-                            className="flex-1 py-1.5 bg-deep-blue-50 border border-deep-blue-200 rounded-sm font-song text-xs text-deep-blue hover:bg-deep-blue-100 transition-colors"
-                          >
-                            查看
-                          </button>
-                          <button
-                            onClick={() => handleRemoveFavorite(favorite.id)}
-                            className="px-3 py-1.5 bg-palace-red/10 border border-palace-red/20 rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
-                          >
-                            取消收藏
-                          </button>
-                        </div>
-                      )}
+                    )}
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-song text-xs text-deep-blue-light">
+                        {new Date(favorite.created_at).toLocaleDateString('zh-CN')}
+                      </span>
                     </div>
-                  </FrameDecorations>
-                </motion.div>
-              )
-            })}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleDownload(favorite)}
+                        className="flex-1 py-1.5 bg-rice-paper border border-palace-red rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
+                      >
+                        下载
+                      </button>
+                      <button
+                        onClick={() => handleViewDetail(favorite)}
+                        className="flex-1 py-1.5 bg-deep-blue-50 border border-deep-blue-200 rounded-sm font-song text-xs text-deep-blue hover:bg-deep-blue-100 transition-colors"
+                      >
+                        查看
+                      </button>
+                      <button
+                        onClick={() => handleRemoveFavorite(favorite.id)}
+                        className="px-3 py-1.5 bg-palace-red/10 border border-palace-red/20 rounded-sm font-song text-xs text-palace-red hover:bg-palace-red hover:text-rice-paper transition-colors"
+                      >
+                        取消收藏
+                      </button>
+                    </div>
+                  </div>
+                </FrameDecorations>
+              </motion.div>
+            ))}
           </div>
         )}
       </div>
+
+      <WorkDetailModal
+        work={
+          detailWork
+            ? {
+                id: detailWork.id,
+                title: detailWork.params?.title || detailWork.title || `纹样作品 #${detailWork.id.slice(0, 8)}`,
+                tags: detailWork.params?.tags || [],
+                author: detailWork.author_nickname || '匿名',
+                image: detailWork.image_url,
+                createdAt: detailWork.created_at,
+              }
+            : null
+        }
+        onClose={() => setDetailWork(null)}
+      />
     </div>
   )
 }
