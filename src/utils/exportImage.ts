@@ -338,19 +338,19 @@ function shapeFor(productId: string): ShapeSpec {
         path: (ctx, S) => roundedRectPath(ctx, 0.32 * S, 0.08 * S, 0.36 * S, 0.66 * S, 0.025 * S),
         patternRect: (S) => ({ x: 0.32 * S, y: 0.08 * S, w: 0.36 * S, h: 0.66 * S }),
         detail: (ctx, S) => {
-          // 顶部挂孔 + 黄铜圈
+          // 顶部挂孔 + 红挂环
           ctx.beginPath()
           ctx.arc(0.5 * S, 0.15 * S, 0.028 * S, 0, Math.PI * 2)
           ctx.fillStyle = '#F5F0E6'
           ctx.fill()
-          ctx.strokeStyle = '#B08D57'
+          ctx.strokeStyle = '#A03A3A'
           ctx.lineWidth = Math.max(1.5, S * 0.006)
           ctx.stroke()
           // 底部连接扣
           ctx.fillStyle = '#A03A3A'
           ctx.fillRect(0.415 * S, 0.736 * S, 0.17 * S, 0.014 * S)
-          // 流苏线
-          ctx.strokeStyle = '#A03A3A'
+          // 流苏线（金）
+          ctx.strokeStyle = '#B08D57'
           ctx.lineWidth = Math.max(1.5, S * 0.009)
           ctx.beginPath()
           ctx.moveTo(0.425 * S, 0.75 * S)
@@ -360,8 +360,8 @@ function shapeFor(productId: string): ShapeSpec {
           ctx.moveTo(0.575 * S, 0.75 * S)
           ctx.lineTo(0.565 * S, 0.84 * S)
           ctx.stroke()
-          // 流苏穗
-          ctx.fillStyle = '#A03A3A'
+          // 流苏穗（金）
+          ctx.fillStyle = '#B08D57'
           for (const [cx, cy] of [
             [0.435, 0.85],
             [0.5, 0.862],
