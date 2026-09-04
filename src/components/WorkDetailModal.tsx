@@ -6,7 +6,7 @@ import { mockPatternDna } from '../mock/patternDna'
 import { supabase } from '../lib/supabase'
 import { PATTERN_PLACEHOLDER, isPlaceholderUrl } from '../lib/imageLoader'
 import { Button } from './ui/Button'
-import { downloadImageViaProxy } from '../utils/downloadImage'
+import { downloadImageAsFormat, downloadImageViaProxy } from '../utils/downloadImage'
 
 export interface WorkDetailModalWork {
   id: string
@@ -86,7 +86,7 @@ export default function WorkDetailModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [work, onClose])
 
-  const handleDownload = async () => {
+  const handleDownload = async (format: 'png' | 'jpg') => {
     if (!work) return
     let url = imgSrc || work.image || ''
     if (!url) {
@@ -106,17 +106,51 @@ export default function WorkDetailModal({
       alert('图片暂未加载完成，请稍后重试')
       return
     }
+    if (isPlaceholderUrl(url)) {
+      alert('图片仍在加载中，请稍后重试')
+      return
+    }
+
+    const filename = `wenyun_pattern_${(work.id || '').slice(0, 8) || Date.now()}.${format === 'png' ? 'png' : 'jpg'}`
     setDownloading(true)
     try {
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
         navigator.userAgent
       )
       if (isMobile) {
-        window.open(`/.netlify/functions/download?url=${encodeURIComponent(url)}`, '_blank')
+        // 移动端直接打开：PNG 尽量走 download 函数（带校验），JPG 只能开原图由浏览器保存
+        window.open(
+          format === 'png'
+            ? `/.netlify/functions/download?url=${encodeURIComponent(url)}`
+            : url,
+          '_blank'
+        )
         return
       }
-      // 经 download 函数中转并校验文件头/大小，失败抛错不落盘
-      await downloadImageViaProxy(url, `wenyun_pattern_${(work.id || '').slice(0, 8) || Date.now()}.png`)
+
+      try {
+        // 优先直接下载：支持 data: / blob: / http(s)，PNG 带校验，JPG 经 Canvas 白底转换
+        await downloadImageAsFormat(url, filename, format)
+      } catch (directErr) {
+        console.warn('[WorkDetailModal] direct download failed, fallback to proxy/open:', directErr)
+        if (format === 'png') {
+          try {
+            // 生产环境若跨域受限，经 Netlify download 函数中转
+            await downloadImageViaProxy(url, filename)
+          } catch (proxyErr) {
+            // 本地 dev 未部署 Netlify 函数时，/functions/download 会返回 index.html(text/html)，
+            // 直接打开原图让用户另存为，避免继续报「图源类型异常」。
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+              window.open(url, '_blank')
+            } else {
+              throw proxyErr
+            }
+          }
+        } else {
+          // JPG 转换需要跨域原图；直接下载失败时只能打开原图让用户自行保存
+          window.open(url, '_blank')
+        }
+      }
     } catch (error) {
       console.error('[WorkDetailModal] 下载失败:', error)
       alert((error as Error)?.message || '下载失败，请尝试右键图片另存为')
@@ -208,9 +242,24 @@ export default function WorkDetailModal({
                       {isFavorite ? '已收藏' : '收藏'} · {favoriteCount}
                     </Button>
                   )}
-                  <Button variant="outline" size="sm" onClick={handleDownload} disabled={downloading}>
-                    下载
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownload('png')}
+                      disabled={downloading}
+                    >
+                      PNG
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownload('jpg')}
+                      disabled={downloading}
+                    >
+                      JPG
+                    </Button>
+                  </div>
                   {shareUrl && (
                     <Button variant="outline" size="sm" onClick={handleShare}>
                       分享
