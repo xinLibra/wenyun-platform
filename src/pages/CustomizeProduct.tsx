@@ -1,5 +1,6 @@
 import { generatePreviewDataUrl, buildProductPreviewDataUrl } from '../utils/exportImage'
 import { ensurePublicImageUrl } from '../lib/storage'
+import { fetchHttpImageUrls, loadImagesConcurrently } from '../lib/imageLoader'
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
@@ -530,6 +531,9 @@ export default function CustomizeProduct() {
   const [showPatternModal, setShowPatternModal] = useState(false)
   const [patternTab, setPatternTab] = useState<'work' | 'favorite'>('work')
   const [userPatterns, setUserPatterns] = useState<UserPattern[]>([])
+  // 列表元数据刷新 key，驱动后台补拉 image_url
+  const [patternListKey, setPatternListKey] = useState(0)
+  const [patternImageLoadErrors, setPatternImageLoadErrors] = useState<Record<string, string>>({})
   const [selectedPatternImage, setSelectedPatternImage] = useState<string | null>(() => {
     const globalPattern = safeSessionGet('customize:selectedPattern:global')
     if (globalPattern) {
@@ -679,11 +683,13 @@ export default function CustomizeProduct() {
   }
 
   const patternsCacheRef = useRef<{ userId: string; ts: number; data: UserPattern[] } | null>(null)
+  const patternImageLoadGenRef = useRef(0)
 
   const fetchUserPatterns = async (force = false) => {
     // 缓存 5 分钟内直接用
     if (!force && patternsCacheRef.current?.data && Date.now() - patternsCacheRef.current.ts < 300_000) {
       setUserPatterns(patternsCacheRef.current.data)
+      setPatternListKey((k) => k + 1)
       setPatternModalLoading(false)
       return
     }
@@ -708,21 +714,21 @@ export default function CustomizeProduct() {
 
       const patterns: UserPattern[] = []
 
-      // 作品 + 收藏并行查询，整体 15s 超时
+      // 作品 + 收藏并行查询元数据（不拉 image_url，避免历史 data: base64 大字段导致超时）
       const queryPromise = (async () => {
         const [myWorksResult, favoritesResult] = await Promise.all([
           supabase
             .from('generations')
-            .select('id, image_url, params')
+            .select('id, params')
             .eq('user_id', sessionUser!.id)
             .eq('is_deleted', false)
             .order('created_at', { ascending: false })
-            .limit(40),
+            .limit(1000),
           supabase
             .from('favorites')
             .select('generation_id')
             .eq('user_id', sessionUser!.id)
-            .limit(40),
+            .limit(1000),
         ])
         return { myWorksResult, favoritesResult }
       })()
@@ -741,7 +747,7 @@ export default function CustomizeProduct() {
         myWorksResult.data.forEach((work: any) => {
           patterns.push({
             id: work.id,
-            image_url: work.image_url,
+            image_url: '',
             title: work.params?.title || `我的作品 #${String(work.id).slice(0, 8)}`,
             type: 'work',
           })
@@ -755,26 +761,31 @@ export default function CustomizeProduct() {
         if (favRecords && favRecords.length > 0) {
           const generationIds = favRecords.map((f: any) => f.generation_id)
           try {
-            const favResult = await supabase
-              .from('generations')
-              .select('id, image_url, params')
-              .in('id', generationIds)
-              .eq('is_deleted', false)
-              .limit(40)
-            if (favResult.error) {
-              console.error('Fetch patterns - favorites detail query failed', serializeError(favResult.error))
-            } else if (favResult.data) {
-              favResult.data.forEach((fav: any) => {
-                if (!patterns.find(p => p.id === fav.id)) {
-                  patterns.push({
-                    id: fav.id,
-                    image_url: fav.image_url,
-                    title: fav.params?.title || `收藏作品 #${String(fav.id).slice(0, 8)}`,
-                    type: 'favorite',
-                  })
-                }
-              })
+            // 分片查询，避免 in 列表过长
+            const favRows: any[] = []
+            for (let i = 0; i < generationIds.length; i += 50) {
+              const chunk = generationIds.slice(i, i + 50)
+              const { data, error } = await supabase
+                .from('generations')
+                .select('id, params')
+                .in('id', chunk)
+                .eq('is_deleted', false)
+              if (error) {
+                console.error('Fetch patterns - favorites detail query failed', serializeError(error))
+                break
+              }
+              favRows.push(...(data || []))
             }
+            favRows.forEach((fav: any) => {
+              if (!patterns.find(p => p.id === fav.id)) {
+                patterns.push({
+                  id: fav.id,
+                  image_url: '',
+                  title: fav.params?.title || `收藏作品 #${String(fav.id).slice(0, 8)}`,
+                  type: 'favorite',
+                })
+              }
+            })
           } catch (favErr) {
             console.error('Fetch patterns - favorites detail query threw', serializeError(favErr))
           }
@@ -787,11 +798,13 @@ export default function CustomizeProduct() {
           setFetchError(true)
         } else {
           setUserPatterns(patternsCacheRef.current.data)
+          setPatternListKey((k) => k + 1)
         }
         return
       }
 
       setUserPatterns(patterns)
+      setPatternListKey((k) => k + 1)
       patternsCacheRef.current = { userId: sessionUser!.id, ts: Date.now(), data: patterns }
     } catch (err) {
       console.error('Fetch patterns error', serializeError(err))
@@ -800,6 +813,7 @@ export default function CustomizeProduct() {
         setFetchError(true)
       } else {
         setUserPatterns(patternsCacheRef.current.data)
+        setPatternListKey((k) => k + 1)
       }
     } finally {
       setPatternModalLoading(false)
@@ -821,15 +835,78 @@ export default function CustomizeProduct() {
     setShowPatternModal(false)
   }
 
+  // 列表元数据就绪后，后台补拉图片地址：先批量 http 短链，再逐条取历史 base64
+  useEffect(() => {
+    if (userPatterns.length === 0) return
+
+    const generation = ++patternImageLoadGenRef.current
+    let cancelled = false
+
+    const applyImageUrls = (urlMap: Record<string, string>) => {
+      if (cancelled || generation !== patternImageLoadGenRef.current) return
+      const ids = Object.keys(urlMap)
+      if (ids.length === 0) return
+      setUserPatterns((prev) => {
+        const next = prev.map((p) => {
+          const url = urlMap[p.id]
+          return url ? { ...p, image_url: url } : p
+        })
+        // 同步更新缓存，避免短时间重新打开弹窗重复补拉
+        if (patternsCacheRef.current?.data) {
+          next.forEach((p) => {
+            const cached = patternsCacheRef.current!.data.find((c) => c.id === p.id)
+            if (cached && p.image_url) cached.image_url = p.image_url
+          })
+        }
+        return next
+      })
+      setPatternImageLoadErrors((prev) => {
+        const next = { ...prev }
+        ids.forEach((id) => delete next[id])
+        return next
+      })
+    }
+
+    const run = async () => {
+      try {
+        const ids = userPatterns.map((p) => p.id)
+        const shortMap = await fetchHttpImageUrls(ids)
+        applyImageUrls(shortMap)
+
+        const pendingIds = ids.filter((id) => !shortMap[id])
+        if (pendingIds.length === 0) return
+
+        await loadImagesConcurrently(
+          pendingIds,
+          (id, url) => applyImageUrls({ [id]: url }),
+          1,
+          (id, reason) => {
+            console.warn(`[CustomizeProduct] load image failed for ${id}:`, reason)
+            setPatternImageLoadErrors((prev) => ({ ...prev, [id]: reason }))
+          }
+        )
+      } catch (e) {
+        console.warn('[CustomizeProduct] load pattern images failed', e)
+      }
+    }
+
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [patternListKey])
+
   const handleOpenPatternModal = () => {
     setShowPatternModal(true)
     setPatternRenderLimit(12)
     setPatternImageStates({})
+    setPatternImageLoadErrors({})
     void fetchUserPatterns(false)
   }
 
   const handleRetryPatterns = () => {
     setFetchError(false)
+    setPatternImageLoadErrors({})
     fetchUserPatterns(true)
   }
 
@@ -2224,17 +2301,23 @@ export default function CustomizeProduct() {
                               const rawUrl = pattern.image_url
                               const resolvedUrl = resolveImageUrl(rawUrl)
                               const isHugeBase64 = rawUrl.startsWith('data:') && rawUrl.length > 300_000
+                              const hasUrl = !!rawUrl
+                              const failed = !!patternImageLoadErrors[pattern.id]
                               return (
                                 <motion.div
                                   key={pattern.id}
                                   initial={{ opacity: 0, y: 20 }}
                                   animate={{ opacity: 1, y: 0 }}
                                   transition={{ delay: Math.min(index, 8) * 0.05 }}
-                                  onClick={() => handleSelectPattern(pattern)}
-                                  className="cursor-pointer group"
+                                  onClick={hasUrl ? () => handleSelectPattern(pattern) : undefined}
+                                  className={`group ${hasUrl ? 'cursor-pointer' : 'cursor-wait'}`}
                                 >
                                   <div className="aspect-square bg-deep-blue-50 rounded-sm overflow-hidden border-2 border-transparent group-hover:border-palace-red transition-colors relative">
-                                    {imgState === 'error' ? (
+                                    {!hasUrl && !failed ? (
+                                      <div className="absolute inset-0 flex items-center justify-center bg-deep-blue-50">
+                                        <div className="w-5 h-5 border-2 border-deep-blue-200 border-t-palace-red rounded-full animate-spin"></div>
+                                      </div>
+                                    ) : imgState === 'error' || failed ? (
                                       <div className="w-full h-full flex flex-col items-center justify-center bg-deep-blue-50 p-2">
                                         <svg className="w-6 h-6 text-deep-blue-light mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
