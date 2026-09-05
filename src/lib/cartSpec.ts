@@ -27,6 +27,24 @@ export function normalizeColorsForSpec(
   return parts.join(',')
 }
 
+/**
+ * 纹样内容指纹：无论纹样图以「完整 base64」还是「缩略图/短链」形式存储，
+ * 同一张纹样都得到同一个指纹，用于规格唯一键的稳定性（避免因降采样改变 specKey）。
+ * - http(s) 短链：直接用 URL
+ * - data: base64：对内容做短哈希 + 长度，避免把几 MB 原始串写进 specKey
+ */
+export function patternHashOf(patternImage: string | null | undefined): string {
+  if (!patternImage) return ''
+  if (/^https?:\/\//i.test(patternImage)) return `url:${patternImage}`
+  if (/^data:/i.test(patternImage)) {
+    // 从 data: 前缀后（逗号之后）的 base64 内容取指纹；前缀 MIME 差异不影响同一像素内容
+    const comma = patternImage.indexOf(',')
+    const content = comma >= 0 ? patternImage.slice(comma + 1) : patternImage
+    return `data:${stableHash(content)}:${content.length}`
+  }
+  return `other:${patternImage}`
+}
+
 /** FNV-1a 短哈希：把较长的 canonical 串压成固定长度，仅用于比对相等 */
 function stableHash(str: string): string {
   let h = 2166136261 >>> 0
@@ -50,9 +68,11 @@ export function computeSpecKey(input: SpecKeyInput): string {
     input.generationId || c.generationId || c.patternId || ''
   const patternKey =
     patternId ||
-    (typeof c.patternImage === 'string' && c.patternImage.trim()
-      ? c.patternImage
-      : 'none')
+    (typeof c.patternHash === 'string' && c.patternHash.trim()
+      ? c.patternHash
+      : typeof c.patternImage === 'string' && c.patternImage.trim()
+        ? patternHashOf(c.patternImage)
+        : 'none')
   const opacity = c.patternOpacity ?? c.opacity ?? 100
   const canonical = JSON.stringify({
     p: input.productId,

@@ -1,5 +1,5 @@
 import { generatePreviewDataUrl, buildProductPreviewDataUrl } from '../utils/exportImage'
-import { ensurePublicImageUrl } from '../lib/storage'
+import { ensurePublicImageUrl, downscaleDataUrl } from '../lib/storage'
 import { fetchHttpImageUrls, loadImagesConcurrently } from '../lib/imageLoader'
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -12,6 +12,7 @@ import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { PatternRenderer, layoutPresets } from '../components/PatternRenderer'
 import { DraggableText } from '../components/DraggableText'
 import { useCart } from '../hooks/useCart'
+import { patternHashOf } from '../lib/cartSpec'
 import { supabase } from '../lib/supabase'
 import { Product3DViewer } from '../components/Product3DViewer'
 import { loadProduct3DConfig, has3DConfig, COLOR_PALETTE, type Product3DConfig, type PatternAreaKey } from '../config/product3D'
@@ -228,6 +229,36 @@ const getInitialMaterial = (productId: string) => {
   return productMaterials[productId]?.[0] || ''
 }
 
+/** 从该产品草稿同步读取上次的部件配色（刷新后第一帧就恢复，避免用默认值覆盖草稿） */
+const readDraftColors = (productId: string): Record<string, string> => {
+  const draftKey = `product_config_draft_${productId}`
+  const savedDraft = safeGetItem(draftKey)
+  if (savedDraft) {
+    try {
+      const draft = JSON.parse(savedDraft)
+      if (draft && typeof draft === 'object' && draft.colors && typeof draft.colors === 'object') {
+        return draft.colors
+      }
+    } catch { /* ignore */ }
+  }
+  return {}
+}
+
+/** 从该产品草稿同步读取上次的纹样透明度（未保存过为 100） */
+const readDraftPatternOpacity = (productId: string): number => {
+  const draftKey = `product_config_draft_${productId}`
+  const savedDraft = safeGetItem(draftKey)
+  if (savedDraft) {
+    try {
+      const draft = JSON.parse(savedDraft)
+      if (draft && typeof draft === 'object' && typeof draft.patternOpacity === 'number') {
+        return draft.patternOpacity
+      }
+    } catch { /* ignore */ }
+  }
+  return 100
+}
+
 export default function CustomizeProduct() {
   const navigate = useNavigate()
   const { addToCart } = useCart()
@@ -304,7 +335,7 @@ export default function CustomizeProduct() {
   const [positionY, setPositionY] = useState(getInitialParams(getInitialProduct()).positionY)
 
   const [blendMode, setBlendMode] = useState(getInitialParams(getInitialProduct()).blendMode)
-  const [patternOpacity, setPatternOpacity] = useState(100)
+  const [patternOpacity, setPatternOpacity] = useState(() => readDraftPatternOpacity(getInitialProduct()))
   const [selectedCategory, setSelectedCategory] = useState(getInitialCategory())
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
     const savedProduct = safeGetItem('selected_product_id') || 'scarf_front'
@@ -345,20 +376,19 @@ export default function CustomizeProduct() {
   // 右侧面板折叠状态
   const [panelExpanded, setPanelExpanded] = useState<{ layout: boolean; color: boolean; adjust: boolean }>({ layout: true, color: true, adjust: true })
   // 通用换色：colorMaterial.name → HEX 色值
-  const [productColors, setProductColors] = useState<Record<string, string>>({})
+  const [productColors, setProductColors] = useState<Record<string, string>>(() => readDraftColors(getInitialProduct()))
+  /** 已为哪个 productId 完成配色/透明度草稿还原；未还原前禁止保存草稿，避免默认值覆盖已存配色 */
+  const restoredProductRef = useRef<string | null>(null)
 
   // 切换产品时异步加载 3D 配置
   useEffect(() => {
     let cancelled = false
-    if (!has3DConfig(selectedProduct)) {
-      setProduct3DConfig(null)
-      setProductColors({})
-      return
-    }
-    setProduct3DConfig(null)
+    const productId = selectedProduct
+    // 标记尚未还原，防止初次渲染用默认配色/透明度覆盖真正保存的草稿
+    restoredProductRef.current = null
     // 从该产品草稿恢复上次配色/透明度（刷新/切换后自动还原，而不是清空成默认）
     const restoreDraftAppearance = () => {
-      const draftKey = `product_config_draft_${selectedProduct}`
+      const draftKey = `product_config_draft_${productId}`
       const raw = safeGetItem(draftKey)
       if (!raw) return
       try {
@@ -369,10 +399,22 @@ export default function CustomizeProduct() {
         }
       } catch { /* ignore */ }
     }
-    loadProduct3DConfig(selectedProduct).then((cfg) => {
+    if (!has3DConfig(productId)) {
+      setProduct3DConfig(null)
+      setProductColors({})
+      restoreDraftAppearance()
+      // 延迟到恢复值提交后再允许保存草稿，避免本次渲染用旧值覆盖
+      queueMicrotask(() => {
+        if (!cancelled) restoredProductRef.current = productId
+      })
+      return
+    }
+    setProduct3DConfig(null)
+    loadProduct3DConfig(productId).then((cfg) => {
       if (cancelled) return
       setProduct3DConfig(cfg)
       restoreDraftAppearance()
+      restoredProductRef.current = productId
     })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -657,6 +699,8 @@ export default function CustomizeProduct() {
   }, [])
 
   useEffect(() => {
+    // 当前产品的配色/透明度草稿尚未还原时跳过保存，避免用默认值覆盖已保存的配色/透明度
+    if (restoredProductRef.current !== selectedProduct) return
     const draftKey = `product_config_draft_${selectedProduct}`
     // base64 大图不写入草稿，避免撑爆 localStorage 配额；仅存 URL 或标记
     const spi = selectedPatternImage ?? ''
@@ -1104,11 +1148,18 @@ export default function CustomizeProduct() {
         positionX,
         positionY,
         patternOpacity,
+        colors: productColors,
         onSource: (s) => console.log(`[OrderPreview] source= ${s}`),
       })
       if (url) previewImage = url
-      // 截图是 data: base64：已登录则先转 Storage 短链再入库；未登录保持原样，结算时再转
+      // 截图是 data: base64：先压缩到小尺寸（避免大 base64 撑爆 localStorage / DB 请求体），
+      // 已登录则再转 Storage 短链；未登录保持小 base64，结算时再转
       if (previewImage && /^data:/i.test(previewImage)) {
+        try {
+          previewImage = (await downscaleDataUrl(previewImage, 384)) || previewImage
+        } catch (e) {
+          console.warn('[Cart] preview downscale failed, keep original:', e)
+        }
         try {
           const { data: s } = await supabase.auth?.getSession()
           if (s?.session?.user) {
@@ -1116,6 +1167,26 @@ export default function CustomizeProduct() {
           }
         } catch (e) {
           console.warn('[Cart] preview upload failed, keep base64:', e)
+        }
+      }
+      // 纹样图只保存「小引用」：库中图已是 http 短链则直接保留；
+      // 否则 data: base64 统一降采样到 ~320 并尽量上传为短链，避免把几 MB base64 写进购物车 / 数据库。
+      // patternHash 取「原始纹样」的内容指纹（与存储尺寸无关），保证规格键稳定不因降采样而变。
+      const patternHash = patternHashOf(selectedPatternImage || null)
+      let patternImgForCart = selectedPatternImage || ''
+      if (patternImgForCart && /^data:/i.test(patternImgForCart)) {
+        try {
+          patternImgForCart = (await downscaleDataUrl(patternImgForCart, 320)) || patternImgForCart
+        } catch (e) {
+          console.warn('[Cart] pattern downscale failed, keep original:', e)
+        }
+        try {
+          const { data: s } = await supabase.auth?.getSession()
+          if (s?.session?.user) {
+            patternImgForCart = (await ensurePublicImageUrl(s.session.user.id, patternImgForCart, 320)) || patternImgForCart
+          }
+        } catch (e) {
+          console.warn('[Cart] pattern upload failed, keep base64:', e)
         }
       }
       const cartProduct = products.find(p => p.id === selectedProduct)
@@ -1126,7 +1197,7 @@ export default function CustomizeProduct() {
         name: cartProduct?.name,
         price: cartProduct?.price,
         image: cartProduct?.image,
-        customization: { scale, rotation, positionX, positionY, blendMode, patternImage: selectedPatternImage, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, colors: productColors, previewImage, previewImageUrl: previewImage },
+        customization: { scale, rotation, positionX, positionY, blendMode, patternImage: patternImgForCart || undefined, patternHash: patternHash || undefined, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, patternOpacity, colors: productColors, previewImage, previewImageUrl: previewImage },
         quantity: quantity
       })
       alert('已加入购物车')
@@ -1150,6 +1221,7 @@ export default function CustomizeProduct() {
         positionX,
         positionY,
         patternOpacity,
+        colors: productColors,
         onSource: (s) => {
           orderPreviewSourceRef.current = s
           console.log(`[OrderPreview] source= ${s}`)

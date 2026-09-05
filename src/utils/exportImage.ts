@@ -310,6 +310,8 @@ export interface ProductPreviewParams {
   positionY?: number
   /** 纹样透明度（0-100），仅影响合成缩略图里的纹样明度 */
   patternOpacity?: number
+  /** 部件配色 { 部件名: HEX }（如 bookmark 的 ring/tassel），合成缩略图的产品细节随配色渲染 */
+  colors?: Record<string, string>
 }
 
 interface ShapeSpec {
@@ -317,8 +319,10 @@ interface ShapeSpec {
   path: (ctx: CanvasRenderingContext2D, S: number) => void
   /** 纹样填充区域（平铺范围 / 居中定位的基准矩形） */
   patternRect: (S: number) => { x: number; y: number; w: number; h: number }
+  /** 主体底色：如手提袋的 bag_body，叠加纹样前先铺一层产品主体色（无则为 undefined） */
+  bodyColor?: (colors: Record<string, string>) => string
   /** 产品细节：流苏 / 提手 / 相机开孔 / 线圈 / 折角等 */
-  detail?: (ctx: CanvasRenderingContext2D, S: number) => void
+  detail?: (ctx: CanvasRenderingContext2D, S: number, colors: Record<string, string>) => void
 }
 
 function roundedRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -332,6 +336,12 @@ function roundedRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w:
   ctx.closePath()
 }
 
+/** 从配色表取色，非法/缺失回退默认色 */
+function colorOf(colors: Record<string, string>, key: string, fallback: string): string {
+  const v = colors?.[key]
+  return typeof v === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v) ? v : fallback
+}
+
 function shapeFor(productId: string): ShapeSpec {
   switch (productId) {
     case 'bookmark': {
@@ -339,20 +349,22 @@ function shapeFor(productId: string): ShapeSpec {
       return {
         path: (ctx, S) => roundedRectPath(ctx, 0.32 * S, 0.08 * S, 0.36 * S, 0.66 * S, 0.025 * S),
         patternRect: (S) => ({ x: 0.32 * S, y: 0.08 * S, w: 0.36 * S, h: 0.66 * S }),
-        detail: (ctx, S) => {
+        detail: (ctx, S, colors) => {
+          const ringColor = colorOf(colors, 'ring', '#A03A3A')
+          const tasselColor = colorOf(colors, 'tassel', '#B08D57')
           // 顶部挂孔 + 红挂环
           ctx.beginPath()
           ctx.arc(0.5 * S, 0.15 * S, 0.028 * S, 0, Math.PI * 2)
           ctx.fillStyle = '#F5F0E6'
           ctx.fill()
-          ctx.strokeStyle = '#A03A3A'
+          ctx.strokeStyle = ringColor
           ctx.lineWidth = Math.max(1.5, S * 0.006)
           ctx.stroke()
           // 底部连接扣
-          ctx.fillStyle = '#A03A3A'
+          ctx.fillStyle = ringColor
           ctx.fillRect(0.415 * S, 0.736 * S, 0.17 * S, 0.014 * S)
           // 流苏线（金）
-          ctx.strokeStyle = '#B08D57'
+          ctx.strokeStyle = tasselColor
           ctx.lineWidth = Math.max(1.5, S * 0.009)
           ctx.beginPath()
           ctx.moveTo(0.425 * S, 0.75 * S)
@@ -363,7 +375,7 @@ function shapeFor(productId: string): ShapeSpec {
           ctx.lineTo(0.565 * S, 0.84 * S)
           ctx.stroke()
           // 流苏穗（金）
-          ctx.fillStyle = '#B08D57'
+          ctx.fillStyle = tasselColor
           for (const [cx, cy] of [
             [0.435, 0.85],
             [0.5, 0.862],
@@ -382,8 +394,9 @@ function shapeFor(productId: string): ShapeSpec {
       return {
         path: (ctx, S) => roundedRectPath(ctx, 0.24 * S, 0.44 * S, 0.52 * S, 0.42 * S, 0.015 * S),
         patternRect: (S) => ({ x: 0.24 * S, y: 0.44 * S, w: 0.52 * S, h: 0.42 * S }),
-        detail: (ctx, S) => {
-          const handleColor = productId === 'paper_bag' ? '#6B5B45' : '#8A2F2F'
+        bodyColor: (colors) => colorOf(colors, 'bag_body', '#E8DFC9'),
+        detail: (ctx, S, colors) => {
+          const handleColor = colorOf(colors, 'handle', productId === 'paper_bag' ? '#6B5B45' : '#8A2F2F')
           ctx.strokeStyle = handleColor
           ctx.lineCap = 'round'
           ctx.lineWidth = Math.max(2, S * 0.018)
@@ -702,9 +715,16 @@ export async function generateProductPreviewDataUrl(
   ctx.save()
   shape.path(ctx, S)
   ctx.clip()
+  // 2.1) 先铺一层「产品主体色」（如手提袋 bag_body），这样换了部件配色后缩略图立即体现，而非白袋+小纹样
+  const bodyFill = shape.bodyColor ? shape.bodyColor(params.colors || {}) : ''
+  if (bodyFill) {
+    shape.path(ctx, S)
+    ctx.fillStyle = bodyFill
+    ctx.fill()
+  }
   if (patternImg) {
     fillPatternClipped(ctx, patternImg, rect, params)
-  } else {
+  } else if (!bodyFill) {
     ctx.fillStyle = '#E8DFC9'
     ctx.fillRect(rect.x, rect.y, rect.w, rect.h)
   }
@@ -722,7 +742,7 @@ export async function generateProductPreviewDataUrl(
   // 4) 产品细节（流苏 / 提手 / 相机开孔等）
   if (shape.detail) {
     ctx.save()
-    shape.detail(ctx, S)
+    shape.detail(ctx, S, params.colors || {})
     ctx.restore()
   }
 
@@ -791,6 +811,8 @@ export async function buildProductPreviewDataUrl(opts: {
   positionY?: number
   /** 纹样透明度（0-100），合成兜底时反映到缩略图 */
   patternOpacity?: number
+  /** 部件配色 { 部件名: HEX }，合成兜底时反映到产品细节（如书签挂环/流苏） */
+  colors?: Record<string, string>
   /** 生成完成后回调实际来源：'capture3d'（3D 截图）| 'composite'（产品轮廓+纹样合成）| ''（失败） */
   onSource?: (source: 'capture3d' | 'composite') => void
 }): Promise<string> {
@@ -834,6 +856,7 @@ export async function buildProductPreviewDataUrl(opts: {
         positionX: opts.positionX,
         positionY: opts.positionY,
         patternOpacity: opts.patternOpacity,
+        colors: opts.colors,
       }, 384)
       if (url) {
         opts.onSource?.('composite')

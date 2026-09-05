@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { products } from '../lib/products'
 import { classifyError, logSupabaseConfig, withTimeout } from '../lib/async'
-import { computeSpecKey, specKeyOf } from '../lib/cartSpec'
+import { computeSpecKey, specKeyOf, patternHashOf } from '../lib/cartSpec'
 
 export interface CartItem {
   id: string
@@ -48,6 +48,52 @@ function tsOf(v: unknown): number {
   return Number.isFinite(t) ? t : 0
 }
 
+/** 只保留 http(s) 短链 / 关键元信息，剥掉 data: base64 大字段（用于 localStorage 配额兜底） */
+function stripHeavyImages(item: CartItem): CartItem {
+  const c: Record<string, any> = { ...(item.customization || {}) }
+  if (typeof c.previewImage === 'string' && /^data:/i.test(c.previewImage)) delete c.previewImage
+  if (typeof c.previewImageUrl === 'string' && /^data:/i.test(c.previewImageUrl)) delete c.previewImageUrl
+  if (typeof c.patternImage === 'string' && /^data:/i.test(c.patternImage)) delete c.patternImage
+  return { ...item, snapshotImage: undefined, customization: c }
+}
+
+/**
+ * 写入 localStorage 的保险写法：先写完整；配额不足依次降级为「剥 base64 大图」→「只留骨架」，
+ * 确保「购物车列表」绝不会因为图片太大而整体写失败（这正是加购成功后刷新却少商品的主因）。
+ */
+function writeLocalCart(items: CartItem[]): boolean {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+    return true
+  } catch (e: any) {
+    console.warn('[Cart] localStorage full, downgrading images:', e?.message ?? e)
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items.map(stripHeavyImages)))
+      console.warn('[Cart] saved slim cart (images stripped) to localStorage')
+      return true
+    } catch (e2: any) {
+      console.warn('[Cart] localStorage still full, saving skeleton only:', e2?.message ?? e2)
+      try {
+        const skeleton = items.map((it) => ({
+          id: it.id,
+          productId: it.productId,
+          generationId: it.generationId,
+          quantity: it.quantity,
+          specKey: it.specKey,
+          addedAt: it.addedAt,
+          updatedAt: it.updatedAt,
+        }))
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(skeleton))
+        console.warn('[Cart] saved skeleton cart to localStorage')
+        return true
+      } catch (e3: any) {
+        console.error('[Cart] localStorage write failed entirely:', e3?.message ?? e3)
+        return false
+      }
+    }
+  }
+}
+
 /** 按 updatedAt（次选 addedAt）降序：最近操作 / 最近加入在最上方 */
 function sortByRecency(list: CartItem[]): CartItem[] {
   return [...list].sort((a, b) => {
@@ -57,6 +103,45 @@ function sortByRecency(list: CartItem[]): CartItem[] {
     // 同为旧数据的稳定兜底：按加入时间倒序
     return tsOf(b.addedAt) - tsOf(a.addedAt)
   })
+}
+
+/** 规格唯一键（兼容旧数据：无 specKey 时现场计算） */
+function cartKeyOf(item: CartItem): string {
+  return (
+    (typeof item.specKey === 'string' && item.specKey) ||
+    computeSpecKey({
+      productId: item.productId,
+      generationId: item.generationId,
+      customization: item.customization,
+    })
+  )
+}
+
+/** 过滤当前会话已被显式移除的行，避免「删除后又从 DB/localStorage 被合并回来」 */
+function withoutRemoved(list: CartItem[], removed: Set<string>): CartItem[] {
+  if (removed.size === 0) return list
+  return list.filter((i) => !removed.has(i.id))
+}
+
+/**
+ * 合并本地购物车与云端购物车（按规格键去重，取 updatedAt 更新的一侧）。
+ * 解决「刚加入购物车的商品被旧 DB 快照顶掉，要等很久甚至不出现」的问题：
+ * 本地刚加的商品即使 DB 还没同步到，也会保留在列表中立即展示。
+ */
+function mergeCartItems(local: CartItem[], db: CartItem[]): CartItem[] {
+  const byKey = new Map<string, CartItem>()
+  for (const item of [...db, ...local]) {
+    const key = cartKeyOf(item)
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, item)
+      continue
+    }
+    const tExisting = tsOf(existing.updatedAt || existing.addedAt)
+    const tItem = tsOf(item.updatedAt || item.addedAt)
+    if (tItem > tExisting) byKey.set(key, item)
+  }
+  return sortByRecency([...byKey.values()])
 }
 
 /** 兼容填充：name/price/image 未写入时从产品表补齐；并按 customization 计算 specKey / 时间 / 快照 */
@@ -75,9 +160,16 @@ function enrichCartItem(item: any): CartItem {
         ? item.created_at
         : undefined
 
+  const storedSpecKey = typeof item?.specKey === 'string' ? item.specKey : ''
+  // 旧数据带纹样时重新按「内容指纹」计算规格键，避免早期以「raw patternImage」算出的 stale specKey
+  // 与新加的同规格商品不一致（同图案不同存储尺寸 → 必须是同一行，而不是变成两条）。
+  const hasPatternInfo =
+    (typeof customization.patternImage === 'string' && customization.patternImage.trim()) ||
+    (typeof customization.patternHash === 'string' && customization.patternHash.trim())
   const specKey =
-    (typeof item?.specKey === 'string' && item.specKey) ||
-    computeSpecKey({ productId, generationId, customization })
+    storedSpecKey && !hasPatternInfo
+      ? storedSpecKey
+      : computeSpecKey({ productId, generationId, customization })
   const addedAt =
     (typeof item?.addedAt === 'string' && item.addedAt) ||
     (typeof customization.addedAt === 'string' && customization.addedAt) ||
@@ -94,11 +186,18 @@ function enrichCartItem(item: any): CartItem {
     (typeof customization.previewImage === 'string' && customization.previewImage.trim() && customization.previewImage) ||
     undefined
 
+  // 旧数据兜底：若 customization 缺 patternHash 但带纹样图，则用内容指纹补齐，
+  // 保证即使 localStorage 因配额被「剥 base64 大图」也不会让同规格演化成两条。
+  const enrichedCustomization: Record<string, any> = { ...customization }
+  if (!enrichedCustomization.patternHash && typeof enrichedCustomization.patternImage === 'string' && enrichedCustomization.patternImage.trim()) {
+    enrichedCustomization.patternHash = patternHashOf(enrichedCustomization.patternImage)
+  }
+
   return {
     id: item?.id || crypto.randomUUID(),
     productId,
     generationId,
-    customization,
+    customization: enrichedCustomization,
     quantity: typeof item?.quantity === 'number' && item.quantity > 0 ? item.quantity : 1,
     name: (typeof item?.name === 'string' && item.name.trim()) ? item.name : fallbackName,
     price: (typeof item?.price === 'string' && item.price.trim()) ? item.price : fallbackPrice,
@@ -175,6 +274,10 @@ export function useCart() {
   const syncSeq = useRef(0)
   /** 云同步失败后的一次性自动重试定时器 */
   const autoRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** 本次会话中被显式移除（删除）的行 id：云同步只删这些，避免「全量删除 DB 里没有的 id」误删他人/其它实例 */
+  const removedIdsRef = useRef<Set<string>>(new Set())
+  /** 清空购物车标记：本次会话用户主动清空，saveToDB 删除该用户全部行 */
+  const clearAllRef = useRef(false)
 
   const syncCart = useCallback(async () => {
     const seq = ++syncSeq.current
@@ -185,7 +288,7 @@ export function useCart() {
       if (!sessionRes.ok) {
         // 登录状态服务本身不可用（断网 / Supabase 暂停）→ 云端不可用：弱提示 + 本地兜底
         const local = sortByRecency(readLocalCart())
-        setItems(local)
+        setItems(withoutRemoved(local, removedIdsRef.current))
         setError(null)
         setPendingSync(local.length > 0)
         if (local.length > 0) {
@@ -198,7 +301,7 @@ export function useCart() {
       const sessionUser = sessionRes.user
       if (!sessionUser) {
         // 未登录：直接显示本地购物车（本地购物车不要求登录，也不会空转 loading）
-        setItems(sortByRecency(readLocalCart()))
+        setItems(withoutRemoved(sortByRecency(readLocalCart()), removedIdsRef.current))
         setError(null)
         setNotice(null)
         setPendingSync(false)
@@ -236,11 +339,13 @@ export function useCart() {
               })
             )
           )
-          setItems(dbItems)
+          // 合并本地 + 云端：本地刚加的商品（DB 尚未同步）必须保留并立即展示，
+          // 不能被旧的 DB 快照顶掉，否则会出现「加购后要等很久才出现/不出现」。
+          setItems(withoutRemoved(mergeCartItems(readLocalCart(), dbItems), removedIdsRef.current))
         } else {
           // 关键修复：DB 无数据时绝不把本地已有购物车清空，
           // 否则刷新/重新登录后 localStorage 里的商品会被 [] 覆盖 →「购物车又变空」
-          setItems(sortByRecency(readLocalCart()))
+          setItems(withoutRemoved(sortByRecency(readLocalCart()), removedIdsRef.current))
         }
         setError(null)
         setNotice(null)
@@ -249,7 +354,7 @@ export function useCart() {
         console.error('[Cart] Failed to sync cart from DB:', e?.message ?? e, e)
         // 兜底：显示本地数据，不阻塞页面；云端失败只做弱提示，不再用大块红条打断体验
         const local = sortByRecency(readLocalCart())
-        setItems(local)
+        setItems(withoutRemoved(local, removedIdsRef.current))
         if (local.length > 0) {
           setError(null)
           setNotice({ kind: 'offline', message: `云端暂不可用，当前为本地购物车（${classifyError(e).message}）` })
@@ -262,7 +367,7 @@ export function useCart() {
     } catch (e: any) {
       console.error('[Cart] syncCart fatal:', e?.message ?? e, e)
       const local = sortByRecency(readLocalCart())
-      setItems(local)
+      setItems(withoutRemoved(local, removedIdsRef.current))
       if (local.length > 0) {
         setError(null)
         setNotice({ kind: 'offline', message: `云端暂不可用，当前为本地购物车（${classifyError(e).message}）` })
@@ -327,11 +432,7 @@ export function useCart() {
 
   const saveToDB = useCallback(async (currentItems: CartItem[]) => {
     // 无论是否登录，先把当前购物车写入 localStorage，保证刷新后仍能读出
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentItems))
-    } catch (e) {
-      console.error('[Cart] Local save failed:', e)
-    }
+    writeLocalCart(currentItems)
 
     if (!isLoaded.current) return
 
@@ -383,35 +484,33 @@ export function useCart() {
           throw upsertResult.error
         }
 
-        const existingResult = await withTimeout(
-          supabase
-            .from('cart_items')
-            .select('id')
-            .eq('user_id', sessionUser.id),
-          DB_TIMEOUT_MS,
-          '查询购物车'
+        // 只删除「当前会话显式移除」的行 id，而不是「DB 有但本地没有的 id」。
+        // 后者会把其它设备 / 其它页面实例刚加、但本实例尚未同步到的商品误删掉，
+        // 这正是「购物车商品减少 / 底部商品莫名消失」的根因之一。
+        const removed = [...removedIdsRef.current].filter(
+          (id) => !currentItems.some((item) => item.id === id)
         )
-        const existingIds = new Set((existingResult.data || []).map((item: any) => item.id))
-        const currentIds = new Set(currentItems.map(item => item.id))
-
-        const staleIds = [...existingIds].filter(id => !currentIds.has(id))
-        if (staleIds.length > 0) {
+        if (removed.length > 0) {
           const delResult = await withTimeout(
             supabase
               .from('cart_items')
               .delete()
               .eq('user_id', sessionUser.id)
-              .in('id', staleIds),
+              .in('id', removed),
             DB_TIMEOUT_MS,
-            '清理过期购物车'
+            '清理已移除购物车'
           )
           if (delResult.error) {
-            console.error('[Cart] Stale cleanup failed:', delResult.error)
+            console.error('[Cart] Removed-items cleanup failed:', delResult.error)
+          } else {
+            removed.forEach((id) => removedIdsRef.current.delete(id))
           }
         }
-      } else {
-        // 清空购物车：删除该用户在 DB 中的全部行，
-        // 否则刷新后 syncCart 会从 DB 把旧商品读回来（清空无效）
+      }
+
+      // 用户主动清空：删除该用户全部行，否则刷新后 syncCart 会从 DB 读回旧商品（清空无效）。
+      // 仅在「购物车确实为空」时删，避免「清空后又立刻加购」被误删整个用户记录。
+      if (clearAllRef.current && currentItems.length === 0) {
         const delResult = await withTimeout(
           supabase
             .from('cart_items')
@@ -422,6 +521,8 @@ export function useCart() {
         )
         if (delResult.error) {
           console.error('[Cart] Clear DB failed:', delResult.error?.message ?? delResult.error, delResult.error)
+        } else {
+          clearAllRef.current = false
         }
       }
       setPendingSync(false)
@@ -433,6 +534,12 @@ export function useCart() {
       setNotice({ kind: 'pending', message: '云端暂不可用，更改已保存在本地，稍后将自动同步' })
     }
   }, [])
+
+  useEffect(() => {
+    // 立即写入本地：刚加购物车的商品第一时间就能被其它页面（购物车/结算）读到，
+    // 不依赖下方 500ms 防抖（防抖只用于云同步），否则快速跳转时新商品会「消失」。
+    writeLocalCart(items)
+  }, [items])
 
   useEffect(() => {
     if (saveTimer.current) {
@@ -513,6 +620,7 @@ export function useCart() {
   }
 
   function removeFromCart(id: string) {
+    removedIdsRef.current.add(id)
     setItems((prev) => prev.filter((i) => i.id !== id))
   }
 
@@ -530,6 +638,8 @@ export function useCart() {
   }
 
   function clearCart() {
+    clearAllRef.current = true
+    removedIdsRef.current.clear()
     setItems([])
   }
 

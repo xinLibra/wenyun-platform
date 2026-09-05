@@ -194,7 +194,7 @@ CREATE INDEX IF NOT EXISTS idx_favorites_generation_id
 1. 禁止 `select *`，只选列表必需列；
 2. `generations` 用 JSON 投影 `params->>title` / `params->tags`，不拉整个 `params`（其中可能含 base64 预览图、完整 prompt / DNA 等大字段）；
 3. `orders` 用 JSON 投影只取 `customization` / `shipping_info` 的渲染所需小字段，明确排除 `previewImage`（可能是 base64 大图）；
-4. `limit`：作品 50、订单 20，均按 `created_at desc`；
+4. `limit`：作品 50、订单 100，均按 `created_at desc`（订单前端默认展示最近 20 笔，可点「加载更多」逐批查看至 100 笔）；
 5. 均带 `user_id` 过滤，超时 / 错误日志打印 `message` 而非空 `Error {}`。
 
 ---
@@ -208,6 +208,7 @@ CREATE INDEX IF NOT EXISTS idx_favorites_generation_id
 |---|---|---|
 | `colors` | object | 部件配色 `{ 部件名: HEX }`（默认色/未换色时为空对象） |
 | `patternOpacity` | number | 纹样透明度 0-100（默认 100） |
+| `patternHash` | string | 纹样内容指纹（`url:` 短链 / `data:` 内容哈希），与存储尺寸无关，保证同图案降采样后规格键不变 |
 | `specKey` | string | 规格唯一键：`productId + 纹样 + colors + patternOpacity + 排版/文字参数` 的确定性哈希，同键合并数量 |
 | `addedAt` | string(ISO) | 首次加入购物车时间（购物车行 / 订单快照） |
 | `updatedAt` | string(ISO) | 最近一次操作（加购合并 / 改数量）时间，用于「最近操作置顶」排序 |
@@ -230,4 +231,3 @@ CREATE INDEX IF NOT EXISTS idx_favorites_generation_id
 >   ADD COLUMN IF NOT EXISTS added_at timestamptz,
 >   ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 > ```
-

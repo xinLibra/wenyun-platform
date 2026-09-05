@@ -52,6 +52,10 @@ const FALLBACK_IMAGE = '/placeholder-pattern-a.png'
 /** 网络不稳时自动重试：最多 3 次（1 次初始 + 2 次重试），间隔 1s */
 const MAX_ATTEMPTS = 3
 const RETRY_DELAY_MS = 1000
+/** 订单拉取上限：单次最多拉取最近 100 笔（配合前端「加载更多」分页展示） */
+const ORDERS_LIMIT = 100
+/** 前端每次「加载更多」新增展示的笔数 */
+const ORDER_PAGE_STEP = 20
 /** 订单本地缓存（按用户隔离）：失败时先展示上次成功结果并标「可能不是最新」 */
 const ORDERS_CACHE_PREFIX = 'orders_local_cache_'
 
@@ -127,6 +131,8 @@ export default function Orders() {
   const [error, setError] = useState<string | null>(null)
   /** 有缓存降级：展示上次成功结果并弱提示「可能不是最新」 */
   const [staleNotice, setStaleNotice] = useState(false)
+  /** 前端分页可见笔数：默认展示最近 20 笔，点「加载更多」逐批展示更多 */
+  const [visibleCount, setVisibleCount] = useState(ORDER_PAGE_STEP)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showReorderModal, setShowReorderModal] = useState(false)
   const [showReorderQuantityModal, setShowReorderQuantityModal] = useState(false)
@@ -254,7 +260,7 @@ export default function Orders() {
                 s_name:shipping_info->name, s_phone:shipping_info->phone, s_address:shipping_info->address`)
               .eq('user_id', userId)
               .order('created_at', { ascending: false })
-              .limit(20),
+              .limit(ORDERS_LIMIT),
             DB_TIMEOUT_MS,
             '加载订单'
           )
@@ -325,6 +331,7 @@ export default function Orders() {
           }))
 
           setOrders(orders)
+          setVisibleCount(ORDER_PAGE_STEP)
           setError(null)
           setStaleNotice(false)
           writeOrdersCache(userId, orders)
@@ -346,10 +353,12 @@ export default function Orders() {
       const cached = readOrdersCache(userId)
       if (cached && cached.data.length > 0) {
         setOrders(cached.data)
+        setVisibleCount(ORDER_PAGE_STEP)
         setStaleNotice(true)
         setError(null)
       } else {
         setOrders([])
+        setVisibleCount(ORDER_PAGE_STEP)
         setStaleNotice(false)
         setError(classifyError(lastError).message)
       }
@@ -358,6 +367,7 @@ export default function Orders() {
       console.error('[Orders]', e?.message ?? e, e)
       if (seq !== fetchSeq.current) return
       setOrders([])
+      setVisibleCount(ORDER_PAGE_STEP)
       setStaleNotice(false)
       setError(classifyError(e, '加载订单失败，请检查网络后重试').message)
     } finally {
@@ -521,14 +531,14 @@ export default function Orders() {
         )}
 
         <div className="space-y-6">
-          {orders.map((order, index) => {
+          {orders.slice(0, visibleCount).map((order, index) => {
             const product = products[order.product_id]
             return (
               <motion.div
                 key={order.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
+                transition={{ delay: Math.min(index * 0.1, 0.5) }}
               >
                 <FrameDecorations className="bg-rice-paper-light p-6">
                   <div className="flex justify-between items-center mb-4 pb-4 border-b border-deep-blue-100">
@@ -591,6 +601,17 @@ export default function Orders() {
             )
           })}
         </div>
+        {visibleCount < orders.length && (
+          <div className="mt-6 text-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setVisibleCount((n) => Math.min(n + ORDER_PAGE_STEP, orders.length))}
+            >
+              加载更多（剩余 {orders.length - visibleCount} 笔）
+            </Button>
+          </div>
+        )}
 
         {selectedOrder && (
           <motion.div
@@ -676,12 +697,19 @@ export default function Orders() {
                           </div>
                         </>
                       )}
-                      <div className="flex justify-between">
-                        <span className="font-song text-deep-blue-light text-sm">加入购物车时间</span>
-                        <span className="font-song text-deep-blue text-sm">
-                          {fmtDateTime(selectedOrder.customization?.addedAt || selectedOrder.created_at)}
-                        </span>
-                      </div>
+                      {selectedOrder.customization?.addedAt ? (
+                        <div className="flex justify-between">
+                          <span className="font-song text-deep-blue-light text-sm">加入购物车时间</span>
+                          <span className="font-song text-deep-blue text-sm">
+                            {fmtDateTime(selectedOrder.customization.addedAt)}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex justify-between">
+                          <span className="font-song text-deep-blue-light text-sm">加入购物车时间</span>
+                          <span className="font-song text-deep-blue text-sm text-deep-blue-light">无（直接购买）</span>
+                        </div>
+                      )}
                       {selectedOrder.customization?.updatedAt &&
                         selectedOrder.customization.updatedAt !== selectedOrder.customization?.addedAt && (
                           <div className="flex justify-between">
