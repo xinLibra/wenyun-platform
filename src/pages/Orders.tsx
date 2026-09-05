@@ -79,6 +79,13 @@ function writeOrdersCache(userId: string, data: Order[]) {
   }
 }
 
+function orderTotal(order: Order): string {
+  const product = products[order.product_id]
+  const price = parseFloat(product?.price || '0') || 0
+  const quantity = order.quantity || 1
+  return (price * quantity).toFixed(0)
+}
+
 /** 缩略图独立加载：失败时显示占位图，绝不阻塞整页渲染 */
 function SafeImg({ src, alt, className }: { src: string; alt?: string; className?: string }) {
   const [failed, setFailed] = useState(false)
@@ -253,10 +260,10 @@ export default function Orders() {
                 c_textOverlay:customization->textOverlay, c_textFont:customization->textFont,
                 c_textSize:customization->textSize, c_textPositionX:customization->textPositionX,
                 c_textPositionY:customization->textPositionY,
-                c_previewImageUrl:customization->>'previewImageUrl',
-                c_previewImageUrlUnder:customization->>'preview_image_url',
+                c_previewImageUrl:customization->>previewImageUrl,
+                c_previewImageUrlUnder:customization->>preview_image_url,
                 c_colors:customization->colors, c_patternOpacity:customization->patternOpacity,
-                c_addedAt:customization->>'addedAt', c_updatedAt:customization->>'updatedAt',
+                c_addedAt:customization->>addedAt, c_updatedAt:customization->>updatedAt,
                 s_name:shipping_info->name, s_phone:shipping_info->phone, s_address:shipping_info->address`)
               .eq('user_id', userId)
               .order('created_at', { ascending: false })
@@ -579,7 +586,7 @@ export default function Orders() {
                         <span className="font-song text-deep-blue-light text-sm">
                           下单 {fmtDateTime(order.created_at)}
                         </span>
-                        <span className="font-shufa text-palace-red text-lg">¥{product?.price}</span>
+                        <span className="font-shufa text-palace-red text-lg">¥{orderTotal(order)}</span>
                       </div>
                     </div>
                     <div className="flex items-center text-deep-blue-light">
@@ -731,7 +738,7 @@ export default function Orders() {
                       </div>
                       <div className="flex justify-between">
                         <span className="font-song text-deep-blue">合计金额</span>
-                        <span className="font-shufa text-palace-red text-xl">¥{products[selectedOrder.product_id]?.price}</span>
+                        <span className="font-shufa text-palace-red text-xl">¥{orderTotal(selectedOrder)}</span>
                       </div>
                     </div>
 

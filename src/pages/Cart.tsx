@@ -131,8 +131,9 @@ export default function Cart() {
         const product = products[item.productId]
         // 旧购物车项可能带 data: base64 预览/纹样图：统一转 Storage 短链，订单只存短 URL 不存大 base64
         const customization = { ...(item.customization || {}) }
-        customization.addedAt = customization.addedAt || item.addedAt
-        customization.updatedAt = customization.updatedAt || item.updatedAt || item.addedAt
+        const cartAddedAt = customization.addedAt || item.addedAt || item.updatedAt || new Date().toISOString()
+        customization.addedAt = cartAddedAt
+        customization.updatedAt = customization.updatedAt || item.updatedAt || cartAddedAt
         // 统一产出「定制预览短链」：复用已有预览（加购时生成的 3D 截图/合成图），
         // 旧购物车项无预览则现场生成产品轮廓+纹样合成图。image_url 只写这个预览短链，
         // 绝不写纹样原图（禁止纯纹样 tile 当订单主图）。
