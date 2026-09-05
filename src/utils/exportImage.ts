@@ -308,6 +308,8 @@ export interface ProductPreviewParams {
   rotation?: number
   positionX?: number
   positionY?: number
+  /** 纹样透明度（0-100），仅影响合成缩略图里的纹样明度 */
+  patternOpacity?: number
 }
 
 interface ShapeSpec {
@@ -633,7 +635,9 @@ function fillPatternClipped(
 ) {
   const { layoutMode = 'center', scale = 100, rotation = 0, positionX = 50, positionY = 50 } = params
   ctx.save()
-  ctx.globalAlpha = 0.95
+  // 纹样透明度：默认 100 时保持原透明度 0.95，调低后按比例衰减
+  const opacity = Math.max(0.05, Math.min(1, (params.patternOpacity ?? 100) / 100))
+  ctx.globalAlpha = 0.95 * opacity
   const cx = rect.x + rect.w / 2
   const cy = rect.y + rect.h / 2
 
@@ -777,29 +781,40 @@ export async function buildProductPreviewDataUrl(opts: {
   rotation?: number
   positionX?: number
   positionY?: number
+  /** 纹样透明度（0-100），合成兜底时反映到缩略图 */
+  patternOpacity?: number
   /** 生成完成后回调实际来源：'capture3d'（3D 截图）| 'composite'（产品轮廓+纹样合成）| ''（失败） */
   onSource?: (source: 'capture3d' | 'composite') => void
 }): Promise<string> {
-  // 1) 3D 截图优先
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+  const captureOnce = async (): Promise<string | null> => {
+    if (!opts.tryCapture3D) return null
+    const raw = opts.tryCapture3D()
+    const shot = raw && typeof (raw as Promise<unknown>).then === 'function'
+      ? await (raw as Promise<string | null>)
+      : (raw as string | null)
+    if (shot && !/^data:/i.test(shot)) return shot // 非 dataURL（如已上传短链）直接可用
+    if (shot && !(await isUniformPreviewImage(shot))) return shot
+    return null // 空白 / 未贴纹样：不采用
+  }
+
+  // 1) 3D 截图优先：整帧渲染（等 2 帧）+ 失败重试 2 次，尽力拿到「含配色/透明度」的完整产品图，
+  //    不轻易落回合成轮廓（那会丢失换色/透明效果）
   if (opts.tryCapture3D) {
-    try {
-      const raw = opts.tryCapture3D()
-      const shot = raw && typeof (raw as Promise<unknown>).then === 'function'
-        ? await (raw as Promise<string | null>)
-        : (raw as string | null)
-      if (shot) {
-        if (/^data:/i.test(shot) && (await isUniformPreviewImage(shot))) {
-          console.warn('[Preview] 3D 截图空白/未贴纹样，改用产品轮廓合成图')
-        } else {
+    for (let i = 0; i < 3; i++) {
+      try {
+        const shot = await captureOnce()
+        if (shot) {
           opts.onSource?.('capture3d')
           return shot
         }
+      } catch (e) {
+        console.warn('[Preview] 3D 截图失败（第', i + 1, '次）:', e)
       }
-    } catch (e) {
-      console.warn('[Preview] 3D 截图失败，改用产品轮廓合成图:', e)
+      if (i < 2) await wait(300)
     }
   }
-  // 2) 产品轮廓 + 纹样合成
+  // 2) 产品轮廓 + 纹样合成（3D 不可用时的兜底：保持当前排版与透明度）
   if (opts.patternImage) {
     try {
       const url = await generateProductPreviewDataUrl({
@@ -810,6 +825,7 @@ export async function buildProductPreviewDataUrl(opts: {
         rotation: opts.rotation,
         positionX: opts.positionX,
         positionY: opts.positionY,
+        patternOpacity: opts.patternOpacity,
       }, 384)
       if (url) {
         opts.onSource?.('composite')

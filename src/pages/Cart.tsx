@@ -11,9 +11,24 @@ import { products } from '../lib/products'
 import { ensurePublicImageUrl } from '../lib/storage'
 import { generateProductPreviewDataUrl } from '../utils/exportImage'
 import PatternPreview from '../components/PatternPreview'
+import { formatSpecDiffs } from '../lib/cartSpec'
 
 /** 兜底占位图（与 useCart 保持一致） */
 const FALLBACK_IMAGE = '/placeholder-pattern-a.png'
+
+/** 时间显示：本地化为 月-日 时:分 */
+function fmtShort(iso?: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
 /** 缩略图独立加载：失败时显示占位图，绝不阻塞整页渲染 */
 function SafeImg({ src, alt, className }: { src: string; alt?: string; className?: string }) {
@@ -141,6 +156,7 @@ export default function Cart() {
               rotation: customization.rotation || 0,
               positionX: customization.positionX || 50,
               positionY: customization.positionY || 50,
+              patternOpacity: customization.patternOpacity ?? 100,
             }, 384)
             if (generated) {
               console.log('[OrderPreview] source= composite')
@@ -406,7 +422,19 @@ export default function Cart() {
                       )}
                     </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-shufa text-lg text-deep-blue mb-2 truncate" title={displayName}>{displayName}</p>
+                    <p className="font-shufa text-lg text-deep-blue mb-1 truncate" title={displayName}>{displayName}</p>
+                    {formatSpecDiffs(item.customization).length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {formatSpecDiffs(item.customization).map((diff) => (
+                          <span
+                            key={diff}
+                            className="text-[11px] font-song text-palace-red bg-palace-red/5 border border-palace-red/20 rounded-sm px-1.5 py-0.5"
+                          >
+                            {diff}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => updateQuantity(item.id, item.quantity - 1)}
@@ -422,6 +450,10 @@ export default function Cart() {
                         +
                       </button>
                     </div>
+                    <p className="font-song text-[11px] text-deep-blue-light mt-1.5">
+                      加入 {item.addedAt ? fmtShort(item.addedAt) : '-'}
+                      {item.updatedAt && item.updatedAt !== item.addedAt ? ` · 更新 ${fmtShort(item.updatedAt)}` : ''}
+                    </p>
                   </div>
                   {/* 右列：价格在上、删除在下，独立分区互不遮挡 */}
                   <div className="flex flex-col items-end justify-between flex-shrink-0 pl-2">

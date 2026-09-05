@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { products } from '../lib/products'
 import { classifyError, logSupabaseConfig, withTimeout } from '../lib/async'
+import { computeSpecKey, specKeyOf } from '../lib/cartSpec'
 
 export interface CartItem {
   id: string
@@ -15,6 +16,14 @@ export interface CartItem {
   price?: string
   /** 产品默认图 / 定制预览 URL（渲染兜底，避免空白格） */
   image?: string
+  /** 规格唯一键：相同 specKey 视为同一条（合并数量）；不同则新开一行 */
+  specKey?: string
+  /** 该行定制的完整外观快照（3D 截图或产品合成图），合并数量时保留已有图 */
+  snapshotImage?: string
+  /** 首次加入时间 */
+  addedAt?: string
+  /** 最近一次操作（加购/改数量/合并）时间 */
+  updatedAt?: string
 }
 
 const STORAGE_KEY = 'cart_items_local'
@@ -29,21 +38,94 @@ const NOTICE_AUTO_HIDE_MS = 6000
 /** 云同步失败后自动重试一次的时间：云端恢复后可静默同步（不自动循环，避免持续刷请求） */
 const AUTO_RETRY_MS = 15000
 
-/** 兼容填充：name/price/image 未写入时从产品表补齐，保证购物车/订单不会出现无图无名条目 */
+function nowIso(): string {
+  return new Date().toISOString()
+}
+
+function tsOf(v: unknown): number {
+  if (typeof v !== 'string' || !v) return 0
+  const t = new Date(v).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
+/** 按 updatedAt（次选 addedAt）降序：最近操作 / 最近加入在最上方 */
+function sortByRecency(list: CartItem[]): CartItem[] {
+  return [...list].sort((a, b) => {
+    const ta = tsOf(a.updatedAt || a.addedAt)
+    const tb = tsOf(b.updatedAt || b.addedAt)
+    if (tb !== ta) return tb - ta
+    // 同为旧数据的稳定兜底：按加入时间倒序
+    return tsOf(b.addedAt) - tsOf(a.addedAt)
+  })
+}
+
+/** 兼容填充：name/price/image 未写入时从产品表补齐；并按 customization 计算 specKey / 时间 / 快照 */
 function enrichCartItem(item: any): CartItem {
   const product = item?.productId ? products[item.productId] : undefined
   const fallbackName = product?.name || '未命名商品'
   const fallbackPrice = product?.price || '0'
   const fallbackImage = product?.image || FALLBACK_IMAGE
+  const customization: Record<string, any> = item?.customization || {}
+  const productId = item?.productId || ''
+  const generationId = item?.generationId ?? null
+  const dbCreatedAt =
+    typeof item?.createdAt === 'string'
+      ? item.createdAt
+      : typeof item?.created_at === 'string'
+        ? item.created_at
+        : undefined
+
+  const specKey =
+    (typeof item?.specKey === 'string' && item.specKey) ||
+    computeSpecKey({ productId, generationId, customization })
+  const addedAt =
+    (typeof item?.addedAt === 'string' && item.addedAt) ||
+    (typeof customization.addedAt === 'string' && customization.addedAt) ||
+    dbCreatedAt
+  const updatedAt =
+    (typeof item?.updatedAt === 'string' && item.updatedAt) ||
+    (typeof customization.updatedAt === 'string' && customization.updatedAt) ||
+    addedAt ||
+    dbCreatedAt
+
+  const snapshotImage =
+    (typeof item?.snapshotImage === 'string' && item.snapshotImage.trim() && item.snapshotImage) ||
+    (typeof customization.previewImageUrl === 'string' && customization.previewImageUrl.trim() && customization.previewImageUrl) ||
+    (typeof customization.previewImage === 'string' && customization.previewImage.trim() && customization.previewImage) ||
+    undefined
+
   return {
     id: item?.id || crypto.randomUUID(),
-    productId: item?.productId || '',
-    generationId: item?.generationId ?? null,
-    customization: item?.customization || {},
+    productId,
+    generationId,
+    customization,
     quantity: typeof item?.quantity === 'number' && item.quantity > 0 ? item.quantity : 1,
     name: (typeof item?.name === 'string' && item.name.trim()) ? item.name : fallbackName,
     price: (typeof item?.price === 'string' && item.price.trim()) ? item.price : fallbackPrice,
     image: (typeof item?.image === 'string' && item.image.trim()) ? item.image : fallbackImage,
+    specKey,
+    snapshotImage,
+    addedAt,
+    updatedAt,
+  }
+}
+
+/** 把规格元信息（specKey / 加入时间 / 更新时间）落到 item 及其 customization，便于持久化 */
+function stampMeta(item: CartItem, patch: { specKey?: string; addedAt?: string; updatedAt?: string }): CartItem {
+  const specKey = patch.specKey || item.specKey || ''
+  const addedAt = patch.addedAt || item.addedAt || nowIso()
+  const updatedAt = patch.updatedAt || item.updatedAt || addedAt
+  return {
+    ...item,
+    specKey,
+    addedAt,
+    updatedAt,
+    customization: {
+      ...(item.customization || {}),
+      specKey,
+      addedAt,
+      updatedAt,
+    },
   }
 }
 
@@ -102,7 +184,7 @@ export function useCart() {
 
       if (!sessionRes.ok) {
         // 登录状态服务本身不可用（断网 / Supabase 暂停）→ 云端不可用：弱提示 + 本地兜底
-        const local = readLocalCart()
+        const local = sortByRecency(readLocalCart())
         setItems(local)
         setError(null)
         setPendingSync(local.length > 0)
@@ -116,7 +198,7 @@ export function useCart() {
       const sessionUser = sessionRes.user
       if (!sessionUser) {
         // 未登录：直接显示本地购物车（本地购物车不要求登录，也不会空转 loading）
-        setItems(readLocalCart())
+        setItems(sortByRecency(readLocalCart()))
         setError(null)
         setNotice(null)
         setPendingSync(false)
@@ -142,20 +224,23 @@ export function useCart() {
         }
 
         if (dbCart && dbCart.length > 0) {
-          const dbItems: CartItem[] = dbCart.map((item: any) =>
-            enrichCartItem({
-              id: item.id,
-              productId: item.product_id,
-              generationId: item.generation_id,
-              customization: item.customization,
-              quantity: item.quantity,
-            })
+          const dbItems: CartItem[] = sortByRecency(
+            dbCart.map((item: any) =>
+              enrichCartItem({
+                id: item.id,
+                productId: item.product_id,
+                generationId: item.generation_id,
+                customization: item.customization,
+                quantity: item.quantity,
+                createdAt: item.created_at,
+              })
+            )
           )
           setItems(dbItems)
         } else {
           // 关键修复：DB 无数据时绝不把本地已有购物车清空，
           // 否则刷新/重新登录后 localStorage 里的商品会被 [] 覆盖 →「购物车又变空」
-          setItems(readLocalCart())
+          setItems(sortByRecency(readLocalCart()))
         }
         setError(null)
         setNotice(null)
@@ -163,7 +248,7 @@ export function useCart() {
       } catch (e: any) {
         console.error('[Cart] Failed to sync cart from DB:', e?.message ?? e, e)
         // 兜底：显示本地数据，不阻塞页面；云端失败只做弱提示，不再用大块红条打断体验
-        const local = readLocalCart()
+        const local = sortByRecency(readLocalCart())
         setItems(local)
         if (local.length > 0) {
           setError(null)
@@ -176,7 +261,7 @@ export function useCart() {
       }
     } catch (e: any) {
       console.error('[Cart] syncCart fatal:', e?.message ?? e, e)
-      const local = readLocalCart()
+      const local = sortByRecency(readLocalCart())
       setItems(local)
       if (local.length > 0) {
         setError(null)
@@ -240,8 +325,6 @@ export function useCart() {
   /** 关闭弱提示（不中断后台同步，也不影响本地数据） */
   const dismissNotice = useCallback(() => setNotice(null), [])
 
-  const COMPARE_FIELDS = ['scale', 'rotation', 'positionX', 'positionY', 'blendMode', 'patternOpacity', 'patternImage', 'colors']
-
   const saveToDB = useCallback(async (currentItems: CartItem[]) => {
     // 无论是否登录，先把当前购物车写入 localStorage，保证刷新后仍能读出
     try {
@@ -268,14 +351,27 @@ export function useCart() {
           supabase
             .from('cart_items')
             .upsert(
-              currentItems.map(item => ({
-                id: item.id,
-                user_id: sessionUser.id,
-                product_id: item.productId,
-                generation_id: item.generationId || null,
-                customization: item.customization,
-                quantity: item.quantity,
-              })),
+              currentItems.map(item => {
+                // 规格键与时间戳随 customization JSON 持久化（无需新增 DB 列即可跨设备恢复）
+                const customization = {
+                  ...(item.customization || {}),
+                  specKey: item.specKey || item.customization?.specKey || computeSpecKey({
+                    productId: item.productId,
+                    generationId: item.generationId,
+                    customization: item.customization,
+                  }),
+                  addedAt: item.addedAt || item.customization?.addedAt || nowIso(),
+                  updatedAt: item.updatedAt || item.customization?.updatedAt || nowIso(),
+                }
+                return {
+                  id: item.id,
+                  user_id: sessionUser.id,
+                  product_id: item.productId,
+                  generation_id: item.generationId || null,
+                  customization,
+                  quantity: item.quantity,
+                }
+              }),
               { onConflict: 'id' }
             ),
           DB_TIMEOUT_MS,
@@ -353,36 +449,66 @@ export function useCart() {
     }
   }, [items, saveToDB])
 
-  function addToCart(item: Omit<CartItem, 'id'>) {
-    // 兼容填充：调用方未写 name/price/image 时从产品表补齐，禁止 undefined/空字符串导致空白格
-    const enriched = enrichCartItem(item)
+  /** 加购核心逻辑：按 specKey 判断规格是否相同 */
+  function addToCart(input: Omit<CartItem, 'id'>) {
+    const enriched = enrichCartItem(input)
+    const specKey = computeSpecKey({
+      productId: enriched.productId,
+      generationId: enriched.generationId,
+      customization: enriched.customization,
+    })
+    const now = nowIso()
+
     setItems((prev) => {
+      // 找同规格：优先已带 specKey 的精确比对；旧数据按同样规则现场计算
       const existingIndex = prev.findIndex((i) => {
         if (i.productId !== enriched.productId) return false
-
-        for (const key of COMPARE_FIELDS) {
-          const existingVal = i.customization[key]
-          const newVal = enriched.customization[key]
-          if (JSON.stringify(existingVal) !== JSON.stringify(newVal)) {
-            return false
-          }
-        }
-
-        return true
+        if (i.specKey) return i.specKey === specKey
+        return specKeyOf({ productId: i.productId, generationId: i.generationId, customization: i.customization }) === specKey
       })
 
       if (existingIndex >= 0) {
-        const newItems = [...prev]
-        newItems[existingIndex] = {
-          ...newItems[existingIndex],
-          ...enriched,
-          quantity: newItems[existingIndex].quantity + enriched.quantity,
-        }
-        return newItems
+        const old = prev[existingIndex]
+        const oldCustom = old.customization || {}
+        const newCustom = enriched.customization || {}
+        // 合并：保留该规格原有截图与首次加入时间，数量相加并刷新最近操作时间。
+        // 注意：新加的 item 可能缺 addedAt/快照，合并时以旧行为准，不覆盖为 undefined
+        const merged: CartItem = stampMeta(
+          {
+            ...old,
+            productId: old.productId || enriched.productId,
+            generationId: old.generationId ?? enriched.generationId,
+            quantity: old.quantity + enriched.quantity,
+            name: old.name || enriched.name,
+            price: old.price || enriched.price,
+            image: old.image || enriched.image,
+            // 快照沿用旧行（同规格外观一致），旧行无快照时用本次新快照
+            snapshotImage: old.snapshotImage || enriched.snapshotImage,
+            customization: {
+              ...newCustom,
+              ...oldCustom,
+              specKey,
+              addedAt: oldCustom.addedAt || old.addedAt || now,
+              updatedAt: now,
+              previewImageUrl: oldCustom.previewImageUrl || newCustom.previewImageUrl,
+              previewImage:
+                (oldCustom.previewImageUrl || oldCustom.previewImage) ||
+                newCustom.previewImageUrl ||
+                newCustom.previewImage,
+            },
+          },
+          { specKey, updatedAt: now }
+        )
+        const others = prev.filter((p) => p.id !== old.id)
+        return sortByRecency([merged, ...others])
       }
 
-      const uuid = crypto.randomUUID()
-      return [...prev, { ...enriched, id: uuid }]
+      // 新规格：新开一行（含完整快照），置于列表最上方
+      const newItem = stampMeta(
+        enrichCartItem({ ...enriched, id: crypto.randomUUID(), specKey, addedAt: now, updatedAt: now }),
+        { specKey, addedAt: now, updatedAt: now }
+      )
+      return sortByRecency([newItem, ...prev])
     })
   }
 
@@ -395,7 +521,12 @@ export function useCart() {
       removeFromCart(id)
       return
     }
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity } : i)))
+    setItems((prev) => {
+      const updated = prev.map((i) =>
+        i.id === id ? stampMeta({ ...i, quantity }, { updatedAt: nowIso() }) : i
+      )
+      return sortByRecency(updated)
+    })
   }
 
   function clearCart() {

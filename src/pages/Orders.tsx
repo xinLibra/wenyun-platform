@@ -8,6 +8,15 @@ import { classifyError, logSupabaseConfig, sleep, withTimeout } from '../lib/asy
 import { useNavigate } from 'react-router-dom'
 import { products } from '../lib/products'
 import { getOrderPreviewUrl } from '../lib/orderPreview'
+import { formatSpecDiffs } from '../lib/cartSpec'
+
+/** 时间显示：本地化为 完整 年月日 时:分:秒 */
+function fmtDateTime(raw?: string): string {
+  if (!raw) return '-'
+  const d = new Date(raw.endsWith('Z') || /[+-]\d\d:\d\d$/.test(raw) ? raw : raw + 'Z')
+  if (Number.isNaN(d.getTime())) return '-'
+  return d.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+}
 
 interface Order {
   id: string
@@ -240,6 +249,8 @@ export default function Orders() {
                 c_textPositionY:customization->textPositionY,
                 c_previewImageUrl:customization->>'previewImageUrl',
                 c_previewImageUrlUnder:customization->>'preview_image_url',
+                c_colors:customization->colors, c_patternOpacity:customization->patternOpacity,
+                c_addedAt:customization->>'addedAt', c_updatedAt:customization->>'updatedAt',
                 s_name:shipping_info->name, s_phone:shipping_info->phone, s_address:shipping_info->address`)
               .eq('user_id', userId)
               .order('created_at', { ascending: false })
@@ -301,6 +312,10 @@ export default function Orders() {
               textPositionY: r.c_textPositionY,
               previewImageUrl: r.c_previewImageUrl,
               preview_image_url: r.c_previewImageUrlUnder,
+              colors: r.c_colors,
+              patternOpacity: r.c_patternOpacity,
+              addedAt: r.c_addedAt,
+              updatedAt: r.c_updatedAt,
             },
             shipping_info: {
               name: r.s_name,
@@ -532,21 +547,27 @@ export default function Orders() {
                     </div>
                     <div className="flex-1">
                       <h3 className="font-shufa text-lg text-deep-blue mb-1">{product?.name}</h3>
-                      <p className="font-song text-xs text-deep-blue-light mb-2">
+                      <p className="font-song text-xs text-deep-blue-light mb-1">
                         定制参数：尺寸 {order.customization?.scale || 100}%，旋转 {order.customization?.rotation || 0}°
                         {order.customization?.textOverlay && (
                           <span>，文字：{order.customization.textOverlay}</span>
                         )}
                       </p>
+                      {formatSpecDiffs(order.customization).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-1.5">
+                          {formatSpecDiffs(order.customization).map((diff) => (
+                            <span
+                              key={diff}
+                              className="text-[11px] font-song text-palace-red bg-palace-red/5 border border-palace-red/20 rounded-sm px-1.5 py-0.5"
+                            >
+                              {diff}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
                         <span className="font-song text-deep-blue-light text-sm">
-                          {(() => {
-                            const raw = order.created_at;
-                            const utcDateStr = raw.endsWith('Z') ? raw : raw + 'Z';
-                            const date = new Date(utcDateStr);
-                            const formatted = date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-                            return formatted;
-                          })()}
+                          下单 {fmtDateTime(order.created_at)}
                         </span>
                         <span className="font-shufa text-palace-red text-lg">¥{product?.price}</span>
                       </div>
@@ -615,6 +636,18 @@ export default function Orders() {
                             <span>，文字：{selectedOrder.customization.textOverlay}（{selectedOrder.customization.textSize || 16}px）</span>
                           )}
                         </p>
+                        {formatSpecDiffs(selectedOrder.customization).length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            {formatSpecDiffs(selectedOrder.customization).map((diff) => (
+                              <span
+                                key={diff}
+                                className="text-[11px] font-song text-palace-red bg-palace-red/5 border border-palace-red/20 rounded-sm px-1.5 py-0.5"
+                              >
+                                {diff}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -644,16 +677,23 @@ export default function Orders() {
                         </>
                       )}
                       <div className="flex justify-between">
-                        <span className="font-song text-deep-blue-light text-sm">下单时间</span>
+                        <span className="font-song text-deep-blue-light text-sm">加入购物车时间</span>
                         <span className="font-song text-deep-blue text-sm">
-                          {(() => {
-                            const raw = selectedOrder.created_at;
-                            const utcDateStr = raw.endsWith('Z') ? raw : raw + 'Z';
-                            const date = new Date(utcDateStr);
-                            const formatted = date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-                            return formatted;
-                          })()}
+                          {fmtDateTime(selectedOrder.customization?.addedAt || selectedOrder.created_at)}
                         </span>
+                      </div>
+                      {selectedOrder.customization?.updatedAt &&
+                        selectedOrder.customization.updatedAt !== selectedOrder.customization?.addedAt && (
+                          <div className="flex justify-between">
+                            <span className="font-song text-deep-blue-light text-sm">最近更新</span>
+                            <span className="font-song text-deep-blue text-sm">
+                              {fmtDateTime(selectedOrder.customization.updatedAt)}
+                            </span>
+                          </div>
+                        )}
+                      <div className="flex justify-between">
+                        <span className="font-song text-deep-blue-light text-sm">下单时间</span>
+                        <span className="font-song text-deep-blue text-sm">{fmtDateTime(selectedOrder.created_at)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="font-song text-deep-blue-light text-sm">订单状态</span>

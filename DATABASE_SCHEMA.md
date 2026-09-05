@@ -196,3 +196,38 @@ CREATE INDEX IF NOT EXISTS idx_favorites_generation_id
 3. `orders` 用 JSON 投影只取 `customization` / `shipping_info` 的渲染所需小字段，明确排除 `previewImage`（可能是 base64 大图）；
 4. `limit`：作品 50、订单 20，均按 `created_at desc`；
 5. 均带 `user_id` 过滤，超时 / 错误日志打印 `message` 而非空 `Error {}`。
+
+---
+
+## 十、购物车 / 订单「规格快照」说明（存于 `customization` JSON，无需新增列）
+
+购物车合并与订单快照的规格信息全部内嵌在 `cart_items.customization` / `orders.customization` JSON 中，
+**不新增 DB 顶层列**（避免需要迁移列并重新授权 RLS）。前端统一由 `src/lib/cartSpec.ts` 负责计算与展示。
+
+| JSON 字段 | 类型 | 说明 |
+|---|---|---|
+| `colors` | object | 部件配色 `{ 部件名: HEX }`（默认色/未换色时为空对象） |
+| `patternOpacity` | number | 纹样透明度 0-100（默认 100） |
+| `specKey` | string | 规格唯一键：`productId + 纹样 + colors + patternOpacity + 排版/文字参数` 的确定性哈希，同键合并数量 |
+| `addedAt` | string(ISO) | 首次加入购物车时间（购物车行 / 订单快照） |
+| `updatedAt` | string(ISO) | 最近一次操作（加购合并 / 改数量）时间，用于「最近操作置顶」排序 |
+| `previewImageUrl` / `previewImage` | string | 完整 3D 截图或产品合成图（Storage 短链或 base64），该规格行的外观快照 |
+
+合并/排序规则：
+
+1. `specKey` 相同 → 同规格，`quantity += n`、`updatedAt = now`，行移动到列表顶部；
+2. `specKey` 不同（换色 / 改透明度 / 换纹样等）→ 新开一行，占位 `crypto.randomUUID()`，插到顶部；
+3. 列表按 `updatedAt`（次选 `addedAt` / `created_at`）降序渲染；
+4. 结算下单成功 → 删除对应用户 `cart_items` 行，订单中通过 `customization` 保留完整快照（图 / 规格 / 数量 / 时间）；
+5. 再次购买 / 重新定制时读取 `customization`（含 `colors`、`patternOpacity`）还原规格。
+
+> 若后续希望直接在 SQL 层按规格聚合，可自行添加下列可选列（非必须，前端 JSON 方案已可用）：
+>
+> ```sql
+> ALTER TABLE cart_items
+>   ADD COLUMN IF NOT EXISTS spec_key text,
+>   ADD COLUMN IF NOT EXISTS snapshot_url text,
+>   ADD COLUMN IF NOT EXISTS added_at timestamptz,
+>   ADD COLUMN IF NOT EXISTS updated_at timestamptz;
+> ```
+

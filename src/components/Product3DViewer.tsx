@@ -450,7 +450,8 @@ function LoaderFallback() {
   )
 }
 
-/** 注册截图函数：截图前先强制渲染一帧，确保 colorMap/material 变更已经落到画布 */
+/** 注册截图函数：先强制渲染并等 2 帧再取图，
+ * 确保 colorMap / patternOpacity / 纹样贴图等变更已经真正落到画布（避免截图残缺/半加载） */
 function CaptureManager({
   captureRef,
 }: {
@@ -459,14 +460,26 @@ function CaptureManager({
   const { gl, scene, camera } = useThree()
   useEffect(() => {
     if (!captureRef) return
-    captureRef.current = async () => {
-      try {
-        gl.render(scene, camera)
-        return gl.domElement.toDataURL('image/png')
-      } catch {
-        return null
-      }
-    }
+    captureRef.current = () =>
+      new Promise<string | null>((resolve) => {
+        let attempt = 0
+        const tick = () => {
+          let shot: string | null = null
+          try {
+            gl.render(scene, camera)
+            if (attempt < 2) {
+              attempt += 1
+              requestAnimationFrame(tick)
+              return
+            }
+            shot = gl.domElement.toDataURL('image/png')
+          } catch {
+            shot = null
+          }
+          resolve(shot)
+        }
+        tick()
+      })
   }, [captureRef, gl, scene, camera])
   return null
 }

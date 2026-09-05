@@ -356,11 +356,23 @@ export default function CustomizeProduct() {
       return
     }
     setProduct3DConfig(null)
+    // 从该产品草稿恢复上次配色/透明度（刷新/切换后自动还原，而不是清空成默认）
+    const restoreDraftAppearance = () => {
+      const draftKey = `product_config_draft_${selectedProduct}`
+      const raw = safeGetItem(draftKey)
+      if (!raw) return
+      try {
+        const d = JSON.parse(raw)
+        if (d && typeof d === 'object') {
+          if (d.colors && typeof d.colors === 'object') setProductColors(d.colors)
+          if (typeof d.patternOpacity === 'number') setPatternOpacity(d.patternOpacity)
+        }
+      } catch { /* ignore */ }
+    }
     loadProduct3DConfig(selectedProduct).then((cfg) => {
       if (cancelled) return
       setProduct3DConfig(cfg)
-      // 不默认上深色：空 colorMap → 保持 glb 原色；用户点色板后再写入
-      setProductColors({})
+      restoreDraftAppearance()
     })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -482,6 +494,11 @@ export default function CustomizeProduct() {
           setTextRotation(draft.text.textRotation || 0)
         }
         setProductColors(draft.colors || {})
+        if (typeof draft.patternOpacity === 'number') {
+          setPatternOpacity(draft.patternOpacity)
+        } else {
+          setPatternOpacity(100)
+        }
         setActiveColorPart(null)
         return
       } catch {
@@ -507,6 +524,7 @@ export default function CustomizeProduct() {
     setTextRotation(0)
     setLayoutMode('free')
     setProductColors({})
+    setPatternOpacity(100)
     setActiveColorPart(null)
   }
   
@@ -580,6 +598,9 @@ export default function CustomizeProduct() {
         setPositionY(customization?.positionY || 50)
         setBlendMode(customization?.blendMode || 'normal')
         setPatternOpacity(customization?.patternOpacity ?? 100)
+        if (customization?.colors && typeof customization.colors === 'object') {
+          setProductColors(customization.colors)
+        }
         try { localStorage.removeItem('reorder_product') } catch { /* ignore */ }
         return
       } catch {
@@ -615,6 +636,12 @@ export default function CustomizeProduct() {
         setPositionX(draft.params?.positionX || 50)
         setPositionY(draft.params?.positionY || 50)
         setBlendMode(draft.params?.blendMode || 'screen')
+        if (draft.colors && typeof draft.colors === 'object') {
+          setProductColors(draft.colors)
+        }
+        if (typeof draft.patternOpacity === 'number') {
+          setPatternOpacity(draft.patternOpacity)
+        }
         if (draft.text && !has3DConfig(selectedProduct)) {
           setTextOverlay(draft.text.textOverlay || '')
           setTextFont(draft.text.textFont || 'shufa')
@@ -642,10 +669,11 @@ export default function CustomizeProduct() {
       params: { scale, rotation, positionX, positionY, blendMode },
       text: { textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
       colors: productColors,
+      patternOpacity,
       updatedAt: new Date().toISOString()
     }
     safeSetItem(draftKey, JSON.stringify(draft))
-  }, [selectedProduct, selectedMaterial, selectedPatternImage, layoutMode, scale, rotation, positionX, positionY, blendMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, productColors])
+  }, [selectedProduct, selectedMaterial, selectedPatternImage, layoutMode, scale, rotation, positionX, positionY, blendMode, textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation, productColors, patternOpacity])
 
   // ===== 色相/明度滑条：实时写入当前激活部件 =====
   useEffect(() => {
@@ -979,6 +1007,8 @@ export default function CustomizeProduct() {
       layoutMode,
       params: { scale, rotation, positionX, positionY, blendMode },
       text: { textOverlay, textFont, textSize, textPositionX, textPositionY, textRotation },
+      colors: productColors,
+      patternOpacity,
       updatedAt: new Date().toISOString()
     }
     if (!safeSetItem(draftKey, JSON.stringify(draft))) {
@@ -1073,6 +1103,7 @@ export default function CustomizeProduct() {
         rotation,
         positionX,
         positionY,
+        patternOpacity,
         onSource: (s) => console.log(`[OrderPreview] source= ${s}`),
       })
       if (url) previewImage = url
@@ -1118,6 +1149,7 @@ export default function CustomizeProduct() {
         rotation,
         positionX,
         positionY,
+        patternOpacity,
         onSource: (s) => {
           orderPreviewSourceRef.current = s
           console.log(`[OrderPreview] source= ${s}`)
