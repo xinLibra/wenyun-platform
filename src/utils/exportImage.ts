@@ -729,9 +729,10 @@ export async function generateProductPreviewDataUrl(
   return canvas.toDataURL('image/png')
 }
 
-// 检测 data: 图片是否「基本空白/单色」（用于判断 3D 截图是否真的贴上了纹样）。
-// 缩放到 64x64 后只统计非透明像素的亮度标准差，过小则视为空白/未贴纹样截图。
-function isUniformPreviewImage(dataUrl: string): Promise<boolean> {
+// 检测 data: 截图是否基本空白。
+// 之前用「亮度标准差」判定单色图，会把浅色产品、低透明度纹样、统一部件配色的有效 3D 截图误判失败，
+// 导致购物车/订单回退到本地 2D 轮廓合成图。这里改为只判断是否存在足够的非透明模型像素。
+function isBlankPreviewImage(dataUrl: string): Promise<boolean> {
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
@@ -744,20 +745,27 @@ function isUniformPreviewImage(dataUrl: string): Promise<boolean> {
         if (!ctx) return resolve(true)
         ctx.drawImage(img, 0, 0, size, size)
         const data = ctx.getImageData(0, 0, size, size).data
-        const lums: number[] = []
+        let visiblePixels = 0
+        let minX = size
+        let minY = size
+        let maxX = -1
+        let maxY = -1
         for (let i = 0; i < data.length; i += 4) {
           const a = data[i + 3]
           if (a < 16) continue // 跳过透明背景
-          lums.push(0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2])
+          const px = (i / 4) % size
+          const py = Math.floor(i / 4 / size)
+          visiblePixels += 1
+          minX = Math.min(minX, px)
+          minY = Math.min(minY, py)
+          maxX = Math.max(maxX, px)
+          maxY = Math.max(maxY, py)
         }
-        if (lums.length < 8) return resolve(true) // 几乎全透明 → 空白
-        const mean = lums.reduce((s, v) => s + v, 0) / lums.length
-        let sq = 0
-        for (const l of lums) sq += (l - mean) * (l - mean)
-        const stddev = Math.sqrt(sq / lums.length)
-        resolve(stddev < 10)
+        const boundsW = maxX >= minX ? maxX - minX + 1 : 0
+        const boundsH = maxY >= minY ? maxY - minY + 1 : 0
+        resolve(visiblePixels < 24 || boundsW < 4 || boundsH < 4)
       } catch {
-        resolve(true) // 解码异常保守视为空白，走合成兜底
+        resolve(true)
       }
     }
     img.onerror = () => resolve(true)
@@ -794,8 +802,8 @@ export async function buildProductPreviewDataUrl(opts: {
       ? await (raw as Promise<string | null>)
       : (raw as string | null)
     if (shot && !/^data:/i.test(shot)) return shot // 非 dataURL（如已上传短链）直接可用
-    if (shot && !(await isUniformPreviewImage(shot))) return shot
-    return null // 空白 / 未贴纹样：不采用
+    if (shot && !(await isBlankPreviewImage(shot))) return shot
+    return null
   }
 
   // 1) 3D 截图优先：整帧渲染（等 2 帧）+ 失败重试 2 次，尽力拿到「含配色/透明度」的完整产品图，
