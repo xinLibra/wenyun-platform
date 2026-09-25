@@ -1362,7 +1362,7 @@ export default function CreatePattern() {
                     />
                   ) : (
                     <img
-                      src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20pattern%20design%20elegant%20minimal%20blue%20white&image_size=square"
+                      src="/images/home/theme-geometric.png"
                       alt="纹样预览"
                       className="w-full h-full object-cover"
                     />

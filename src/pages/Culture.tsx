@@ -9,7 +9,7 @@ const cultures = [
     region: '江苏南通、浙江桐乡',
     description: '蓝印花布是中国传统的民间印染工艺，以靛蓝染料印花而成。其图案多取材于民间传说、吉祥寓意和自然风光，具有浓郁的乡土气息和民族特色。蓝印花布的制作工艺包括刻板、刮浆、染色等多道工序，每一步都需要匠人的精心操作。',
     features: ['靛蓝色调', '植物纹样', '对称构图'],
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20blue%20calico%20fabric%20pattern%20floral%20elegant&image_size=square',
+    image: '/images/home/craft-dye.png',
   },
   {
     name: '剪纸艺术',
@@ -17,7 +17,7 @@ const cultures = [
     region: '陕西、山西、河北',
     description: '剪纸是中国最古老的民间艺术之一，通过剪刀或刻刀在纸上剪刻出各种图案。剪纸题材广泛，包括人物、动物、花卉、吉祥符号等，常用于节日装饰、婚丧嫁娶等场合。剪纸艺术讲究线条流畅、构图精巧，体现了中国民间艺人的高超技艺。',
     features: ['红色主调', '镂空技法', '民俗题材'],
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20papercut%20art%20red%20festive%20elegant&image_size=square',
+    image: '/images/home/craft-carving.png',
   },
   {
     name: '刺绣纹样',
@@ -25,7 +25,7 @@ const cultures = [
     region: '苏绣(苏州)、湘绣(长沙)、蜀绣(成都)、粤绣(广州)',
     description: '刺绣是中国传统的手工艺之一，以针线在织物上绣制各种图案。中国四大名绣——苏绣、湘绣、蜀绣、粤绣各具特色，针法丰富、色彩艳丽。刺绣纹样多取材于自然景物和吉祥图案，既实用又具有极高的艺术价值。',
     features: ['色彩丰富', '针法多样', '立体感强'],
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20embroidery%20pattern%20colorful%20elegant%20floral&image_size=square',
+    image: '/images/home/craft-embroidery.png',
   },
   {
     name: '水墨风格',
@@ -33,7 +33,7 @@ const cultures = [
     region: '全国',
     description: '水墨画是中国传统绘画的代表形式，以墨色的浓淡变化表现物象。水墨风格讲究"气韵生动"、"意在笔先"，追求意境和神韵。水墨纹样常以山水、花鸟、书法为题材，具有简洁、含蓄、空灵的艺术特点。',
     features: ['墨色变化', '意境深远', '留白艺术'],
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20ink%20wash%20painting%20pattern%20minimal%20elegant%20mountains&image_size=square',
+    image: '/images/home/work-landscape.png',
   },
 ]
 

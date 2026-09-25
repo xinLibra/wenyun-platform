@@ -15,7 +15,7 @@ const craftCategories = [
     id: 'dye',
     name: '染织工艺',
     description: '以染、织、印等技法制作纹样的传统工艺',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20blue%20calico%20dyeing%20pattern%20with%20floral%20designs%20indigo%20blue%20on%20white%20fabric&image_size=square',
+    image: '/images/home/craft-dye.png',
     subcategories: ['蓝印花布', '扎染', '蜡染'],
     history: '中国染织工艺历史悠久，早在新石器时代就已出现。蓝印花布以靛蓝为染料，用木板雕刻图案进行防染印花，是最具代表性的民间染织技艺之一。',
     region: '江苏南通、浙江桐乡、湖南邵阳等地是蓝印花布的主要产地，扎染以云南大理最为著名，蜡染则在贵州、广西等地广为流传。'
@@ -24,7 +24,7 @@ const craftCategories = [
     id: 'embroidery',
     name: '刺绣工艺',
     description: '以针线在织物上绣制图案的装饰艺术',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20embroidery%20silk%20fabric%20intricate%20flower%20and%20bird%20pattern%20gold%20thread%20elegant&image_size=square',
+    image: '/images/home/craft-embroidery.png',
     subcategories: ['苏绣', '湘绣', '蜀绣', '粤绣'],
     history: '刺绣工艺始于商周，盛于唐宋。中国四大名绣各有特色：苏绣精细雅洁，湘绣写实生动，蜀绣色彩鲜艳，粤绣华丽繁复。',
     region: '苏绣以苏州为中心，湘绣以长沙为中心，粤绣以广州为中心，蜀绣以成都为中心，形成了各具特色的刺绣流派。'
@@ -33,7 +33,7 @@ const craftCategories = [
     id: 'brocade',
     name: '织锦工艺',
     description: '以彩色丝线织成图案的高档丝织品',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20brocade%20silk%20fabric%20colorful%20pattern%20gold%20and%20silver%20threads%20luxurious&image_size=square',
+    image: '/images/home/craft-brocade.png',
     subcategories: ['云锦', '蜀锦', '壮锦'],
     history: '织锦工艺历史悠久，汉代蜀锦已闻名天下。南京云锦以其富丽堂皇的色彩和精湛的织造技艺被誉为"东方瑰宝"。',
     region: '云锦产于江苏南京，蜀锦产于四川成都，壮锦是广西壮族的传统工艺，各有独特的地域风格。'
@@ -42,7 +42,7 @@ const craftCategories = [
     id: 'carving',
     name: '雕刻工艺',
     description: '以刀、凿等工具在材料上雕刻图案的技艺',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20papercut%20art%20red%20intricate%20double%20happiness%20pattern%20folk%20art%20style&image_size=square',
+    image: '/images/home/craft-carving.png',
     subcategories: ['剪纸', '木雕', '砖雕', '石雕'],
     history: '剪纸是最具代表性的民间雕刻艺术，起源于汉代，以剪刀或刻刀为工具，在纸上剪刻出各种图案，是中国最古老的民间艺术之一。',
     region: '剪纸艺术遍布全国各地，陕西剪纸粗犷豪放，河北剪纸精美细腻，广东剪纸华丽繁复，各有特色。'
@@ -51,7 +51,7 @@ const craftCategories = [
     id: 'ceramic',
     name: '陶瓷工艺',
     description: '在陶瓷器物上绘制或雕刻纹样的装饰技艺',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20blue%20and%20white%20porcelain%20pattern%20flower%20design%20elegant%20traditional&image_size=square',
+    image: '/images/home/craft-ceramic.png',
     subcategories: ['青花瓷', '粉彩', '钧瓷'],
     history: '青花瓷始于唐代，成熟于元代，以钴蓝料在白瓷上绘制图案，色泽清新典雅。景德镇青花瓷更是闻名于世，被誉为"瓷都"。',
     region: '江西景德镇是青花瓷的主要产地，河南禹州的钧瓷以其独特的窑变效果著称，粉彩瓷则以景德镇最为著名。'
@@ -60,7 +60,7 @@ const craftCategories = [
     id: 'metal',
     name: '金属工艺',
     description: '在金属器物上铸造或錾刻纹样的传统技艺',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20bronze%20vessel%20pattern%20taotie%20mask%20ancient%20Chinese%20art%20style&image_size=square',
+    image: '/images/home/craft-metal.png',
     subcategories: ['青铜纹饰', '花丝镶嵌'],
     history: '青铜纹饰始于商周时期，以饕餮纹、云雷纹、夔龙纹等为代表，体现了古代先民的宗教信仰和审美观念。',
     region: '青铜文化以中原地区最为发达，河南安阳殷墟出土的青铜器纹饰最为精美，花丝镶嵌则以北京、成都等地最为著名。'
@@ -72,28 +72,28 @@ const ethnicCategories = [
     id: 'han',
     name: '汉族',
     description: '华夏文明的主体民族，纹样风格多样且体系完整',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20Han%20ethnic%20pattern%20elegant%20cloud%20and%20flower%20design%20red%20and%20gold&image_size=square',
+    image: '/images/home/ethnic-han.png',
     features: '汉族纹样注重对称和谐，题材广泛，包括云纹、花鸟、山水、吉祥图案等，体现了"天人合一"的哲学思想。'
   },
   {
     id: 'miao',
     name: '苗族',
     description: '以刺绣和银饰著称的少数民族',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20Miao%20ethnic%20embroidery%20pattern%20colorful%20geometric%20design%20folk%20art&image_size=square',
+    image: '/images/home/ethnic-miao.png',
     features: '苗族纹样以刺绣为主，色彩鲜艳，图案夸张变形，充满原始生命力，多取材于自然万物和神话传说。'
   },
   {
     id: 'tibetan',
     name: '藏族',
     description: '融合宗教与自然元素的高原民族纹样',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Tibetan%20pattern%20mandala%20design%20colorful%20Buddhist%20symbols%20ethnic%20art&image_size=square',
+    image: '/images/home/ethnic-tibetan.png',
     features: '藏族纹样受藏传佛教影响深远，以吉祥八宝、万字纹、莲花纹等为特色，色彩浓郁，寓意深远。'
   },
   {
     id: 'mongolian',
     name: '蒙古族',
     description: '以游牧文化为特色的草原民族纹样',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Mongolian%20pattern%20horse%20and%20cloud%20design%20blue%20and%20white%20nomadic%20style&image_size=square',
+    image: '/images/home/ethnic-mongolian.png',
     features: '蒙古族纹样以卷草纹、云纹、马纹为特色，风格粗犷豪放，体现了草原民族的豪迈气概。'
   },
 ]
@@ -103,7 +103,7 @@ const themeCategories = [
     id: 'geometric',
     name: '几何纹',
     description: '以线条与几何形构成的纹样，规整有序、秩序感强',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20geometric%20pattern%20huiwen%20meander%20gold%20and%20red%20ancient%20style&image_size=square',
+    image: '/images/home/theme-geometric.png',
     subcategories: ['回纹', '盘长纹', '锦地纹', '方胜纹'],
     meaning: '回纹回环往复，盘长寓意连绵不绝，锦地锦绣满铺，方胜方正得胜。'
   },
@@ -111,7 +111,7 @@ const themeCategories = [
     id: 'figure',
     name: '人物纹',
     description: '以人物形象为题材的纹样',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20figure%20pattern%20ancient%20scholars%20and%20beauties%20elegant%20painting%20style&image_size=square',
+    image: '/images/home/theme-figure.png',
     subcategories: ['神话人物', '历史故事', '生活场景'],
     meaning: '人物纹多取材于神话传说、历史故事和日常生活，如八仙过海、嫦娥奔月等，具有丰富的叙事性。'
   },
@@ -123,57 +123,57 @@ const styleCategories = [
     name: '具象',
     opposite: '抽象',
     description: '纹样造型写实，注重细节刻画，力求逼真再现物象形态',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=realistic%20Chinese%20traditional%20flower%20pattern%20detailed%20petals%20and%20leaves%20naturalistic&image_size=square',
-    oppositeImage: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=abstract%20Chinese%20traditional%20pattern%20geometric%20shapes%20minimalist%20modern&image_size=square'
+    image: '/images/home/style-realism.png',
+    oppositeImage: '/images/home/style-abstract.png'
   },
   {
     id: 'traditional',
     name: '传统',
     opposite: '现代',
     description: '遵循传统美学规范，保留经典纹样的原始风貌和文化内涵',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=classic%20Chinese%20traditional%20pattern%20ancient%20style%20red%20and%20gold%20elegant&image_size=square',
-    oppositeImage: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20Chinese%20pattern%20design%20contemporary%20minimal%20clean%20lines&image_size=square'
+    image: '/images/home/style-traditional.png',
+    oppositeImage: '/images/home/style-modern.png'
   },
   {
     id: 'complex',
     name: '繁复',
     opposite: '简约',
     description: '纹样层次丰富，细节繁多，呈现华丽饱满的视觉效果',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=intricate%20Chinese%20traditional%20pattern%20dense%20floral%20design%20rich%20details%20luxurious&image_size=square',
-    oppositeImage: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=minimal%20Chinese%20pattern%20simple%20elegant%20clean%20design%20white%20space&image_size=square'
+    image: '/images/home/style-complex.png',
+    oppositeImage: '/images/home/style-simple.png'
   },
   {
     id: 'handmade',
     name: '手作感',
     opposite: '数字科技感',
     description: '保留手工制作的肌理和质感，呈现自然质朴的艺术效果',
-    image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=handmade%20Chinese%20traditional%20pattern%20textured%20brush%20strokes%20organic%20imperfections&image_size=square',
-    oppositeImage: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=digital%20Chinese%20pattern%20futuristic%20geometric%20tech%20style%20glowing%20lines&image_size=square'
+    image: '/images/home/style-handmade.png',
+    oppositeImage: '/images/home/style-digital.png'
   },
 ]
 
 const works = [
-  { id: 1, title: '牡丹花开', author: '设计师小王', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20peony%20flower%20pattern%20blue%20and%20white%20ceramic%20style%20elegant&image_size=square' },
-  { id: 2, title: '年年有余', author: '非遗传承人', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20fish%20pattern%20papercut%20style%20red%20and%20gold%20festive&image_size=square' },
-  { id: 3, title: '山水之间', author: '艺术爱好者', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20landscape%20pattern%20ink%20wash%20style%20minimal%20elegant&image_size=square' },
-  { id: 4, title: '吉祥如意', author: '文创设计师', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20auspicious%20cloud%20pattern%20embroidery%20style%20colorful&image_size=square' },
-  { id: 5, title: '回纹四方', author: '设计师小李', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20huiwen%20meander%20geometric%20pattern%20gold%20and%20red%20elegant&image_size=square' },
-  { id: 6, title: '凤舞九天', author: '艺术工作室', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20traditional%20phoenix%20pattern%20embroidery%20style%20colorful%20elegant&image_size=square' },
+  { id: 1, title: '牡丹花开', author: '设计师小王', image: '/images/home/work-peony.png' },
+  { id: 2, title: '年年有余', author: '非遗传承人', image: '/images/home/work-fish.png' },
+  { id: 3, title: '山水之间', author: '艺术爱好者', image: '/images/home/work-landscape.png' },
+  { id: 4, title: '吉祥如意', author: '文创设计师', image: '/images/home/work-cloud.png' },
+  { id: 5, title: '回纹四方', author: '设计师小李', image: '/images/home/theme-geometric.png' },
+  { id: 6, title: '凤舞九天', author: '艺术工作室', image: '/images/home/work-phoenix.png' },
 ]
 
 const comparisonData = [
   {
     traditionalTitle: '传统蓝印花布',
-    traditionalImage: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20blue%20calico%20fabric%20vintage%20texture%20classic%20pattern&image_size=square',
+    traditionalImage: '/images/home/craft-dye.png',
     aiTitle: 'AI创新设计',
-    aiImage: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20Chinese%20blue%20calico%20pattern%20redesign%20AI%20generated%20contemporary%20style&image_size=square',
+    aiImage: '/images/home/compare-ai-calico.png',
     description: '传统蓝印花布纹样规整对称，AI在保留传统韵味的基础上融入现代审美，让经典纹样焕发新生。'
   },
   {
     traditionalTitle: '传统剪纸',
-    traditionalImage: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20Chinese%20papercut%20red%20classic%20intricate%20design%20folk%20art&image_size=square',
+    traditionalImage: '/images/home/craft-carving.png',
     aiTitle: 'AI再创作',
-    aiImage: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20Chinese%20papercut%20art%20AI%20innovation%20creative%20redesign%20contemporary&image_size=square',
+    aiImage: '/images/home/compare-ai-papercut.png',
     description: '传统剪纸工艺复杂耗时，AI能够快速生成多样化的剪纸风格纹样，同时保持剪纸艺术的镂空美感。'
   },
 ]
@@ -543,6 +543,7 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mt-8">
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
                   whileHover={{ scale: 1.02 }}
                   transition={{ delay: 0.1 }}
                   className="text-center"
@@ -556,6 +557,7 @@ export default function Home() {
                 
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
                   whileHover={{ scale: 1.02 }}
                   transition={{ delay: 0.2 }}
                   className="text-center"
@@ -569,6 +571,7 @@ export default function Home() {
                 
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
                   whileHover={{ scale: 1.02 }}
                   transition={{ delay: 0.3 }}
                   className="text-center"
@@ -582,6 +585,7 @@ export default function Home() {
                 
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
                   whileHover={{ scale: 1.02 }}
                   transition={{ delay: 0.4 }}
                   className="text-center"
