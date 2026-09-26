@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, StampButton } from '../components/ui/Button'
 import { GeneratingPulse } from '../components/ui/GeneratingPulse'
 import { BranchDivider } from '../components/decorations/IceCrackDivider'
@@ -148,6 +148,7 @@ function resolveFusionTagLabel(s: { patternId: string; patternName: string } | n
 
 export default function CreatePattern() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [dimension, setDimension] = useState<PatternDimension>(DEFAULT_DIMENSION)
   const [generationParams, setGenerationParams] = useState<GenerationParams>(DEFAULT_GENERATION_PARAMS)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -170,6 +171,31 @@ export default function CreatePattern() {
   const [fusionCurrentWorkId, setFusionCurrentWorkId] = useState<string>('')
   const [toastMessage, setToastMessage] = useState('')
   const toastTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const theme = searchParams.get('theme')
+    const subcategory = searchParams.get('subcategory') || ''
+    if (theme !== 'floral' && theme !== 'geometric') return
+
+    const validSubcategory = getSubcategories(theme).some((item) => item.id === subcategory)
+      ? subcategory
+      : ''
+    const nextDimension: PatternDimension = {
+      ...DEFAULT_DIMENSION,
+      mainTheme: theme,
+      subcategory: validSubcategory,
+    }
+    const nextParams = validSubcategory
+      ? applyPreset({ ...DEFAULT_GENERATION_PARAMS, dimension: nextDimension }, validSubcategory)
+      : { ...DEFAULT_GENERATION_PARAMS, dimension: nextDimension }
+
+    setDimension(nextDimension)
+    setGenerationParams({ ...nextParams, dimension: nextDimension })
+    setSelectedPatternName(
+      validSubcategory ? findSubcategory(theme, validSubcategory)?.label || '' : ''
+    )
+    setIsStep2Complete(Boolean(validSubcategory))
+  }, [searchParams])
 
   const showToastMessage = (message: string) => {
     setToastMessage(message)

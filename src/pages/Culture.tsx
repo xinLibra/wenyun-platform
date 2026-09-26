@@ -9,7 +9,7 @@ const cultures = [
     region: '江苏南通、浙江桐乡',
     description: '蓝印花布是中国传统的民间印染工艺，以靛蓝染料印花而成。其图案多取材于民间传说、吉祥寓意和自然风光，具有浓郁的乡土气息和民族特色。蓝印花布的制作工艺包括刻板、刮浆、染色等多道工序，每一步都需要匠人的精心操作。',
     features: ['靛蓝色调', '植物纹样', '对称构图'],
-    image: '/images/home/craft-dye.png',
+    image: '/images/heritage/blue-calico-floral-bird.jpg',
   },
   {
     name: '剪纸艺术',

@@ -109,14 +109,10 @@ const products = [
   { id: 'bookmark', name: '书签', price: '19', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Chinese%20bookmark%20with%20metal%20ring%20and%20silk%20tassel%20on%20wooden%20stick%20blank%20elegant%20product%20photography%20on%20white%20background&image_size=portrait_4_3', category: '文创' },
   { id: 'phonecase', name: '手机壳', price: '49', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20white%20smartphone%20case%20with%20detachable%20side%20frame%20minimal%20product%20photography%20on%20light%20background&image_size=portrait_4_3', category: '文创' },
   { id: 'notebook', name: '笔记本', price: '39', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=spiral%20coil%20notebook%20blank%20kraft%20cover%20with%20silver%20metal%20binding%20rings%20minimal%20product%20photography&image_size=portrait_4_3', category: '文创' },
-  { id: 'postcard', name: '明信片', price: '12', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=postcard%20blank%20white%20minimal%20product%20photography&image_size=landscape_4_3', category: '文创' },
   { id: 'tote', name: '手提包', price: '59', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=canvas%20tote%20bag%20blank%20natural%20beige%20with%20brown%20leather%20handles%20upright%20front%20view%20product%20photography&image_size=square', category: '文创' },
   { id: 'paper_bag', name: '纸袋', price: '29', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=kraft%20paper%20shopping%20bag%20with%20twisted%20paper%20handles%20upright%20front%20view%20blank%20product%20photography&image_size=square', category: '文创' },
   { id: 'cushion', name: '抱枕', price: '89', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=square%20cushion%20pillow%20blank%20white%20with%20decorative%20border%20edge%20front%20view%20product%20photography&image_size=square', category: '文创' },
   { id: 'handkerchief', name: '手帕', price: '19', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=folded%20cotton%20handkerchief%20blank%20white%20minimal%20product%20photography%20on%20light%20background&image_size=square', category: '文创' },
-  { id: 'scarf', name: '围巾', price: '299', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20wool%20scarf%20elegant%20minimal%20product%20photography&image_size=square', category: '服饰' },
-  { id: 'silkscarf', name: '丝巾', price: '199', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=silk%20scarf%20blank%20white%20elegant%20product%20photography&image_size=square', category: '服饰' },
-  { id: 'square_scarf', name: '方巾', price: '149', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=silk%20square%20scarf%20blank%20white%20elegant%20product%20photography&image_size=square', category: '服饰' },
   { id: 'tshirt', name: 'T恤', price: '89', image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=blank%20white%20cotton%20t-shirt%20front%20view%20with%20collar%20sleeve%20and%20hem%20trim%20minimal%20product%20photography&image_size=portrait_4_3', category: '服饰' },
 ]
 
@@ -124,14 +120,10 @@ const productMaterials: Record<string, string[]> = {
   bookmark: ['wood', 'paper'],
   phonecase: ['plastic', 'silicone'],
   notebook: ['paper', 'leather'],
-  postcard: ['paper'],
   tote: ['canvas', 'cotton'],
   paper_bag: ['paper'],
   cushion: ['cotton', 'polyester'],
   handkerchief: ['cotton', 'silk'],
-  scarf: ['silk', 'wool'],
-  silkscarf: ['silk'],
-  square_scarf: ['silk'],
   tshirt: ['cotton', 'polyester'],
 }
 
@@ -208,6 +200,10 @@ function isBase64DataUrl(url: string): boolean {
 
 
 const getInitialProduct = () => {
+  const queryProduct = new URLSearchParams(window.location.search).get('product')
+  if (queryProduct && products.find(p => p.id === queryProduct)) {
+    return queryProduct
+  }
   const savedProduct = safeGetItem('selected_product_id')
   if (savedProduct && products.find(p => p.id === savedProduct)) {
     return savedProduct
@@ -320,6 +316,11 @@ export default function CustomizeProduct() {
   }
 
   const getInitialCategory = () => {
+    const queryProduct = new URLSearchParams(window.location.search).get('product')
+    const queryCategory = products.find((product) => product.id === queryProduct)?.category
+    if (queryCategory) {
+      return queryCategory
+    }
     const savedCategory = safeGetItem('selected_product_category')
     if (savedCategory && ['文创', '服饰'].includes(savedCategory)) {
       return savedCategory
