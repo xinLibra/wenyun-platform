@@ -14,6 +14,8 @@ import { BambooToggle } from '../components/ui/Select'
 import { applyPreset } from '../config/generationPresets'
 import { PatternDimension, GenerationParams, PromptParseResult, CRAFT_OPTIONS, ETHNIC_OPTIONS, THEME_OPTIONS, APPLICATION_OPTIONS, ARRANGEMENT_OPTIONS, SYMMETRY_OPTIONS } from '../types/pattern'
 import { supabase } from '../lib/supabase'
+
+const DEFAULT_PATTERN_PREVIEW = '/images/home/theme-geometric.png'
 import { uploadPatternImage } from '../lib/storage'
 import { mockSemanticSearch } from '../mock/semanticSearch'
 import { PatternDnaRadar, type PatternDnaData } from '../components/PatternDnaRadar'
@@ -1388,7 +1390,7 @@ export default function CreatePattern() {
                     />
                   ) : (
                     <img
-                      src="/images/home/theme-geometric.png"
+                      src={DEFAULT_PATTERN_PREVIEW}
                       alt="纹样预览"
                       className="w-full h-full object-cover"
                     />

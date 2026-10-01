@@ -4,37 +4,29 @@
     "productName": "手提包",
     "modelUrl": "tote_bag.glb",
     "meshConfig": {
-      "textureTargetMaterial": [
-        "tripo_part_new_0_0_material"
-      ],
+      "textureTargetMaterial": ["tripo_part_3"],
       "textureTargetMaterials": {
-        "center": ["tripo_part_new_0_0_material"],
-        "full": [
-          "tripo_part_0_material",
-          "tripo_part_new_0_0_material"
-        ]
+        "center": ["tripo_part_3"],
+        "full": ["tripo_part_3"]
       },
       "colorTargetMaterials": {
-        "center": ["tripo_part_new_0_0_material"],
-        "full": [
-          "tripo_part_0_material",
-          "tripo_part_new_0_0_material"
-        ]
+        "center": ["tripo_part_3"],
+        "full": ["tripo_part_3"]
       },
       "colorMaterials": [
         {
           "name": "handle",
-          "materialName": "tripo_part_9_material",
+          "materialName": "tripo_part_2",
           "label": "手提带子"
         },
         {
           "name": "bag_body",
-          "materialName": "tripo_part_0_material",
+          "materialName": "tripo_part_3",
           "label": "帆布包身"
         }
       ]
     },
-    "modelRotation": [3.14159, 1, 0],
+    "modelRotation": [0, 1.5708, 0],
     "modelScale": 0.35,
     "cameraDefault": {
       "position": [0, 0.12, 1.55],

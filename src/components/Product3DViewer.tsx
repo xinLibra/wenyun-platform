@@ -30,6 +30,9 @@ interface Product3DViewerProps {
   excludeFromPatternAreaFull?: string[]
   /** 纹样透明度 0-1，仅对命中贴图目标的材质生效（默认 1 不透明） */
   patternOpacity?: number
+  /** OrbitControls 的垂直旋转范围，避免产品翻到顶部或底部后难以找回正面。 */
+  minPolarAngle?: number
+  maxPolarAngle?: number
 }
 
 function hexToColor(hex: string): THREE.Color {
@@ -499,6 +502,8 @@ export function Product3DViewer({
   className = '',
   excludeFromPatternAreaFull = [],
   patternOpacity = 1,
+  minPolarAngle,
+  maxPolarAngle,
 }: Product3DViewerProps) {
   const rot = modelRotation ?? [0, 0, 0]
   const scl = modelScale ?? 0.35
@@ -548,6 +553,8 @@ export function Product3DViewer({
           enablePan={false}
           minDistance={0.5}
           maxDistance={6}
+          minPolarAngle={minPolarAngle}
+          maxPolarAngle={maxPolarAngle}
           target={[0, 0, 0]}
         />
       </Canvas>

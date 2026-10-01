@@ -4,23 +4,16 @@
     "productName": "T恤",
     "modelUrl": "t_shirt.glb",
     "meshConfig": {
-      "textureTargetMaterial": "tripo_part_new_0_material",
+      "textureTargetMaterial": "Fabric",
       "textureTargetMaterials": {
-        "chest": ["tripo_part_new_0_material"],
-        "full": [
-          "tripo_part_new_0_material",
-          "Object_6_material",
-          "Object_5_material",
-          "Object_7_material",
-          "Object_8_material"
-        ]
+        "chest": ["Fabric"],
+        "full": ["Fabric"]
       },
       "colorMaterials": [
-        { "name": "body", "materialName": "tripo_part_new_0_material", "label": "衣身主体" },
-        { "name": "fabric", "materialName": "Object_6_material", "label": "衣身侧边" },
-        { "name": "neck", "materialName": "Object_8_material", "label": "领口" },
-        { "name": "sleeve", "materialName": "Object_7_material", "label": "袖口包边" },
-        { "name": "waist", "materialName": "Object_5_material", "label": "下摆包边" }
+        { "name": "body", "materialName": "Fabric", "label": "衣身主体" },
+        { "name": "neck", "materialName": "TrimNeck", "label": "领口" },
+        { "name": "sleeve", "materialName": "TrimSleeves", "label": "袖口包边" },
+        { "name": "waist", "materialName": "TrimWaist", "label": "下摆包边" }
       ]
     },
     "modelRotation": [0, 0, 0],

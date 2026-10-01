@@ -1653,6 +1653,8 @@ export default function CustomizeProduct() {
                         modelScale={product3DConfig.modelScale ?? 0.35}
                         cameraPosition={product3DConfig.cameraDefault?.position ?? [0, 0.12, 1.7]}
                         patternArea={patternArea}
+                        minPolarAngle={selectedProduct === 'tote' ? 0.85 : undefined}
+                        maxPolarAngle={selectedProduct === 'tote' ? Math.PI - 0.85 : undefined}
                         excludeFromPatternAreaFull={
                           selectedProduct === 'tote'
                             ? (product3DConfig.meshConfig?.colorMaterials || [])
