@@ -1,154 +1,161 @@
 import { motion } from 'framer-motion'
-import { BranchDivider, MeanderDivider, LotusDivider } from '../components/decorations/IceCrackDivider'
-import { FrameDecorations } from '../components/decorations/CornerDecorations'
+import { BranchDivider, MeanderDivider } from '../components/decorations/IceCrackDivider'
 
-const cultures = [
+const floralPatterns = [
+  { name: '牡丹纹', form: '花冠饱满、花瓣层叠，常以团花或折枝形式组织。', meaning: '富贵、繁荣与吉祥' },
+  { name: '莲花纹', form: '以莲瓣、莲蓬和舒展叶片构成，可形成放射式或对称式纹样。', meaning: '清雅、纯洁与和合' },
+  { name: '梅花纹', form: '以五瓣花形和疏朗枝干为特征，适合单独纹样与连续排布。', meaning: '坚韧、高洁与迎春' },
+  { name: '菊花纹', form: '花瓣细密并围绕花心放射展开，轮廓规整而富有层次。', meaning: '长寿、淡泊与高雅' },
+  { name: '兰花纹', form: '叶片修长舒展，花朵轻盈，构图多强调曲线和留白。', meaning: '高洁、典雅与君子品格' },
+  { name: '芙蓉花纹', form: '花瓣宽展、层次柔和，常以盛放花形表现圆润舒展的视觉效果。', meaning: '美好、纯洁与富贵' },
+  { name: '石榴花纹', form: '以钟形花冠、翻卷花瓣和枝叶组合，色彩表现通常较为鲜明。', meaning: '繁盛、喜庆与生命力' },
+]
+
+const geometricPatterns = [
+  { name: '回纹', form: '由横竖折线连续回转构成，可形成边饰、带状或四方连续结构。', meaning: '绵延不断、循环往复' },
+  { name: '盘长纹', form: '以交错穿插的线带构成闭合结构，讲究路径连贯与上下叠压关系。', meaning: '连绵长久、圆满相续' },
+  { name: '锦地纹', form: '通过菱格、多边形或交织单元密集铺陈，形成规整丰富的底纹。', meaning: '锦绣繁盛、秩序和谐' },
+  { name: '方胜纹', form: '由两个菱形交叠或相连构成，可作为中心纹样或连续组合单元。', meaning: '同心相合、吉祥美满' },
+]
+
+const craftKnowledge = [
   {
     name: '蓝印花布',
-    origin: '唐宋时期',
-    region: '江苏南通、浙江桐乡',
-    description: '蓝印花布是中国传统的民间印染工艺，以靛蓝染料印花而成。其图案多取材于民间传说、吉祥寓意和自然风光，具有浓郁的乡土气息和民族特色。蓝印花布的制作工艺包括刻板、刮浆、染色等多道工序，每一步都需要匠人的精心操作。',
-    features: ['靛蓝色调', '植物纹样', '对称构图'],
     image: '/images/heritage/blue-calico-floral-bird.jpg',
+    imageAlt: '蓝印花布花鸟纹实物',
+    description: '以纹版和防染浆形成留白，再经靛蓝染色呈现蓝白纹样。常见题材包括花鸟、瑞果与几何边饰，布局多采用对称和连续组织。',
+    tags: ['靛蓝防染', '蓝白对比', '连续布局'],
   },
   {
-    name: '剪纸艺术',
-    origin: '南北朝时期',
-    region: '陕西、山西、河北',
-    description: '剪纸是中国最古老的民间艺术之一，通过剪刀或刻刀在纸上剪刻出各种图案。剪纸题材广泛，包括人物、动物、花卉、吉祥符号等，常用于节日装饰、婚丧嫁娶等场合。剪纸艺术讲究线条流畅、构图精巧，体现了中国民间艺人的高超技艺。',
-    features: ['红色主调', '镂空技法', '民俗题材'],
-    image: '/images/home/craft-carving.png',
+    name: '传统刺绣',
+    image: '/images/heritage/traditional-embroidery-phoenix.png',
+    imageAlt: '凤凰花卉刺绣实物',
+    description: '通过针线在织物上塑造轮廓、色阶和肌理。花卉纹样常利用长短针、套针等方式表现花瓣层次，并结合枝叶形成疏密有致的画面。',
+    tags: ['针线造型', '色阶层次', '花卉题材'],
   },
   {
-    name: '刺绣纹样',
-    origin: '新石器时代',
-    region: '苏绣(苏州)、湘绣(长沙)、蜀绣(成都)、粤绣(广州)',
-    description: '刺绣是中国传统的手工艺之一，以针线在织物上绣制各种图案。中国四大名绣——苏绣、湘绣、蜀绣、粤绣各具特色，针法丰富、色彩艳丽。刺绣纹样多取材于自然景物和吉祥图案，既实用又具有极高的艺术价值。',
-    features: ['色彩丰富', '针法多样', '立体感强'],
-    image: '/images/home/craft-embroidery.png',
+    name: '蜀锦织造',
+    image: '/images/heritage/shu-brocade-chengdu.png',
+    imageAlt: '成都博物馆藏蜀锦织物实物',
+    description: '以经纬组织和多色丝线织出复杂纹样，图案与织物结构同步形成。连续单元、对称骨架和锦地组织是理解传统几何纹样的重要参考。',
+    tags: ['经纬组织', '多色丝线', '锦地纹样'],
   },
   {
-    name: '水墨风格',
-    origin: '唐代',
-    region: '全国',
-    description: '水墨画是中国传统绘画的代表形式，以墨色的浓淡变化表现物象。水墨风格讲究"气韵生动"、"意在笔先"，追求意境和神韵。水墨纹样常以山水、花鸟、书法为题材，具有简洁、含蓄、空灵的艺术特点。',
-    features: ['墨色变化', '意境深远', '留白艺术'],
-    image: '/images/home/work-landscape.png',
+    name: '佛山剪纸',
+    image: '/images/heritage/foshan-paper-cutting.jpg',
+    imageAlt: '佛山花卉蝴蝶剪纸实物',
+    description: '以剪、刻形成虚实相间的镂空结构，讲究线线相连和外轮廓完整。花卉、蝴蝶等题材常经过概括变形，形成鲜明的平面装饰效果。',
+    tags: ['剪刻镂空', '虚实对比', '平面造型'],
+  },
+  {
+    name: '青花瓷纹饰',
+    image: '/images/heritage/porcelain-flowers-birds.jpg',
+    imageAlt: '博物馆藏青花花鸟纹瓷盘实物',
+    description: '以含钴青料在瓷胎上绘制纹饰，再施透明釉高温烧成。盘、碗等器物常以中心主题纹配合边缘连续纹，形成主次分明的适合纹样。',
+    tags: ['釉下青花', '器形适配', '中心与边饰'],
+  },
+  {
+    name: '建筑木雕',
+    image: '/images/heritage/qing-carved-wood-panels.jpg',
+    imageAlt: '清代建筑木雕花板实物',
+    description: '通过浮雕、透雕等方法在木构件上形成花卉与几何纹饰。门窗花板尤其强调重复单元、穿插关系和结构强度，兼具装饰与空间分隔功能。',
+    tags: ['浮雕透雕', '门窗花板', '几何骨架'],
   },
 ]
 
+function PatternKnowledgeCard({ name, form, meaning }: { name: string; form: string; meaning: string }) {
+  return (
+    <article className="border-t-2 border-deep-blue bg-rice-paper-light p-5">
+      <div className="flex items-start justify-between gap-4">
+        <h3 className="font-shufa text-2xl text-deep-blue">{name}</h3>
+        <span className="shrink-0 border border-palace-red/30 px-2 py-1 font-song text-xs text-palace-red">当前可生成</span>
+      </div>
+      <p className="mt-4 font-song leading-7 text-deep-blue-light">{form}</p>
+      <div className="mt-4 border-l-2 border-ming-yellow pl-3">
+        <span className="font-song text-xs text-deep-blue-light">文化寓意</span>
+        <p className="mt-1 font-song text-sm text-deep-blue">{meaning}</p>
+      </div>
+    </article>
+  )
+}
+
 export default function Culture() {
   return (
-    <div className="min-h-screen py-8 px-4">
-      <div className="max-w-6xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12"
-        >
-          <h1 className="font-shufa text-4xl md:text-5xl text-deep-blue mb-4">非遗文化</h1>
+    <div className="min-h-screen bg-rice-paper px-4 py-10 md:py-16">
+      <div className="mx-auto max-w-7xl">
+        <motion.header initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-3xl text-center">
+          <p className="font-song text-sm text-palace-red">PATTERN KNOWLEDGE</p>
+          <h1 className="mt-3 font-shufa text-4xl text-deep-blue md:text-5xl">传统纹样知识库</h1>
           <BranchDivider />
-          <p className="font-song text-deep-blue-light mt-4">探索中国非物质文化遗产纹样的魅力与内涵</p>
-        </motion.div>
+          <p className="mt-5 font-song leading-8 text-deep-blue-light">
+            围绕平台当前支持的花卉与几何主题，了解各类纹样的造型特征、组织方式和文化寓意。知识资料用于辅助理解和创作，不代表生成结果会复刻特定传统工艺。
+          </p>
+          <nav className="mt-7 flex flex-wrap justify-center gap-3 font-song text-sm">
+            <a href="#floral" className="border border-deep-blue-100 px-4 py-2 text-deep-blue transition hover:border-palace-red hover:text-palace-red">花卉纹样</a>
+            <a href="#geometric" className="border border-deep-blue-100 px-4 py-2 text-deep-blue transition hover:border-palace-red hover:text-palace-red">几何纹样</a>
+            <a href="#craft" className="border border-deep-blue-100 px-4 py-2 text-deep-blue transition hover:border-palace-red hover:text-palace-red">工艺参考</a>
+          </nav>
+        </motion.header>
 
-        <motion.section
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mb-16"
-        >
-          <FrameDecorations className="bg-rice-paper-light p-8 md:p-12">
-            <h2 className="font-shufa text-2xl md:text-3xl text-deep-blue mb-6">中国传统纹样概述</h2>
-            <MeanderDivider />
-            
-            <p className="font-song text-deep-blue-light leading-relaxed mt-8">
-              中国传统纹样是中华民族五千年文明的重要组成部分，承载着丰富的文化内涵和审美智慧。从新石器时代的彩陶纹样，到商周时期的青铜器纹饰，再到唐宋以来的织绣、陶瓷纹样，中国传统纹样经历了漫长的发展历程，形成了独特的艺术风格和体系。
-            </p>
-            
-            <p className="font-song text-deep-blue-light leading-relaxed mt-4">
-              传统纹样不仅是装饰艺术，更是文化传承的载体。每一种纹样都蕴含着特定的寓意和象征意义，如牡丹象征富贵吉祥，龙凤象征皇权与尊贵，蝙蝠象征福气，鱼象征年年有余等。这些纹样不仅反映了古人对美好生活的向往，也体现了中华民族独特的审美观念和哲学思想。
-            </p>
-          </FrameDecorations>
+        <motion.section id="floral" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="scroll-mt-24 pt-20">
+          <div className="grid items-center gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+            <img src="/images/heritage/theme-floral-reference.jpg" alt="传统花卉纹样资料图" className="aspect-[4/3] w-full object-cover" />
+            <div>
+              <p className="font-song text-sm text-palace-red">01 / FLORAL</p>
+              <h2 className="mt-2 font-shufa text-4xl text-deep-blue">花卉纹样知识</h2>
+              <MeanderDivider />
+              <p className="mt-5 font-song leading-8 text-deep-blue-light">
+                花卉纹样常从花冠、花瓣、枝叶等自然形态中提炼轮廓，再通过对称、旋转、团花或连续排布形成装饰结构。平台目前支持以下七类花卉母题。
+              </p>
+            </div>
+          </div>
+          <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {floralPatterns.map((pattern) => <PatternKnowledgeCard key={pattern.name} {...pattern} />)}
+          </div>
         </motion.section>
 
-        <div className="space-y-8">
-          {cultures.map((culture, index) => (
-            <motion.div
-              key={culture.name}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 + index * 0.15 }}
-            >
-              <FrameDecorations className="bg-rice-paper-light p-6 md:p-8">
-                <div className="flex flex-col md:flex-row gap-6">
-                  <div className="md:w-1/3 flex-shrink-0">
-                    <div className="aspect-square bg-rice-paper-dark rounded-sm overflow-hidden">
-                      <img src={culture.image} alt={culture.name} className="w-full h-full object-cover" />
-                    </div>
-                  </div>
-                  <div className="md:w-2/3">
-                    <div className="flex items-center gap-4 mb-3">
-                      <h3 className="font-shufa text-2xl text-deep-blue">{culture.name}</h3>
-                      <span className="px-3 py-1 bg-palace-red/10 text-palace-red font-song text-sm rounded-sm">非物质文化遗产</span>
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-4 mb-4 font-song text-sm">
-                      <div className="flex items-center">
-                        <span className="text-deep-blue-light mr-1">起源：</span>
-                        <span className="text-deep-blue">{culture.origin}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <span className="text-deep-blue-light mr-1">代表地域：</span>
-                        <span className="text-deep-blue">{culture.region}</span>
-                      </div>
-                    </div>
-                    
-                    <p className="font-song text-deep-blue-light leading-relaxed mb-4">
-                      {culture.description}
-                    </p>
-                    
-                    <div className="flex flex-wrap gap-2">
-                      {culture.features.map((feature) => (
-                        <span key={feature} className="px-3 py-1 bg-deep-blue/10 text-deep-blue font-song text-sm rounded-sm">
-                          {feature}
-                        </span>
-                      ))}
-                    </div>
+        <motion.section id="geometric" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="scroll-mt-24 pt-20">
+          <div className="grid items-center gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+            <div>
+              <p className="font-song text-sm text-palace-red">02 / GEOMETRIC</p>
+              <h2 className="mt-2 font-shufa text-4xl text-deep-blue">几何纹样知识</h2>
+              <MeanderDivider />
+              <p className="mt-5 font-song leading-8 text-deep-blue-light">
+                几何纹样强调线条转折、单元重复、交叠关系与整体秩序，可通过单独纹样、边饰和四方连续等方式组织。平台目前支持以下四类几何母题。
+              </p>
+            </div>
+            <img src="/images/heritage/theme-geometric-reference.png" alt="传统几何纹样资料图" className="aspect-[4/3] w-full object-cover" />
+          </div>
+          <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {geometricPatterns.map((pattern) => <PatternKnowledgeCard key={pattern.name} {...pattern} />)}
+          </div>
+        </motion.section>
+
+        <motion.section id="craft" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="scroll-mt-24 pt-20">
+          <div className="border-y border-deep-blue-100 py-9">
+            <p className="font-song text-sm text-palace-red">03 / CRAFT KNOWLEDGE</p>
+            <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+              <h2 className="font-shufa text-4xl text-deep-blue">传统工艺知识</h2>
+              <p className="max-w-2xl font-song leading-7 text-deep-blue-light">通过真实馆藏与工艺实物认识纹样如何依附于织物、纸张、陶瓷和木构件。以下图片均为真实资料图，不是 AI 生成图。</p>
+            </div>
+          </div>
+          <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {craftKnowledge.map((craft) => (
+              <article key={craft.name} className="overflow-hidden border border-deep-blue-100 bg-rice-paper-light">
+                <img src={craft.image} alt={craft.imageAlt} className="aspect-[4/3] w-full object-cover" />
+                <div className="p-5">
+                  <h3 className="font-shufa text-2xl text-deep-blue">{craft.name}</h3>
+                  <p className="mt-4 font-song leading-7 text-deep-blue-light">{craft.description}</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {craft.tags.map((tag) => <span key={tag} className="border border-deep-blue-100 px-2.5 py-1 font-song text-xs text-deep-blue">{tag}</span>)}
                   </div>
                 </div>
-              </FrameDecorations>
-            </motion.div>
-          ))}
-        </div>
-
-        <motion.section
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
-          className="mt-16"
-        >
-          <div className="text-center mb-10">
-            <h2 className="font-shufa text-2xl md:text-3xl text-deep-blue mb-4">纹样寓意</h2>
-            <LotusDivider />
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { symbol: '牡丹', meaning: '富贵吉祥' },
-              { symbol: '龙凤', meaning: '尊贵权威' },
-              { symbol: '蝙蝠', meaning: '福气满满' },
-              { symbol: '鱼', meaning: '年年有余' },
-              { symbol: '梅花', meaning: '坚韧不拔' },
-              { symbol: '莲花', meaning: '纯洁高雅' },
-              { symbol: '云纹', meaning: '吉祥如意' },
-              { symbol: '回纹', meaning: '绵延不断' },
-            ].map((item) => (
-              <div key={item.symbol} className="bg-rice-paper-light p-4 rounded-sm border border-deep-blue-100 text-center">
-                <span className="font-shufa text-xl text-palace-red">{item.symbol}</span>
-                <p className="font-song text-sm text-deep-blue-light mt-1">{item.meaning}</p>
-              </div>
+              </article>
             ))}
           </div>
+          <p className="mt-6 border-l-2 border-palace-red pl-3 font-song text-sm leading-6 text-deep-blue-light">
+            工艺知识用于理解传统纹样的材料与应用语境；平台当前生成能力仍聚焦花卉、几何及二者融合，不提供刺绣、织锦、剪纸等专项工艺风格生成。
+          </p>
         </motion.section>
       </div>
     </div>

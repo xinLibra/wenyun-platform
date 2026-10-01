@@ -2,10 +2,18 @@ import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 
 export function ScrollToTop() {
-  const { pathname, search } = useLocation()
+  const { pathname, search, hash } = useLocation()
   
   useEffect(() => {
     const handleScroll = () => {
+      if (hash) {
+        const target = document.getElementById(decodeURIComponent(hash.slice(1)))
+        if (target) {
+          window.scrollTo({ top: Math.max(0, target.offsetTop - 80), behavior: 'auto' })
+          return
+        }
+      }
+
       window.scrollTo({
         top: 0,
         behavior: 'smooth'
@@ -21,7 +29,7 @@ export function ScrollToTop() {
       clearTimeout(timer)
       clearTimeout(timer2)
     }
-  }, [pathname, search])
+  }, [pathname, search, hash])
   
   return null
 }

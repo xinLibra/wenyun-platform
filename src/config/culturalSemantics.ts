@@ -172,7 +172,11 @@ export function searchCulturalSemantics(query: string): CulturalSemantic[] {
   const seen = new Set<string>()
   const results: CulturalSemantic[] = []
   for (const item of CULTURAL_SEMANTICS) {
+    const sceneId = sceneToSceneId(item.scene)
+    const sceneMeta = SCENE_META[sceneId]
     const hit = item.keywords.some((kw) => q.includes(kw))
+      || q.includes(item.scene)
+      || Boolean(sceneMeta?.label && q.includes(sceneMeta.label))
     if (hit && !seen.has(item.patternId + item.scene)) {
       seen.add(item.patternId + item.scene)
       results.push(item)
@@ -216,10 +220,12 @@ export const SCENE_ALIAS: Record<string, string> = {
   '姻缘/情缘': 'wedding',
   // 寿辰 / 生辰
   '寿辰/祝寿': 'longevity',
+  '长寿/康宁': 'longevity',
   '长辈寿辰': 'longevity',
   '祝寿/延年': 'longevity',
   '重阳节': 'longevity',
   '生日/生辰': 'birthday',
+  '长寿': 'longevity',
   // 开业 / 创业 / 仕途
   '开业/升职': 'opening',
   '开业/庆典': 'opening',
@@ -243,9 +249,11 @@ export const SCENE_ALIAS: Record<string, string> = {
   '端午/龙舟': 'festival',
   // 礼赠 / 文创周边
   '文化礼品': 'cultural',
+  '文创周边': 'cultural',
   '长辈馈赠': 'cultural',
   // 服饰 / 家居
   '传统服饰': 'apparel',
+  '服饰与面料': 'apparel',
   '家居装饰': 'home',
   // 护佑 / 祈福
   '镇宅/祈福': 'protection',
@@ -314,6 +322,31 @@ export const SCENE_ALIAS: Record<string, string> = {
   '商务/会议': 'business',
 }
 
+/**
+ * 将较细的语义场景归并到少量常用入口。
+ * 关键词表仍完整保留，因此自然语言解析能力不减少，只精简页面上的可选项。
+ */
+const SCENE_COMPACT_GROUP: Record<string, string> = {
+  birthday: 'longevity',
+  festival: 'newyear',
+  joy: 'newyear',
+  opening: 'business',
+  venture: 'business',
+  career: 'business',
+  family: 'prosperity',
+  daughter: 'cultural',
+  children: 'cultural',
+  coming_of_age: 'graduation',
+  friendship: 'cultural',
+  gratitude: 'cultural',
+  protection: 'zen',
+  integrity: 'elegance',
+  craft: 'heritage',
+  minimalist: 'heritage',
+  textile: 'home',
+  emblem: 'cultural',
+}
+
 /** 标准场景 id → 展示名 + 场景提示文案（未列出的场景自动用语义表寓意兜底） */
 const SCENE_META: Record<string, { label: string; hint?: string }> = {
   graduation: { label: '毕业', hint: '寓意成长与高升；宜用梅、牡丹、回纹等；色调明快，适合礼品与书签。' },
@@ -324,14 +357,14 @@ const SCENE_META: Record<string, { label: string; hint?: string }> = {
   venture: { label: '创业', hint: '寓意事业腾飞；宜用方胜、回纹；气势昂扬。' },
   career: { label: '仕途', hint: '寓意功名亨通；宜用方胜、兰；端庄贵气。' },
   housewarming: { label: '乔迁', hint: '寓意新居纳福；宜用锦地、牡丹、莲；温馨吉庆。' },
-  newyear: { label: '新春', hint: '寓意新春吉庆；宜用盘长、方胜、梅；红金喜庆。' },
+  newyear: { label: '新春庆典', hint: '寓意新春与节庆吉祥；宜用盘长、方胜、梅、牡丹；配色明快喜庆。' },
   festival: { label: '庆典', hint: '寓意隆重热闹；宜用盘长、方胜、牡丹；华美大气。' },
-  cultural: { label: '文创周边', hint: '适合手机壳、帆布包、礼盒等；主体清晰、背景干净。' },
+  cultural: { label: '文创礼赠', hint: '适合手机壳、帆布包、礼盒与纪念品等；主体清晰、背景干净。' },
   apparel: { label: '服饰', hint: '适合面料与绣片；注意边缘完整与对称。' },
   home: { label: '家居', hint: '装饰性强、可连续铺陈；宜锦地、回纹、牡丹、莲花；色调和谐。' },
   protection: { label: '护佑', hint: '寓意镇宅护佑；宜用方胜、回纹；稳重有威。' },
-  prosperity: { label: '富贵', hint: '寓意富贵繁荣；宜用牡丹、锦地、石榴；华丽丰盛。' },
-  elegance: { label: '雅集', hint: '寓意文人雅趣；宜用梅兰竹菊、回纹、莲；清雅含蓄。' },
+  prosperity: { label: '富贵家业', hint: '寓意富贵繁荣、家业绵延；宜用牡丹、锦地、石榴；华丽丰盛。' },
+  elegance: { label: '雅集高洁', hint: '寓意文人雅趣与高洁品格；宜用梅兰菊、回纹、莲；清雅含蓄。' },
   daughter: { label: '少女礼', hint: '寓意少女美好；宜用芙蓉、石榴花、盘长；柔美灵动。' },
   children: { label: '童趣', hint: '寓意孩童守护；宜用回纹、蝴蝶；可爱生动。' },
   coming_of_age: { label: '成人礼', hint: '寓意长大成才；宜用回纹、方胜；精神昂扬。' },
@@ -339,7 +372,7 @@ const SCENE_META: Record<string, { label: string; hint?: string }> = {
   noble: { label: '尊贵', hint: '寓意尊贵权威；宜用方胜、锦地；雍容华贵。' },
   nature: { label: '自然四季', hint: '寓意自然生机；宜用菊、梅、莲花；清新明快。' },
   family: { label: '家业传承', hint: '寓意子孙绵延、家业兴旺；宜用石榴、牡丹、莲花。' },
-  zen: { label: '静心禅意', hint: '寓意宁静祥和；宜用莲、盘长、兰；素雅沉静。' },
+  zen: { label: '静心祈福', hint: '寓意宁静、祥和与护佑；宜用莲、盘长、兰、方胜；素雅沉静。' },
   integrity: { label: '清廉高洁', hint: '寓意清正高洁；宜用莲、兰、梅；淡雅端正。' },
   friendship: { label: '友谊金兰', hint: '寓意情谊相投；宜用兰、回纹、梅；清雅隽永。' },
   gratitude: { label: '感恩', hint: '寓意感恩敬重；宜用牡丹、兰；温暖真诚。' },
@@ -350,12 +383,18 @@ const SCENE_META: Record<string, { label: string; hint?: string }> = {
   minimalist: { label: '极简几何', hint: '寓意干净现代；宜用回纹、方胜；黑白或单色。' },
   textile: { label: '底纹满铺', hint: '适合连续底纹与布料；宜用锦地、回纹；连续排布。' },
   emblem: { label: '徽章标识', hint: '适合居中单纹样；宜用方胜（单独）、盘长；对称完整。' },
-  business: { label: '商务', hint: '寓意得胜体面；宜用方胜；端庄方正。' },
+  business: { label: '商务事业', hint: '寓意事业顺遂、开业兴隆；宜用方胜、回纹、牡丹；端庄大气。' },
 }
 
 /** 语义表 scene 原始值 → 标准场景 id（未归并的值原样返回） */
 export function sceneToSceneId(scene: string): string {
-  return SCENE_ALIAS[scene] ?? scene
+  const aliased = SCENE_ALIAS[scene] ?? scene
+  return SCENE_COMPACT_GROUP[aliased] ?? aliased
+}
+
+export function getSceneLabel(scene: string): string {
+  const id = sceneToSceneId(scene)
+  return SCENE_META[id]?.label ?? scene
 }
 
 /** 从语义表 scene 字段自动去重生成「使用场景」选项 */
@@ -386,6 +425,9 @@ export const SCENE_KEYWORDS: Record<string, string[]> = (() => {
     const set = (map[id] ??= new Set<string>())
     set.add(s.scene)
     for (const kw of s.keywords) set.add(kw)
+    const meta = SCENE_META[id]
+    if (meta?.label) set.add(meta.label)
+    set.add(id)
   }
   return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, [...v]]))
 })()

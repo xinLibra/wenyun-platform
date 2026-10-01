@@ -1,4 +1,4 @@
-import { searchCulturalSemantics, sceneToSceneId, type CulturalSemantic } from '../config/culturalSemantics'
+import { getSceneLabel, searchCulturalSemantics, sceneToSceneId, type CulturalSemantic } from '../config/culturalSemantics'
 import { getPatternThumbnail } from '../config/patternThumbnails'
 
 export interface PatternRecommendation {
@@ -37,12 +37,12 @@ export async function mockSemanticSearch(query: string): Promise<SemanticSearchR
     return { matchedTags: [], recommendations: [] }
   }
 
-  const seen = new Set<string>()
+  // 同一纹样只保留一条推荐，避免同一纹样因命中多个场景重复出现。
+  const seenPatternIds = new Set<string>()
   const recs: PatternRecommendation[] = []
   for (const hit of hits) {
-    const key = `${hit.patternId}:${hit.scene}`
-    if (seen.has(key)) continue
-    seen.add(key)
+    if (seenPatternIds.has(hit.patternId)) continue
+    seenPatternIds.add(hit.patternId)
     recs.push({
       patternId: hit.patternId,
       patternName: hit.patternLabel,
@@ -57,7 +57,7 @@ export async function mockSemanticSearch(query: string): Promise<SemanticSearchR
   }
 
   // matchedTags：命中场景的去重集合，供「识别到」标签展示
-  const sceneTags = [...new Set(hits.map((h: CulturalSemantic) => h.scene))].slice(0, 5)
+  const sceneTags = [...new Set(hits.map((h: CulturalSemantic) => getSceneLabel(h.scene)))].slice(0, 5)
 
   return {
     matchedTags: sceneTags,

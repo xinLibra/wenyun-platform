@@ -28,9 +28,9 @@ const themes = [
 ]
 
 const knowledgeCards = [
-  { title: '花卉纹样资料', text: '查阅莲花、牡丹、梅花等传统母题的造型与文化寓意。', image: '/images/heritage/theme-floral-reference.jpg', href: '/create?theme=floral', actionLabel: '进入花卉主题生成' },
-  { title: '几何纹样资料', text: '了解回纹、盘长、锦地与方胜等几何母题的组织规律。', image: '/images/heritage/theme-geometric-reference.png', href: '/create?theme=geometric', actionLabel: '进入几何主题生成' },
-  { title: '蓝印花布工艺', text: '从真实蓝印花布实物中认识靛蓝染色、纹样布局与民间寓意。', image: '/images/heritage/blue-calico-floral-bird.jpg', href: '/culture', actionLabel: '查看工艺资料' },
+  { title: '花卉纹样资料', text: '查阅牡丹、莲花、梅花等七类可生成花卉母题的造型与文化寓意。', image: '/images/heritage/theme-floral-reference.jpg', href: '/culture#floral', actionLabel: '查看花卉知识' },
+  { title: '几何纹样资料', text: '了解回纹、盘长纹、锦地纹与方胜纹的构成方式和组织规律。', image: '/images/heritage/theme-geometric-reference.png', href: '/culture#geometric', actionLabel: '查看几何知识' },
+  { title: '传统工艺知识', text: '通过蓝印花布、刺绣、织锦、剪纸、陶瓷与木雕实物认识纹样应用。', image: '/images/heritage/blue-calico-floral-bird.jpg', href: '/culture#craft', actionLabel: '查看工艺知识' },
 ]
 
 const workflow = [
@@ -140,7 +140,7 @@ export default function Home() {
             {knowledgeCards.map((item) => (
               <Card key={item.title} hover bordered className="overflow-hidden p-0">
                 <img src={item.image} alt={`${item.title}传统资料图`} className="aspect-[4/3] w-full object-cover" />
-                <div className="p-5"><div className="flex items-center justify-between gap-3"><h3 className="font-shufa text-xl text-deep-blue">{item.title}</h3><span className="shrink-0 font-song text-xs text-palace-red">传统资料图</span></div><p className="mt-3 font-song leading-7 text-deep-blue-light">{item.text}</p><Link to={item.href} className="mt-4 inline-flex font-song text-sm text-palace-red">{item.actionLabel} →</Link></div>
+                <div className="p-5"><div className="flex items-center justify-between gap-3"><h3 className="font-shufa text-xl text-deep-blue">{item.title}</h3><span className="shrink-0 font-song text-xs text-palace-red">知识库资料</span></div><p className="mt-3 font-song leading-7 text-deep-blue-light">{item.text}</p><Link to={item.href} className="mt-4 inline-flex font-song text-sm text-palace-red">{item.actionLabel} →</Link></div>
               </Card>
             ))}
           </div>

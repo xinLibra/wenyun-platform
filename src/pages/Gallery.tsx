@@ -30,6 +30,48 @@ interface GalleryWork {
   source?: string
 }
 
+function inferTaxonomyFromContent(
+  title: string,
+  tags: string[],
+  theme?: string,
+  subcategory?: string,
+): { theme?: string; subcategory?: string; tags: string[] } {
+  let resolvedTheme = theme
+  let resolvedSubcategory = subcategory
+  const haystack = `${title} ${(tags || []).join(' ')}`
+
+  if (!resolvedSubcategory) {
+    for (const patternTheme of PATTERN_THEMES) {
+      const matched = patternTheme.subcategories.find((sub) => {
+        const aliases = [sub.label]
+        if (sub.label.endsWith('纹') && sub.label.length > 2) aliases.push(sub.label.slice(0, -1))
+        return aliases.some((alias) => haystack.includes(alias))
+      })
+      if (matched) {
+        resolvedTheme = resolvedTheme || patternTheme.id
+        resolvedSubcategory = matched.id
+        break
+      }
+    }
+  }
+
+  if (resolvedSubcategory && !resolvedTheme) {
+    resolvedTheme = PATTERN_THEMES.find((item) =>
+      item.subcategories.some((sub) => sub.id === resolvedSubcategory)
+    )?.id
+  }
+
+  const resolvedTags = [...(tags || [])]
+  if (resolvedTheme && resolvedSubcategory) {
+    const patternTheme = PATTERN_THEMES.find((item) => item.id === resolvedTheme)
+    const sub = patternTheme?.subcategories.find((item) => item.id === resolvedSubcategory)
+    if (sub && !resolvedTags.includes(sub.label)) resolvedTags.unshift(sub.label)
+    if (patternTheme && !resolvedTags.includes(patternTheme.label)) resolvedTags.push(patternTheme.label)
+  }
+
+  return { theme: resolvedTheme, subcategory: resolvedSubcategory, tags: resolvedTags }
+}
+
 /**
  * 旧数据兼容：无 theme/subcategory 字段时，从 tags 反查子类中文名（与 PATTERN_THEMES label 一致），
  * 映射回主题 + 子类 id，使旧作品也能被花卉/几何子类筛选命中；匹配不到则归入「全部」。
@@ -70,7 +112,7 @@ export default function Gallery() {
       // 缩略图先占位，渲染后由 loadImagesConcurrently 按 id 批量补图
       const { data: generationsData } = await supabase
         .from('generations')
-        .select('id, user_id, style_id, author_nickname, is_public, created_at, published_at, title:params->>title, tags:params->tags, theme:params->>theme, subcategory:params->>subcategory, source:params->>source, fusion:params->fusion')
+        .select('id, user_id, style_id, author_nickname, is_public, created_at, published_at, title:params->>title, tags:params->tags, theme:params->>theme, subcategory:params->>subcategory, dimension:params->dimension, source:params->>source, fusion:params->fusion')
         .eq('is_public', true)
         .eq('is_deleted', false)
         // 最新发布：按「作者选择公开的时间」排序，null 兜底用 created_at（覆盖未回填的旧公开作品）
@@ -118,21 +160,28 @@ export default function Gallery() {
         const transformed: GalleryWork[] = generationsData.map((gen: any) => {
           const profileNickname = userNicknames[gen.user_id]
           const authorName = profileNickname || gen.author_nickname || '用户'
+          const title = gen.title || `纹样作品 #${gen.id.slice(0, 8)}`
+          const taxonomy = inferTaxonomyFromContent(
+            title,
+            gen.tags || [],
+            gen.theme || gen.dimension?.mainTheme || undefined,
+            gen.subcategory || gen.dimension?.subcategory || undefined,
+          )
           
           return {
             id: gen.id,
-            title: gen.title || `纹样作品 #${gen.id.slice(0, 8)}`,
+            title,
             author: authorName,
             category: gen.style_id || 'custom',
             likes: Math.floor(Math.random() * 300) + 50,
             image: '', // 列表不拉 image_url，渲染后按 id 补图
             created_at: gen.created_at,
             published_at: gen.published_at || null,
-            tags: gen.tags || [],
+            tags: taxonomy.tags,
             favoriteCount: favoriteCounts[gen.id] || 0,
             // 主题/子类/来源从保存时的 params 元数据投影读取
-            theme: gen.theme || undefined,
-            subcategory: gen.subcategory || undefined,
+            theme: taxonomy.theme,
+            subcategory: taxonomy.subcategory,
             // 兼容：新数据写 source:'fusion'；旧数据通过 params.fusion 是否存在识别
             source: gen.source || (gen.fusion ? 'fusion' : undefined),
           }
