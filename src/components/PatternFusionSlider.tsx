@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { GeneratingPulse } from './ui/GeneratingPulse'
 
 interface PatternOption {
@@ -24,23 +24,25 @@ export function PatternFusionSlider({
   isGenerating = false,
   resultImage,
 }: PatternFusionSliderProps) {
+  const MIN_FUSION_RATIO = 20
+  const MAX_FUSION_RATIO = 80
   const [ratioA, setRatioA] = useState(50)
   const ratioB = 100 - ratioA
   const canFuse = Boolean(patternA && patternB)
 
+  useEffect(() => {
+    setRatioA(50)
+    onFusionChange?.(50, 50)
+  }, [patternA?.patternId, patternB?.patternId])
+
   const updateRatio = (newRatioA: number) => {
-    const clamped = Math.min(100, Math.max(0, newRatioA))
+    const clamped = Math.min(MAX_FUSION_RATIO, Math.max(MIN_FUSION_RATIO, newRatioA))
     setRatioA(clamped)
     onFusionChange?.(clamped, 100 - clamped)
   }
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     updateRatio(Number(e.target.value))
-  }
-
-  const handleBlockClick = (index: number) => {
-    if (!canFuse) return
-    updateRatio((index + 1) * 10)
   }
 
   const nameA = patternA?.patternName ?? '第一个纹样'
@@ -112,8 +114,8 @@ export function PatternFusionSlider({
         </div>
         <input
           type="range"
-          min={0}
-          max={100}
+          min={MIN_FUSION_RATIO}
+          max={MAX_FUSION_RATIO}
           value={ratioA}
           onChange={handleSliderChange}
           disabled={!canFuse}
@@ -124,22 +126,25 @@ export function PatternFusionSlider({
         />
       </div>
 
-      <div className="flex gap-0.5 mb-5">
-        {Array.from({ length: 10 }).map((_, i) => (
+      <div className="grid grid-cols-3 gap-2 mb-5">
+        {[
+          { label: `${nameA}主导`, value: 65 },
+          { label: '均衡融合', value: 50 },
+          { label: `${nameB}主导`, value: 35 },
+        ].map((preset) => (
           <button
-            key={i}
+            key={preset.value}
             type="button"
-            aria-label={`将比例设为 ${(i + 1) * 10}%`}
-            onClick={() => handleBlockClick(i)}
+            onClick={() => updateRatio(preset.value)}
             disabled={!canFuse}
-            className={`h-2 flex-1 rounded-sm transition-colors ${
-              canFuse ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
-            } ${
-              i < Math.round(ratioA / 10)
-                ? 'bg-palace-red hover:bg-palace-red-dark'
-                : 'bg-deep-blue-200 hover:bg-deep-blue-300'
+            className={`min-w-0 px-2 py-2 border rounded-sm font-song text-xs whitespace-nowrap transition-colors ${
+              ratioA === preset.value
+                ? 'border-palace-red bg-palace-red/10 text-palace-red'
+                : 'border-deep-blue-200 text-deep-blue-light hover:border-deep-blue'
             }`}
-          />
+          >
+            <span className="block truncate">{preset.label}</span>
+          </button>
         ))}
       </div>
 

@@ -70,6 +70,14 @@ const SD_DEFAULTS = {
   seed: -1,
 } as const
 
+/** 双 LoRA 融合比单纹样更容易出现结构漂移，使用更稳定的采样设置。 */
+const FUSION_SD_DEFAULTS = {
+  ...SD_DEFAULTS,
+  steps: 32,
+  cfgScale: 6.5,
+  samplerName: 'DPM++ 2M Karras',
+} as const
+
 /**
  * 代理地址：
  *   - 生产：读 VITE_SD_API_URL（如 https://your-backend.example.com/sd-api），
@@ -758,11 +766,11 @@ function buildNegativePromptCore(
         'product photo',
         'physical object',
         'still life',
-        'organic',
         'abstract block',
         'fragmented shapes',
         'random geometry',
       )
+      if (!hasFloralSide) base.push('organic')
     }
 
     // 锦地强制"软边抽象块面"压制：深色底+白剪影漂移的元凶（2026-08-31 专项，二次修订）。
@@ -1260,14 +1268,11 @@ export interface FusionPromptInfo {
 /**
  * 融合 prompt 拼接
  *
- * 权重映射公式（写入注释供排障对照）：
- *   weight = clamp( w_floor + (融合比例 / 100) × (loraMap 推荐权重 − w_floor) )
- *   - w_floor = 0.30：任一子类比例降到 0 也保留弱显，不会因权重归零被省略 <lora:...>；
- *   - 50/50 时两侧约 0.55–0.75（几何/花卉推荐权重 0.8–0.9 时），保证双纹样同时可见；
- *   - ratio=100 → 取推荐权重；ratio=0 → 取 w_floor。
+ * 权重映射采用 20–80 的压缩有效区间：比例只控制视觉主次，不会把弱侧 LoRA 压到不可辨。
+ * 花卉×几何、花卉×花卉、几何×几何分别使用独立权重区间与构图语义。
  * 说明：
- *   - 所有融合（含回纹×花卉）都是单次 txt2img 双 LoRA 融合（mode=dual_lora_fusion）：
- *     prompt 同时带两个 trigger 与两个 <lora:...>，允许整体纹样风格的混合。
+ *   - 同类组合使用单次 txt2img 双 LoRA 融合；
+ *   - 花卉×几何优先分别生成稳定的单纹样源图，再按构图规则合成，失败时回退双 LoRA。
  *   - 回纹×花卉（方案 C，2026-09-04）：不做 frame/flower 两段合成、无 PIL 贴图、
  *     无 flowerFill/bandScale 合成参数（两段合成已下线）；只在单次 prompt 内软引导
  *     「回纹作外框 + 花卉居中」，权重略偏回纹（50/50 → 回纹≈0.75、花卉≈0.60），
@@ -1278,6 +1283,119 @@ export interface FusionPromptInfo {
 
 /** 花卉子类判定（themeId === 'floral'，几何×花卉分流用） */
 const isFloralSubcategory = (id: string): boolean => getLoraEntry(id)?.themeId === 'floral'
+
+const FUSION_GEOMETRIC_IDS = new Set(['huiwen', 'panchang', 'jindi', 'fangsheng'])
+
+type FusionFamily = 'geometric-floral' | 'floral-floral' | 'geometric-geometric'
+
+const FUSION_MOTIF_TERMS: Record<string, string> = {
+  huiwen: 'rectangular huiwen meander framework',
+  panchang: 'interlaced panchang endless-knot framework',
+  jindi: 'fine jindi brocade lattice ground',
+  fangsheng: 'overlapping fangsheng diamond framework',
+  chrysanthemum: 'recognizable chrysanthemum blossoms',
+  lotus: 'recognizable lotus flowers',
+  plum: 'recognizable plum blossoms and angular branches',
+  peony: 'recognizable layered peony flowers',
+  orchid: 'recognizable orchid flowers and slender leaves',
+  furong: 'recognizable hibiscus flowers',
+  pomegranate_flower: 'recognizable pomegranate flowers',
+}
+
+const getFusionFamily = (a: string, b: string): FusionFamily => {
+  const aGeo = FUSION_GEOMETRIC_IDS.has(a)
+  const bGeo = FUSION_GEOMETRIC_IDS.has(b)
+  if (aGeo && bGeo) return 'geometric-geometric'
+  if (!aGeo && !bGeo) return 'floral-floral'
+  return 'geometric-floral'
+}
+
+/**
+ * 比例控制视觉主次，不再线性压低弱侧 LoRA。
+ * 双 LoRA 的有效区间经过压缩，保证 20:80 时两种纹样仍然可辨。
+ */
+const calcFusionLoraWeight = (id: string, ratio: number, family: FusionFamily): number => {
+  const isGeo = FUSION_GEOMETRIC_IDS.has(id)
+  const normalized = Math.min(80, Math.max(20, ratio)) / 100
+  const [minWeight, maxWeight] = family === 'geometric-floral'
+    ? (isGeo ? [0.58, 0.8] : [0.54, 0.74])
+    : family === 'geometric-geometric'
+      ? [0.52, 0.72]
+      : [0.5, 0.68]
+  return Math.round((minWeight + normalized * (maxWeight - minWeight)) * 100) / 100
+}
+
+const promptEmphasis = (ratio: number): string =>
+  (0.98 + Math.min(80, Math.max(20, ratio)) * 0.0026).toFixed(2)
+
+function buildFusionCompositionClauses(
+  subcategoryA: string,
+  subcategoryB: string,
+  ratioA: number,
+  ratioB: number,
+  arrangement: GenerationParams['arrangement'],
+): string[] {
+  const family = getFusionFamily(subcategoryA, subcategoryB)
+  const termA = FUSION_MOTIF_TERMS[subcategoryA] ?? getLoraEntry(subcategoryA)?.subLabelEn ?? subcategoryA
+  const termB = FUSION_MOTIF_TERMS[subcategoryB] ?? getLoraEntry(subcategoryB)?.subLabelEn ?? subcategoryB
+  const weightedA = `(${termA}:${promptEmphasis(ratioA)})`
+  const weightedB = `(${termB}:${promptEmphasis(ratioB)})`
+
+  if (family === 'geometric-floral') {
+    const geoIsA = FUSION_GEOMETRIC_IDS.has(subcategoryA)
+    const geoTerm = geoIsA ? weightedA : weightedB
+    const flowerTerm = geoIsA ? weightedB : weightedA
+    if (arrangement === 'seamless') {
+      return [
+        `${geoTerm} as a coherent repeating structural ground`,
+        `${flowerTerm} placed rhythmically inside alternating lattice spaces`,
+        'both the floral motif and geometric framework are clearly recognizable',
+        'integrated textile repeat with clean motif boundaries',
+      ]
+    }
+    if (arrangement === 'adapted') {
+      return [
+        `${geoTerm} shaping the border and fitted outline`,
+        `${flowerTerm} as the focal ornament inside the fitted panel`,
+        'both source motifs clearly recognizable in one integrated composition',
+      ]
+    }
+    return [
+      'one complete integrated motif composition, exactly one focal group',
+      `${geoTerm} as the surrounding structural border and supporting framework`,
+      `${flowerTerm} as the central focal motif`,
+      'clear hierarchy, generous negative space, both source motifs clearly recognizable',
+    ]
+  }
+
+  if (family === 'floral-floral') {
+    if (arrangement === 'seamless') {
+      return [
+        `${weightedA} alternating with ${weightedB}`,
+        'two clearly distinguishable flower species, balanced rhythm, interwoven stems',
+        'coherent seamless botanical textile repeat',
+      ]
+    }
+    return [
+      'one complete paired botanical bouquet',
+      `${weightedA} and ${weightedB} with two clearly distinguishable flower species`,
+      'interwoven stems, balanced hierarchy, no hybrid flower',
+    ]
+  }
+
+  if (arrangement === 'seamless') {
+    return [
+      `${weightedA} interlocked with ${weightedB}`,
+      'two distinct geometric vocabularies in one orderly layered lattice',
+      'clean continuous repeat, both source structures clearly recognizable',
+    ]
+  }
+  return [
+    'one complete geometric emblem, exactly one focal group',
+    `${weightedA} structurally interlocked with ${weightedB}`,
+    'two distinct geometric vocabularies, clear line hierarchy, generous negative space',
+  ]
+}
 
 /** 共用商品/写实/门板对联跑题压制词 */
 const HUIWEN_FUSION_NEGATIVE_CORE = [
@@ -1378,37 +1496,17 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     loraFileB = fs.loraFile
   }
 
-  // 权重映射：比例滑条线性映射 + 保底下限（避免任一子类权重归零导致其 LoRA 被省略）
-  //   weight = clamp( w_floor + (ratio/100) × (推荐权重 − w_floor) )
-  //   - 50/50 → 两侧约 0.55–0.75（推荐权重 0.8–0.9 时）；ratio=100 → 取推荐权重；ratio=0 → w_floor；
-  //   - w_floor=0.30：任一侧比例降到 0 也保留弱显，不会使该子类的 <lora:...> 被省略。
-  const FUSION_WEIGHT_FLOOR = 0.3
-  const clampW = (w: number) => Math.max(0, Math.min(1.5, w))
-  const calcWeight = (recommended: number, ratio: number) =>
-    Math.round(clampW(FUSION_WEIGHT_FLOOR + (ratio / 100) * Math.max(0, recommended - FUSION_WEIGHT_FLOOR)) * 100) / 100
-  let weightA = calcWeight(subA?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioA)
-  let weightB = calcWeight(subB?.loraWeight ?? DEFAULT_LORA_WEIGHT, ratioB)
+  const fusionFamily = getFusionFamily(subcategoryA, subcategoryB)
+  const weightA = calcFusionLoraWeight(subcategoryA, ratioA, fusionFamily)
+  const weightB = calcFusionLoraWeight(subcategoryB, ratioB, fusionFamily)
 
-  // 回纹×花卉（方案 C，2026-09-04）：单次双 LoRA、不做两段合成。
-  // 权重整体略偏回纹：50/50 → 回纹≈0.75、花卉≈0.60（回纹带 0.60–0.90、花带 0.50–0.70，
-  // 随滑条浮动，任一侧都不会被压没）；构图由 huiwenSide 分支在正向/负向里软引导。
+  // 回纹×花卉保留专项负向词，但权重统一走压缩曲线，避免弱侧在偏置比例下消失。
   const huiwenSide =
     subcategoryA === 'huiwen' && isFloralSubcategory(subcategoryB)
       ? ('A' as const)
       : subcategoryB === 'huiwen' && isFloralSubcategory(subcategoryA)
         ? ('B' as const)
         : null
-  if (huiwenSide === 'A') {
-    weightA = Math.round(Math.max(0.6, Math.min(0.9, 0.6 + 0.3 * (ratioA / 100))) * 100) / 100
-    weightB = Math.round(Math.max(0.5, Math.min(0.7, 0.5 + 0.2 * (ratioB / 100))) * 100) / 100
-  } else if (huiwenSide === 'B') {
-    weightB = Math.round(Math.max(0.6, Math.min(0.9, 0.6 + 0.3 * (ratioB / 100))) * 100) / 100
-    weightA = Math.round(Math.max(0.5, Math.min(0.7, 0.5 + 0.2 * (ratioA / 100))) * 100) / 100
-  }
-
-  // 融合是否含方胜：任一槽为方胜时，按全局排布决定"单独/连续"语义与负向提示
-  const hasFangsheng = subcategoryA === 'fangsheng' || subcategoryB === 'fangsheng'
-
   const loraA = loraFileA && weightA >= 0.05 ? { file: loraFileA, weight: weightA } : null
   const loraB = loraFileB && weightB >= 0.05 ? { file: loraFileB, weight: weightB } : null
 
@@ -1420,8 +1518,11 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
 
   const parts: string[] = []
 
-  // 1) 触发词：A、B 的 trigger 全部入列（多 trigger 逐项写入）
-  for (const t of [...triggersA, ...triggersB]) parts.push(t)
+  // 1) 主导侧触发词靠前，但两侧触发词全部保留。
+  const orderedTriggers = ratioA >= ratioB
+    ? [...triggersA, ...triggersB]
+    : [...triggersB, ...triggersA]
+  for (const t of orderedTriggers) parts.push(t)
 
   // 2) Chinese traditional {A} and {B} pattern
   if (subLabelEnA && subLabelEnB) {
@@ -1431,6 +1532,15 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   } else {
     parts.push('Chinese traditional pattern')
   }
+
+  // 2.2) 按组合类型明确结构分工，避免两个 LoRA 直接互相覆盖成抽象碎片。
+  parts.push(...buildFusionCompositionClauses(
+    subcategoryA,
+    subcategoryB,
+    ratioA,
+    ratioB,
+    params.arrangement,
+  ))
 
   // 2.5) 几何结构强化（融合侧命中则并入，如 回纹+牡丹 时回纹补直角折线描述）。
   ;[subcategoryA, subcategoryB].forEach((id) => {
@@ -1470,29 +1580,11 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     parts.push('dense elaborate full pattern, intricate detail')
   }
 
-  // 7) 排布：arrangement（沿用用户排布，与其它双主题融合一致）
+  // 7) 排布：组合构图已在前部定义，这里只补生成格式约束。
   const arrangementUsed = params.arrangement
   switch (arrangementUsed) {
     case 'single':
-      if (huiwenSide) {
-        // 回纹×花卉（方案 C，2026-09-04）：单次 txt2img 内软引导构图 —— 回纹作外框、花卉居中。
-        // 不写 border only / empty panel（会把花抹掉或引向合成思维），
-        // 也不用 medallion / emblem 措辞（容易画成圆形徽章贴片观感）。
-        parts.push('huiwen meander as outer border frame')
-        parts.push('floral motif in the center, open panel composition, central floral arrangement')
-        parts.push('flat pattern design, decorative textile style, no seamless tile')
-      } else {
-        parts.push('single motif, centered medallion')
-        // 融合含方胜/盘长/回纹且排布=单独：强化"单个纹样"语义，避免退化成连续网
-        if (
-          hasFangsheng ||
-          subcategoryA === 'panchang' ||
-          subcategoryB === 'panchang' ||
-          (subcategoryA === 'huiwen' || subcategoryB === 'huiwen')
-        ) {
-          parts.push('single motif only, isolated emblem, large empty margin, no repeat, no tiling')
-        }
-      }
+      parts.push('single motif only, centered composition, large empty margin, no repeat, no tiling')
       // 锦地单独：large empty margin / no seamless tile（2026-08-31）
       if (subcategoryA === 'jindi' || subcategoryB === 'jindi') {
         parts.push('large empty margin, no seamless tile')
@@ -1555,7 +1647,25 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     (isGeoFusionSide(subcategoryA) && isFloralSubcategory(subcategoryB)) ||
     (isGeoFusionSide(subcategoryB) && isFloralSubcategory(subcategoryA))
   if (geoFloralFusion) {
-    negativePrompt += ', ' + [...HUIWEN_FUSION_NEGATIVE_CORE, ...FLORAL_ANTI_REALISM].join(', ')
+    negativePrompt += ', ' + [
+      ...HUIWEN_FUSION_NEGATIVE_CORE,
+      ...FLORAL_ANTI_REALISM,
+      'missing floral motif',
+      'missing geometric framework',
+      'only one source pattern',
+      'melted abstract blobs',
+      'fragmented motif pieces',
+      'unrecognizable hybrid symbol',
+    ].join(', ')
+  }
+  if (fusionFamily === 'floral-floral') {
+    negativePrompt += ', single flower species, hybrid flower, merged indistinguishable petals, botanical photograph'
+  }
+  if (fusionFamily === 'geometric-geometric') {
+    negativePrompt += ', only one geometric vocabulary, random abstract geometry, broken lines, melted shapes'
+  }
+  if (arrangementUsed === 'single') {
+    negativePrompt += ', seamless, tileable, repeating pattern, repeated motif, multiple motifs, wallpaper, all-over pattern, cropped motif'
   }
   // 回纹×花卉（方案 C）追加：防四格窗贴画/十字棂条/圆徽章贴片观感；花卉本体不压
   if (huiwenSide) {
@@ -1574,23 +1684,408 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
   }
 }
 
+function loadFusionImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.crossOrigin = 'anonymous'
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('融合源图加载失败'))
+    image.src = src
+  })
+}
+
+type RgbColor = { r: number; g: number; b: number }
+
+function parseHexColor(hex: string): RgbColor | null {
+  const normalized = hex.trim().replace(/^#/, '')
+  const expanded = normalized.length === 3
+    ? normalized.split('').map((char) => char + char).join('')
+    : normalized
+  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) return null
+  return {
+    r: Number.parseInt(expanded.slice(0, 2), 16),
+    g: Number.parseInt(expanded.slice(2, 4), 16),
+    b: Number.parseInt(expanded.slice(4, 6), 16),
+  }
+}
+
+function hslToHex(hue: number, saturation: number, lightness: number): string {
+  const h = ((hue % 360) + 360) % 360
+  const s = Math.min(1, Math.max(0, saturation / 100))
+  const l = Math.min(1, Math.max(0, lightness / 100))
+  const chroma = (1 - Math.abs(2 * l - 1)) * s
+  const section = h / 60
+  const secondary = chroma * (1 - Math.abs((section % 2) - 1))
+  let r = 0
+  let g = 0
+  let b = 0
+  if (section < 1) [r, g, b] = [chroma, secondary, 0]
+  else if (section < 2) [r, g, b] = [secondary, chroma, 0]
+  else if (section < 3) [r, g, b] = [0, chroma, secondary]
+  else if (section < 4) [r, g, b] = [0, secondary, chroma]
+  else if (section < 5) [r, g, b] = [secondary, 0, chroma]
+  else [r, g, b] = [chroma, 0, secondary]
+  const offset = l - chroma / 2
+  const toHex = (value: number) => Math.round((value + offset) * 255).toString(16).padStart(2, '0')
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+}
+
+function resolveFusionTargetHex(colorScheme: ColorSchemeParams): string {
+  if (colorScheme.mode === 'pantone' && colorScheme.pantone) {
+    return getPantoneHex(colorScheme.pantone) ?? '#C3423F'
+  }
+  if (colorScheme.mode === 'image') {
+    const sampled = colorScheme.colors?.map(parseHexColor).find(Boolean)
+    if (sampled) {
+      const toHex = (value: number) => value.toString(16).padStart(2, '0')
+      return `#${toHex(sampled.r)}${toHex(sampled.g)}${toHex(sampled.b)}`
+    }
+  }
+  return hslToHex(colorScheme.hue ?? 0, 58, colorScheme.brightness ?? 50)
+}
+
+function mixRgb(from: RgbColor, to: RgbColor, amount: number): RgbColor {
+  const ratio = Math.min(1, Math.max(0, amount))
+  return {
+    r: Math.round(from.r + (to.r - from.r) * ratio),
+    g: Math.round(from.g + (to.g - from.g) * ratio),
+    b: Math.round(from.b + (to.b - from.b) * ratio),
+  }
+}
+
+function recolorCanvasToTarget(canvas: HTMLCanvasElement, targetHex: string): void {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const target = parseHexColor(targetHex)
+  if (!ctx || !target) return
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const data = image.data
+  const darkTone = mixRgb(target, { r: 24, g: 25, b: 30 }, 0.12)
+  const lightTone = mixRgb(target, { r: 245, g: 240, b: 230 }, 0.72)
+
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue
+    const luminance = (data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722) / 255
+    const normalized = Math.min(1, Math.max(0, (luminance - 0.08) / 0.84))
+    const tone = normalized * normalized * (3 - 2 * normalized)
+    data[i] = Math.round(darkTone.r + (lightTone.r - darkTone.r) * tone)
+    data[i + 1] = Math.round(darkTone.g + (lightTone.g - darkTone.g) * tone)
+    data[i + 2] = Math.round(darkTone.b + (lightTone.b - darkTone.b) * tone)
+  }
+  ctx.putImageData(image, 0, 0)
+}
+
+function createRecoloredSource(image: HTMLImageElement, size: number, targetHex: string): HTMLCanvasElement {
+  const source = document.createElement('canvas')
+  source.width = size
+  source.height = size
+  const ctx = source.getContext('2d')
+  if (!ctx) throw new Error('无法创建融合配色画布')
+  ctx.drawImage(image, 0, 0, size, size)
+  recolorCanvasToTarget(source, targetHex)
+  return source
+}
+
+function createFloralForeground(
+  floral: HTMLImageElement,
+  size: number,
+  targetHex: string,
+): HTMLCanvasElement {
+  const source = document.createElement('canvas')
+  source.width = size
+  source.height = size
+  const sourceCtx = source.getContext('2d', { willReadFrequently: true })
+  if (!sourceCtx) throw new Error('无法读取花卉融合源图')
+  sourceCtx.drawImage(floral, 0, 0, size, size)
+
+  const image = sourceCtx.getImageData(0, 0, size, size)
+  const data = image.data
+  const buckets = new Map<number, { count: number; r: number; g: number; b: number }>()
+  const edgeDepth = 18
+
+  // 从四周边缘统计主色，避免依赖固定红底或白底。
+  for (let y = 0; y < size; y += 3) {
+    for (let x = 0; x < size; x += 3) {
+      if (x >= edgeDepth && x < size - edgeDepth && y >= edgeDepth && y < size - edgeDepth) continue
+      const i = (y * size + x) * 4
+      const key = ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4)
+      const bucket = buckets.get(key) ?? { count: 0, r: 0, g: 0, b: 0 }
+      bucket.count += 1
+      bucket.r += data[i]
+      bucket.g += data[i + 1]
+      bucket.b += data[i + 2]
+      buckets.set(key, bucket)
+    }
+  }
+
+  const background = [...buckets.values()].sort((a, b) => b.count - a.count)[0]
+  if (!background) throw new Error('无法识别花卉源图背景')
+  const bgR = background.r / background.count
+  const bgG = background.g / background.count
+  const bgB = background.b / background.count
+  let visiblePixels = 0
+
+  for (let i = 0; i < data.length; i += 4) {
+    const dr = data[i] - bgR
+    const dg = data[i + 1] - bgG
+    const db = data[i + 2] - bgB
+    const distance = Math.sqrt(dr * dr + dg * dg + db * db)
+    const linearAlpha = Math.min(1, Math.max(0, (distance - 20) / 72))
+    const alpha = linearAlpha * linearAlpha * (3 - 2 * linearAlpha)
+
+    if (alpha > 0.08) visiblePixels += 1
+    if (alpha <= 0.01) {
+      data[i + 3] = 0
+      continue
+    }
+
+    // 去除半透明边缘中的背景色污染，避免花枝周围出现红色方形晕边。
+    if (alpha < 0.98) {
+      data[i] = Math.max(0, Math.min(255, (data[i] - bgR * (1 - alpha)) / alpha))
+      data[i + 1] = Math.max(0, Math.min(255, (data[i + 1] - bgG * (1 - alpha)) / alpha))
+      data[i + 2] = Math.max(0, Math.min(255, (data[i + 2] - bgB * (1 - alpha)) / alpha))
+    }
+    data[i + 3] = Math.round(255 * alpha)
+  }
+
+  const coverage = visiblePixels / (size * size)
+  if (coverage < 0.01 || coverage > 0.68) {
+    throw new Error(`花卉前景识别异常（覆盖率 ${Math.round(coverage * 100)}%）`)
+  }
+
+  sourceCtx.putImageData(image, 0, 0)
+  recolorCanvasToTarget(source, targetHex)
+  return source
+}
+
+/**
+ * 跨主题融合采用透明花卉前景与几何骨架合成。
+ * 花枝直接进入几何底纹，不再使用方形贴图或硬边框分区。
+ */
+async function composeGeometricFloralFusion(options: {
+  geometricImage: string
+  floralImage: string
+  geometricRatio: number
+  arrangement: GenerationParams['arrangement']
+  targetColorHex: string
+}): Promise<string> {
+  if (typeof document === 'undefined') throw new Error('当前环境不支持纹样合成')
+  const [geometric, floral] = await Promise.all([
+    loadFusionImage(options.geometricImage),
+    loadFusionImage(options.floralImage),
+  ])
+  const canvas = document.createElement('canvas')
+  canvas.width = 512
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('无法创建融合画布')
+  const geometricSource = createRecoloredSource(geometric, canvas.width, options.targetColorHex)
+  const floralForeground = createFloralForeground(floral, canvas.width, options.targetColorHex)
+  const targetColor = parseHexColor(options.targetColorHex) ?? { r: 195, g: 66, b: 63 }
+  const backgroundTone = mixRgb(targetColor, { r: 245, g: 240, b: 230 }, 0.86)
+  const focusTone = mixRgb(targetColor, { r: 245, g: 240, b: 230 }, 0.78)
+
+  ctx.fillStyle = `rgb(${backgroundTone.r}, ${backgroundTone.g}, ${backgroundTone.b})`
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.save()
+  ctx.globalAlpha = 0.62 + options.geometricRatio * 0.0024
+  ctx.drawImage(geometricSource, 0, 0, canvas.width, canvas.height)
+  ctx.restore()
+
+  if (options.arrangement === 'seamless') {
+    // 透明花枝按错位节奏进入几何网格，背景保持完全连续。
+    ctx.save()
+    ctx.globalAlpha = 0.64 + (100 - options.geometricRatio) * 0.0032
+    const tileSize = 300 - Math.round(options.geometricRatio * 0.72)
+    const overlap = Math.round((tileSize * 2 - canvas.width) / 2)
+    for (let row = 0; row < 2; row += 1) {
+      for (let col = 0; col < 2; col += 1) {
+        const offset = row % 2 === 0 ? 0 : Math.round(tileSize * 0.18)
+        ctx.drawImage(
+          floralForeground,
+          col * tileSize - overlap + offset,
+          row * tileSize - overlap,
+          tileSize,
+          tileSize,
+        )
+      }
+    }
+    ctx.restore()
+  } else {
+    // 中心仅做无边界的柔和疏密过渡，避免花枝与高密几何线条互相抢夺。
+    const washStrength = 0.48 + (100 - options.geometricRatio) * 0.0032
+    const wash = ctx.createRadialGradient(256, 256, 38, 256, 256, 250)
+    wash.addColorStop(0, `rgba(${focusTone.r}, ${focusTone.g}, ${focusTone.b}, ${washStrength})`)
+    wash.addColorStop(0.58, `rgba(${focusTone.r}, ${focusTone.g}, ${focusTone.b}, ${washStrength * 0.68})`)
+    wash.addColorStop(1, `rgba(${focusTone.r}, ${focusTone.g}, ${focusTone.b}, 0)`)
+    ctx.fillStyle = wash
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    // 花卉比例越高，透明花枝主体越大、越显著；没有矩形背景和边界。
+    const floralScale = 0.9 + (100 - options.geometricRatio) * 0.0018
+    const floralSize = Math.round(canvas.width * floralScale)
+    const floralOffset = Math.round((canvas.width - floralSize) / 2)
+    ctx.save()
+    ctx.globalAlpha = 0.88 + (100 - options.geometricRatio) * 0.0018
+    ctx.shadowColor = `rgba(${focusTone.r}, ${focusTone.g}, ${focusTone.b}, 0.72)`
+    ctx.shadowBlur = 9
+    ctx.drawImage(floralForeground, floralOffset, floralOffset, floralSize, floralSize)
+    ctx.restore()
+
+    // 极轻地回铺几何线性肌理，让花枝像从底纹中生长出来，而非浮在表面。
+    ctx.save()
+    ctx.globalCompositeOperation = 'multiply'
+    ctx.globalAlpha = 0.015 + options.geometricRatio * 0.00025
+    ctx.drawImage(geometricSource, 0, 0, canvas.width, canvas.height)
+    ctx.restore()
+  }
+
+  return canvas.toDataURL('image/png')
+}
+
+function buildGeometricFloralSource(
+  options: FusionGenerationOptions,
+  subcategory: string,
+  role: 'geometric' | 'floral',
+): { prompt: string; negativePrompt: string } {
+  const sourceParams: GenerationParams = {
+    ...options.params,
+    dimension: {
+      ...options.params.dimension,
+      mainTheme: role,
+      theme: [role],
+      subcategory,
+    },
+    complexity: role === 'floral'
+      ? Math.min(options.params.complexity, 58)
+      : Math.min(Math.max(options.params.complexity, 55), 68),
+    textureDetail: role === 'floral'
+      ? Math.min(options.params.textureDetail, 24)
+      : Math.min(options.params.textureDetail, 32),
+    // 花卉只生成一个清晰主体；几何源统一生成连续骨架，供边框或网格合成使用。
+    arrangement: role === 'floral' ? 'single' : 'seamless',
+    symmetry: role === 'floral' ? options.params.symmetry : 'mirror',
+  }
+  const source = buildPromptParts(sourceParams)
+
+  if (role === 'floral') {
+    // 花卉 LoRA 权重过高时会强烈回到训练集的满铺样式；压到 0.66 保留花种特征但释放单主体构图。
+    const restrainedFloralPrompt = source.prompt.replace(
+      /<lora:([^:>]+):[\d.]+>/g,
+      '<lora:$1:0.66>',
+    )
+    return {
+      prompt: [
+        restrainedFloralPrompt,
+        'one large complete recognizable flower motif occupying the center',
+        'one branch and one focal blossom group only',
+        'flat decorative textile pattern',
+        'clean silhouette and clear petal structure',
+        'plain uncluttered background',
+      ].join(', '),
+      negativePrompt: [
+        source.negativePrompt,
+        ...FLORAL_ANTI_REALISM,
+        'flower field',
+        'multiple bouquets',
+        'tiny repeated flowers',
+        'rows of flowers',
+        'grid of medallions',
+        'many small emblems',
+        'all-over floral pattern',
+        'cropped flower',
+        'abstract melted petals',
+      ].join(', '),
+    }
+  }
+
+  return {
+    prompt: [
+      source.prompt,
+      'clear continuous geometric framework',
+      'even line weight',
+      'flat two-dimensional textile ornament',
+      'clean connected structure',
+    ].join(', '),
+    negativePrompt: [
+      source.negativePrompt,
+      'flower',
+      'floral motif',
+      'photograph',
+      'architecture',
+      'window',
+      'furniture',
+      'broken disconnected lines',
+    ].join(', '),
+  }
+}
+
+async function generateGeometricFloralComposite(
+  options: FusionGenerationOptions,
+): Promise<{ imageUrl: string; generationId: string; seed: number; elapsedMs?: number }> {
+  const aIsGeometric = FUSION_GEOMETRIC_IDS.has(options.subcategoryA)
+  const geometricId = aIsGeometric ? options.subcategoryA : options.subcategoryB
+  const floralId = aIsGeometric ? options.subcategoryB : options.subcategoryA
+  const geometricRatio = aIsGeometric ? options.ratioA : options.ratioB
+  const geometricSource = buildGeometricFloralSource(options, geometricId, 'geometric')
+  const floralSource = buildGeometricFloralSource(options, floralId, 'floral')
+  const startedAt = Date.now()
+
+  console.log('[patternGeneration] 跨主题双源生成:', geometricId, '+', floralId, '| geometric ratio:', geometricRatio)
+  const [geometricResult, floralResult] = await Promise.all([
+    callSdProxy({
+      prompt: geometricSource.prompt,
+      negative_prompt: geometricSource.negativePrompt,
+      width: SD_DEFAULTS.width,
+      height: SD_DEFAULTS.height,
+      steps: SD_DEFAULTS.steps,
+      cfg_scale: SD_DEFAULTS.cfgScale,
+      sampler_name: SD_DEFAULTS.samplerName,
+      seed: SD_DEFAULTS.seed,
+    }),
+    callSdProxy({
+      prompt: floralSource.prompt,
+      negative_prompt: floralSource.negativePrompt,
+      width: SD_DEFAULTS.width,
+      height: SD_DEFAULTS.height,
+      steps: SD_DEFAULTS.steps,
+      cfg_scale: SD_DEFAULTS.cfgScale,
+      sampler_name: SD_DEFAULTS.samplerName,
+      seed: SD_DEFAULTS.seed,
+    }),
+  ])
+
+  const imageUrl = await composeGeometricFloralFusion({
+    geometricImage: geometricResult.imageUrl,
+    floralImage: floralResult.imageUrl,
+    geometricRatio,
+    arrangement: options.params.arrangement,
+    targetColorHex: resolveFusionTargetHex(options.params.colorScheme),
+  })
+
+  return {
+    imageUrl,
+    generationId: `fusion-composite-${Date.now()}`,
+    seed: floralResult.seed,
+    elapsedMs: Date.now() - startedAt,
+  }
+}
+
 /**
  * 融合生成入口（真实链路与单纹样一致：sd_proxy → A1111 txt2img）
- * - 所有融合（含回纹×花卉）一律单次 txt2img 双 LoRA（mode=dual_lora_fusion）。
- *   回纹×花卉（方案 C）仅通过 buildFusionPromptParts 内的 prompt 构图语义软引导
- *   「回纹作外框 + 花卉居中」，不保证稳定开光；无两段合成 / 无 PIL 贴图 / 无素材框。
+ * - 花卉×几何优先双源生成后结构化合成，确保两种来源都可辨；
+ * - 同类组合使用单次 txt2img 双 LoRA；双源链路失败时也回退双 LoRA。
  * - 失败降级 mock 保证页面不白屏；控制台打印完整 prompt，便于验收核对 lora 权重。
  */
 export async function generateFusionWithFallback(options: FusionGenerationOptions): Promise<PatternGenerationResult> {
   const info = buildFusionPromptParts(options)
 
-  // 回纹×花卉（方案 C）：与其它融合同为单次 txt2img 双 LoRA（mode=dual_lora_fusion）。
-  // 仅用于日志提示，无任何分次/贴图逻辑。
-  const isHuiwenFloralPair =
-    (options.subcategoryA === 'huiwen' && isFloralSubcategory(options.subcategoryB)) ||
-    (options.subcategoryB === 'huiwen' && isFloralSubcategory(options.subcategoryA))
+  const fusionFamily = getFusionFamily(options.subcategoryA, options.subcategoryB)
 
-  console.log('[patternGeneration] ===== 融合生成请求 mode=dual_lora_fusion =====')
+  console.log(
+    `[patternGeneration] ===== 融合生成请求 mode=${
+      fusionFamily === 'geometric-floral' ? 'composite_sources' : 'dual_lora_fusion'
+    } =====`,
+  )
   console.log(
     '[patternGeneration] 子类A:',
     options.subcategoryA,
@@ -1600,7 +2095,7 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
     `(${info.subLabelEnB ?? 'n/a'})`,
     '| 比例:',
     `${options.ratioA}/${options.ratioB}`,
-    isHuiwenFloralPair ? '| 回纹×花卉 方案C：单次双 LoRA（构图软引导，两段合成已下线）' : '',
+    fusionFamily === 'geometric-floral' ? '| 花卉×几何：双源结构化合成' : '| 同类组合：双 LoRA 融合',
   )
   console.log(
     '[patternGeneration] loraA:',
@@ -1611,10 +2106,10 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
   console.log('[patternGeneration] prompt:', info.prompt)
   console.log('[patternGeneration] negative prompt:', info.negativePrompt)
   console.log(
-    '[patternGeneration] params: steps=', SD_DEFAULTS.steps,
-    'cfg=', SD_DEFAULTS.cfgScale,
-    'sampler=', SD_DEFAULTS.samplerName,
-    'size=', `${SD_DEFAULTS.width}x${SD_DEFAULTS.height}`,
+    '[patternGeneration] params: steps=', FUSION_SD_DEFAULTS.steps,
+    'cfg=', FUSION_SD_DEFAULTS.cfgScale,
+    'sampler=', FUSION_SD_DEFAULTS.samplerName,
+    'size=', `${FUSION_SD_DEFAULTS.width}x${FUSION_SD_DEFAULTS.height}`,
   )
 
   // 锦地条纹压制校验（2026-09-02）：含锦地的融合（如 菊花+锦地 seamless）正向须带六角结构锚点、
@@ -1641,15 +2136,40 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
   }
 
   try {
+    if (fusionFamily === 'geometric-floral') {
+      try {
+        const composite = await generateGeometricFloralComposite(options)
+        console.log(
+          '[patternGeneration] ===== 跨主题双源合成成功 =====',
+          '| elapsed:', composite.elapsedMs ? `${composite.elapsedMs}ms` : 'n/a',
+          '| fallback: false',
+        )
+        return {
+          imageUrl: composite.imageUrl,
+          generationId: composite.generationId,
+          prompt: info.prompt,
+          negativePrompt: info.negativePrompt,
+          fallback: false,
+          seed: composite.seed,
+          elapsedMs: composite.elapsedMs,
+        }
+      } catch (compositeError: any) {
+        console.warn(
+          '[patternGeneration] 双源合成失败，回退单次双 LoRA:',
+          compositeError?.message || String(compositeError),
+        )
+      }
+    }
+
     const result = await callSdProxy({
       prompt: info.prompt,
       negative_prompt: info.negativePrompt,
-      width: SD_DEFAULTS.width,
-      height: SD_DEFAULTS.height,
-      steps: SD_DEFAULTS.steps,
-      cfg_scale: SD_DEFAULTS.cfgScale,
-      sampler_name: SD_DEFAULTS.samplerName,
-      seed: SD_DEFAULTS.seed,
+      width: FUSION_SD_DEFAULTS.width,
+      height: FUSION_SD_DEFAULTS.height,
+      steps: FUSION_SD_DEFAULTS.steps,
+      cfg_scale: FUSION_SD_DEFAULTS.cfgScale,
+      sampler_name: FUSION_SD_DEFAULTS.samplerName,
+      seed: FUSION_SD_DEFAULTS.seed,
     })
 
     console.log(

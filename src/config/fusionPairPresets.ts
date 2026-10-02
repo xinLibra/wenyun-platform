@@ -59,7 +59,7 @@ export const FUSION_PAIR_PRESETS: Record<string, FusionPairPreset> = {
   // 牡丹 + 方胜：富贵方正
   'peony__fangsheng': { arrangement: 'single', symmetry: 'mirror', complexity: 70, culturalIntensity: 80, textureDetail: 30, pantoneCode: '16-1450 TCX', lightness: 50, fusionRatio: 50 },
   // 梅花 + 回纹：疏影与回环
-  'plum__huiwen': { arrangement: 'single', symmetry: 'none', complexity: 60, culturalIntensity: 75, textureDetail: 28, pantoneCode: '14-3904 TCX', lightness: 50, fusionRatio: 50 },
+  'plum__huiwen': { arrangement: 'single', symmetry: 'mirror', complexity: 55, culturalIntensity: 85, textureDetail: 25, pantoneCode: '18-1662 TCX', lightness: 48, fusionRatio: 50 },
   // 莲花 + 回纹：清莲与几何
   'lotus__huiwen': { arrangement: 'single', symmetry: 'mirror', complexity: 60, culturalIntensity: 75, textureDetail: 28, pantoneCode: '19-4052 TCX', lightness: 45, fusionRatio: 50 },
   // 菊花 + 锦地：金秋满铺
@@ -91,6 +91,8 @@ export function getFusionPairPreset(a: string, b: string): FusionPairPreset {
   const pa = GENERATION_PRESETS[a] ?? DEFAULT_PRESET
   const pb = GENERATION_PRESETS[b] ?? DEFAULT_PRESET
   const bothGeometric = GEOMETRIC_SUBCATEGORY_IDS.has(a) && GEOMETRIC_SUBCATEGORY_IDS.has(b)
+  const mixedGeometricFloral = GEOMETRIC_SUBCATEGORY_IDS.has(a) !== GEOMETRIC_SUBCATEGORY_IDS.has(b)
+  const hasJindi = a === 'jindi' || b === 'jindi'
 
   // fallback 颜色：优先使用双纹样推荐色的第一项（避免硬编码单一色）
   const dualRecs = getDualPantoneRecommendations([a, b])
@@ -98,16 +100,22 @@ export function getFusionPairPreset(a: string, b: string): FusionPairPreset {
 
   const preset: FusionPairPreset = {
     arrangement:
-      pa.arrangement === 'seamless' || pb.arrangement === 'seamless'
+      hasJindi
         ? 'seamless'
-        : 'single',
+        : mixedGeometricFloral
+          ? 'single'
+          : pa.arrangement === 'seamless' || pb.arrangement === 'seamless'
+            ? 'seamless'
+            : 'single',
     // 双几何/对称类 → 镜像对称；其余按子类默认（任一子类镜像则取镜像，更稳）
     symmetry:
       bothGeometric || pa.symmetry === 'mirror' || pb.symmetry === 'mirror'
         ? 'mirror'
         : 'none',
-    complexity: clamp(round((pa.complexity + pb.complexity) / 2) + 5, 55, 75),
-    culturalIntensity: clamp(round((pa.culturalIntensity + pb.culturalIntensity) / 2), 55, 75),
+    complexity: mixedGeometricFloral
+      ? clamp(round((pa.complexity + pb.complexity) / 2), 52, 65)
+      : clamp(round((pa.complexity + pb.complexity) / 2) + 5, 55, 72),
+    culturalIntensity: clamp(round((pa.culturalIntensity + pb.culturalIntensity) / 2) + 5, 65, 85),
     textureDetail: round((pa.textureDetail + pb.textureDetail) / 2),
     // 使用双纹样推荐色第一项，无推荐时才回退安全色
     pantoneCode: defaultColor,

@@ -440,7 +440,7 @@ export function ColorPicker({ value, onChange, subcategoryId, subcategoryIds }: 
               <div className="mt-2 p-2 bg-ming-yellow/15 border border-ming-yellow/40 rounded-sm">
                 <div className="flex items-center gap-2 text-xs font-song text-deep-blue-light mb-1.5">
                   <span className="text-ming-yellow">✦</span>
-                  <span>{subIds.length > 1 ? '双纹样推荐色（交集优先）' : '当前子类推荐色'}</span>
+                  <span>{subIds.length > 1 ? '两个纹样共同适用色' : '当前子类推荐色'}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {uniqueRecs.map((defaultPantone) => {
