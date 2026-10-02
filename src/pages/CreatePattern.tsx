@@ -1797,6 +1797,7 @@ export default function CreatePattern() {
                 options={ARRANGEMENT_OPTIONS}
                 value={fusionParams.arrangement}
                 onChange={(v) => setFusionParams((p) => ({ ...p, arrangement: v as GenerationParams['arrangement'] }))}
+                className="[&>button]:min-w-0 [&>button]:whitespace-nowrap [&>button]:px-1 [&>button]:text-sm"
               />
             </div>
             <div>
@@ -1805,6 +1806,7 @@ export default function CreatePattern() {
                 options={SYMMETRY_OPTIONS}
                 value={fusionParams.symmetry}
                 onChange={(v) => setFusionParams((p) => ({ ...p, symmetry: v as GenerationParams['symmetry'] }))}
+                className="[&>button]:min-w-0 [&>button]:whitespace-nowrap [&>button]:px-1 [&>button]:text-sm"
               />
             </div>
           </div>

@@ -90,6 +90,15 @@ export default defineConfig({
     },
   },
   server: {
+    watch: {
+      ignored: [
+        '**/competition-evidence/**',
+        '**/_video-work/**',
+        '**/*.mp4',
+        '**/*.mov',
+        '**/*.avi',
+      ],
+    },
     // 把前端 /sd-api/* 转发到本地 sd_proxy.py（默认 http://127.0.0.1:8787）
     // 这样浏览器调 /sd-api/generate 不会触发 CORS，dev 下与 npm run dev 同进程同源
     proxy: {
