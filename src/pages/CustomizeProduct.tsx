@@ -850,7 +850,9 @@ export default function CustomizeProduct() {
               favRows.push(...(data || []))
             }
             favRows.forEach((fav: any) => {
-              if (!patterns.find(p => p.id === fav.id)) {
+              // 同一作品可以同时属于“我的作品”和“我的收藏”。
+              // 这里只对收藏记录自身去重，不能按作品 id 跨标签去重，否则收藏自己的作品会从收藏标签中消失。
+              if (!patterns.some((p) => p.id === fav.id && p.type === 'favorite')) {
                 patterns.push({
                   id: fav.id,
                   image_url: '',
@@ -927,7 +929,9 @@ export default function CustomizeProduct() {
         // 同步更新缓存，避免短时间重新打开弹窗重复补拉
         if (patternsCacheRef.current?.data) {
           next.forEach((p) => {
-            const cached = patternsCacheRef.current!.data.find((c) => c.id === p.id)
+            const cached = patternsCacheRef.current!.data.find(
+              (c) => c.id === p.id && c.type === p.type,
+            )
             if (cached && p.image_url) cached.image_url = p.image_url
           })
         }
@@ -942,7 +946,7 @@ export default function CustomizeProduct() {
 
     const run = async () => {
       try {
-        const ids = userPatterns.map((p) => p.id)
+        const ids = Array.from(new Set(userPatterns.map((p) => p.id)))
         const shortMap = await fetchHttpImageUrls(ids)
         applyImageUrls(shortMap)
 
@@ -2415,7 +2419,7 @@ export default function CustomizeProduct() {
                               const failed = !!patternImageLoadErrors[pattern.id]
                               return (
                                 <motion.div
-                                  key={pattern.id}
+                                  key={`${pattern.type}:${pattern.id}`}
                                   initial={{ opacity: 0, y: 20 }}
                                   animate={{ opacity: 1, y: 0 }}
                                   transition={{ delay: Math.min(index, 8) * 0.05 }}
