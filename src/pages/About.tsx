@@ -1,5 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion'
-import { useState } from 'react'
+import { motion } from 'framer-motion'
 import { BranchDivider, MeanderDivider, CloudDivider, LotusDivider } from '../components/decorations/IceCrackDivider'
 import { FrameDecorations } from '../components/decorations/CornerDecorations'
 import { Logo } from '../components/ui/Logo'
@@ -8,7 +7,6 @@ const teamMembers = [
   {
     name: '吴歆扬',
     identity: '队长',
-    major: '江南大学人工智能专业',
     role: '系统开发与平台负责人',
     avatarColor: 'bg-palace-red',
     avatarText: '吴',
@@ -17,7 +15,6 @@ const teamMembers = [
   {
     name: '陈颖湘',
     identity: '队员',
-    major: '江南大学人工智能专业',
     role: 'AI模型与数据负责人',
     avatarColor: 'bg-deep-blue',
     avatarText: '陈',
@@ -26,32 +23,10 @@ const teamMembers = [
   {
     name: '郜姗姗',
     identity: '队员',
-    major: '江南大学人工智能专业',
     role: '产品验证负责人',
     avatarColor: 'bg-ming-yellow',
     avatarText: '郜',
     description: '负责产品模板体系建设、生成效果评价体系设计（纹样保真度、产品适配度、色彩协调性等维度），组织用户测试并形成商业可行性分析与推广方案。'
-  },
-]
-
-const advisors = [
-  {
-    name: '张欣',
-    title: '博士/副教授',
-    department: '江南大学人工智能与计算机学院',
-    avatarColor: 'bg-qing-green',
-    avatarText: '张',
-    research: '人工智能、计算智能及其应用',
-    fullBio: '2020年6月获华南理工大学计算机科学与技术专业博士学位，同年7月加入江南大学，现任江南大学人工智能与计算机学院副教授。\n\n已在TEVC、TCYB等国内外权威期刊及会议发表论文20余篇。主持国家自然科学基金青年项目、江苏省双创博士人才计划项目。现为IEEE会员、中国人工智能学会（CAAI）会员、中国自动化学会（CAA）会员、中国计算机学会（CCF）会员，CCF TCCC协同计算专委会执行委员，担任多个国际权威期刊和会议的常用审稿人。'
-  },
-  {
-    name: '牛犁',
-    title: '教授/博士/博士生导师',
-    department: '江南大学设计学院·社会科学处副处长',
-    avatarColor: 'bg-cang-blue',
-    avatarText: '牛',
-    research: '服饰文化、服装设计',
-    fullBio: '国家级青年人才，江南大学至善青年学者，教育部中华优秀传统文化传承基地（江南大学）主任，江苏省非物质文化遗产研究基地主任，中国艺术人类学学会刺绣专业委员会副主任委员兼秘书长，江苏省文化产业学会艺术创意产业专业委员会副主任。\n\n主持国家艺术基金项目、国家社科基金艺术学青年项目、教育部哲学社科重大项目（子课题）、江苏省社科基金项目等各级项目多项。曾获教育部高等学校科学研究优秀成果奖（人文社会科学）二等奖、江苏省哲学社会科学优秀成果二等奖（2项）、"纺织之光"中国纺织工业联合会纺织高等教育教学成果奖一、二等奖等。发表学术论文90余篇，其中30余篇被SCI、CSSCI、EI、CSCD、北大中文核心等数据库收录，被人大复印资料全文转载。'
   },
 ]
 
@@ -65,16 +40,6 @@ const techStack = [
 ]
 
 export default function About() {
-  const [expandedAdvisors, setExpandedAdvisors] = useState<Set<string>>(new Set())
-
-  const toggleAdvisor = (name: string) => {
-    setExpandedAdvisors(prev => {
-      const newSet = new Set(prev)
-      newSet.has(name) ? newSet.delete(name) : newSet.add(name)
-      return newSet
-    })
-  }
-
   return (
     <div className="min-h-screen py-8 px-4">
       <div className="max-w-6xl mx-auto">
@@ -216,7 +181,6 @@ export default function About() {
                     <span className="px-2 py-0.5 bg-palace-red/10 text-palace-red font-song text-xs rounded-sm">{member.identity}</span>
                     <span className="px-2 py-0.5 bg-deep-blue/10 text-deep-blue font-song text-xs rounded-sm">{member.role}</span>
                   </div>
-                  <p className="font-song text-xs text-deep-blue-light mb-3">{member.major}</p>
                   <p className="font-song text-sm text-deep-blue-light">{member.description}</p>
                 </Card>
               </motion.div>
@@ -224,91 +188,6 @@ export default function About() {
           </div>
         </motion.section>
 
-        <motion.section
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="mb-16"
-        >
-          <div className="text-center mb-10">
-            <h2 className="font-shufa text-2xl md:text-3xl text-deep-blue mb-4">指导老师</h2>
-            <CloudDivider />
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {advisors.map((advisor, index) => (
-              <motion.div
-                key={advisor.name}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.5 + index * 0.1 }}
-              >
-                <FrameDecorations className="bg-palace-red/5 p-6">
-                  <div className="flex items-start gap-4">
-                    <div className={`w-16 h-16 rounded-full ${advisor.avatarColor} flex items-center justify-center shadow-md flex-shrink-0`}>
-                      <span className="font-shufa text-2xl text-rice-paper">{advisor.avatarText}</span>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-shufa text-xl text-deep-blue">{advisor.name}</h3>
-                        <span className="px-2 py-0.5 bg-deep-blue/10 text-deep-blue font-song text-xs rounded-sm">{advisor.title}</span>
-                      </div>
-                      <p className="font-song text-sm text-deep-blue-light mt-1">{advisor.department}</p>
-                      <p className="font-song text-sm text-palace-red mt-2">{advisor.research}</p>
-                      
-                      <button
-                        onClick={() => toggleAdvisor(advisor.name)}
-                        className="mt-3 flex items-center text-deep-blue-light hover:text-palace-red transition-colors text-sm font-song"
-                      >
-                        {expandedAdvisors.has(advisor.name) ? '收起简介' : '查看完整简介'}
-                        <svg className={`w-4 h-4 ml-1 transition-transform duration-300 ${expandedAdvisors.has(advisor.name) ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                      
-                      <AnimatePresence>
-                        {expandedAdvisors.has(advisor.name) && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.3 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="mt-3 pt-3 border-t border-deep-blue-100">
-                              <p className="font-song text-sm text-deep-blue-light leading-relaxed">
-                                {advisor.fullBio}
-                              </p>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                </FrameDecorations>
-              </motion.div>
-            ))}
-          </div>
-          
-          <p className="font-song text-deep-blue-light text-center mt-6">
-            感谢两位老师的跨学科指导，为本项目提供了AI技术与设计美学的专业支持。
-          </p>
-        </motion.section>
-
-        <motion.section
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="mt-16 text-center"
-        >
-          <div className="inline-block">
-            <div className="bg-rice-paper-light px-8 py-6 rounded-sm border border-deep-blue-100">
-              <p className="font-shufa text-lg text-deep-blue mb-2">联系方式</p>
-              <p className="font-song text-deep-blue-light">邮箱：3684553782@qq.com</p>
-              <p className="font-song text-deep-blue-light">地址：江苏省无锡市滨湖区江南大学蠡湖校区</p>
-            </div>
-          </div>
-        </motion.section>
       </div>
     </div>
   )

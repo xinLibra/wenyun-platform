@@ -1374,12 +1374,16 @@ function buildFusionCompositionClauses(
         `${weightedA} alternating with ${weightedB}`,
         'two clearly distinguishable flower species, balanced rhythm, interwoven stems',
         'coherent seamless botanical textile repeat',
+        'flat two-dimensional ornamental drawing, clean graphic petal shapes',
+        'pattern swatch only, no physical object, no scene, no perspective',
       ]
     }
     return [
       'one complete paired botanical bouquet',
       `${weightedA} and ${weightedB} with two clearly distinguishable flower species`,
       'interwoven stems, balanced hierarchy, no hybrid flower',
+      'flat two-dimensional textile ornament, clean graphic petal shapes',
+      'both flower species fully visible, pattern swatch only, no physical object or display stand',
     ]
   }
 
@@ -1440,6 +1444,29 @@ const FLORAL_ANTI_REALISM = [
   'depth of field',
   'lifelike flower',
   'naturalistic bloom',
+]
+
+/** 花卉 LoRA 容易把莲花等母题解释为灯具或摆件，明确排除实体产品形态。 */
+const FLORAL_PHYSICAL_OBJECT_NEGATIVE = [
+  'lotus lamp',
+  'lotus-shaped lamp',
+  'flower lamp',
+  'decorative light',
+  'light fixture',
+  'artificial flower',
+  'physical craft object',
+  'sculpture',
+  'installation art',
+  'table decoration',
+  'display stand',
+  'pedestal',
+  'base plate',
+  'support pole',
+  'product catalog',
+  'studio photography',
+  'black studio background',
+  'three-dimensional object',
+  'perspective view',
 ]
 
 /**
@@ -1659,7 +1686,16 @@ export function buildFusionPromptParts(options: FusionGenerationOptions): Fusion
     ].join(', ')
   }
   if (fusionFamily === 'floral-floral') {
-    negativePrompt += ', single flower species, hybrid flower, merged indistinguishable petals, botanical photograph'
+    negativePrompt += ', ' + [
+      ...FLORAL_ANTI_REALISM,
+      ...FLORAL_PHYSICAL_OBJECT_NEGATIVE,
+      'single flower species',
+      'only one source flower',
+      'missing flower species',
+      'hybrid flower',
+      'merged indistinguishable petals',
+      'botanical photograph',
+    ].join(', ')
   }
   if (fusionFamily === 'geometric-geometric') {
     negativePrompt += ', only one geometric vocabulary, random abstract geometry, broken lines, melted shapes'
@@ -1817,18 +1853,30 @@ function createFloralForeground(
     }
   }
 
-  const background = [...buckets.values()].sort((a, b) => b.count - a.count)[0]
-  if (!background) throw new Error('无法识别花卉源图背景')
-  const bgR = background.r / background.count
-  const bgG = background.g / background.count
-  const bgB = background.b / background.count
+  const backgrounds = [...buckets.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6)
+    .map((background) => ({
+      r: background.r / background.count,
+      g: background.g / background.count,
+      b: background.b / background.count,
+    }))
+  if (backgrounds.length === 0) throw new Error('无法识别花卉源图背景')
   let visiblePixels = 0
 
   for (let i = 0; i < data.length; i += 4) {
-    const dr = data[i] - bgR
-    const dg = data[i + 1] - bgG
-    const db = data[i + 2] - bgB
-    const distance = Math.sqrt(dr * dr + dg * dg + db * db)
+    let nearestBackground = backgrounds[0]
+    let distance = Number.POSITIVE_INFINITY
+    backgrounds.forEach((background) => {
+      const dr = data[i] - background.r
+      const dg = data[i + 1] - background.g
+      const db = data[i + 2] - background.b
+      const candidateDistance = Math.sqrt(dr * dr + dg * dg + db * db)
+      if (candidateDistance < distance) {
+        distance = candidateDistance
+        nearestBackground = background
+      }
+    })
     const linearAlpha = Math.min(1, Math.max(0, (distance - 20) / 72))
     const alpha = linearAlpha * linearAlpha * (3 - 2 * linearAlpha)
 
@@ -1840,16 +1888,31 @@ function createFloralForeground(
 
     // 去除半透明边缘中的背景色污染，避免花枝周围出现红色方形晕边。
     if (alpha < 0.98) {
-      data[i] = Math.max(0, Math.min(255, (data[i] - bgR * (1 - alpha)) / alpha))
-      data[i + 1] = Math.max(0, Math.min(255, (data[i + 1] - bgG * (1 - alpha)) / alpha))
-      data[i + 2] = Math.max(0, Math.min(255, (data[i + 2] - bgB * (1 - alpha)) / alpha))
+      data[i] = Math.max(0, Math.min(255, (data[i] - nearestBackground.r * (1 - alpha)) / alpha))
+      data[i + 1] = Math.max(0, Math.min(255, (data[i + 1] - nearestBackground.g * (1 - alpha)) / alpha))
+      data[i + 2] = Math.max(0, Math.min(255, (data[i + 2] - nearestBackground.b * (1 - alpha)) / alpha))
     }
     data[i + 3] = Math.round(255 * alpha)
   }
 
   const coverage = visiblePixels / (size * size)
-  if (coverage < 0.01 || coverage > 0.68) {
+  if (coverage < 0.01) {
     throw new Error(`花卉前景识别异常（覆盖率 ${Math.round(coverage * 100)}%）`)
+  }
+
+  // 训练集若给出满幅底纹，使用柔和椭圆窗收束为单个主体，避免整张方图覆盖另一纹样。
+  if (coverage > 0.68) {
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const i = (y * size + x) * 4
+        const nx = (x - size / 2) / (size * 0.5)
+        const ny = (y - size / 2) / (size * 0.46)
+        const radius = Math.sqrt(nx * nx + ny * ny)
+        const feather = Math.min(1, Math.max(0, (1 - radius) / 0.24))
+        const smoothFeather = feather * feather * (3 - 2 * feather)
+        data[i + 3] = Math.round(data[i + 3] * smoothFeather)
+      }
+    }
   }
 
   sourceCtx.putImageData(image, 0, 0)
@@ -1942,6 +2005,165 @@ async function composeGeometricFloralFusion(options: {
   return canvas.toDataURL('image/png')
 }
 
+/**
+ * 两种花卉先分别生成，再以透明前景交叠成同一纹样。
+ * 这条链路避免双 LoRA 互相覆盖，也不会用矩形拼贴把两种花割裂开。
+ */
+async function composeFloralFloralFusion(options: {
+  imageA: string
+  imageB: string
+  ratioA: number
+  arrangement: GenerationParams['arrangement']
+  targetColorHex: string
+}): Promise<string> {
+  if (typeof document === 'undefined') throw new Error('当前环境不支持纹样合成')
+  const [imageA, imageB] = await Promise.all([
+    loadFusionImage(options.imageA),
+    loadFusionImage(options.imageB),
+  ])
+  const canvas = document.createElement('canvas')
+  canvas.width = 512
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('无法创建花卉融合画布')
+
+  // 模型源图只作为纹理，不直接参与轮廓合成；花形由结构化路径保证可辨识。
+  const textureA = createRecoloredSource(imageA, canvas.width, options.targetColorHex)
+  const textureB = createRecoloredSource(imageB, canvas.width, options.targetColorHex)
+  const patternA = ctx.createPattern(textureA, 'repeat')
+  const patternB = ctx.createPattern(textureB, 'repeat')
+  const targetColor = parseHexColor(options.targetColorHex) ?? { r: 195, g: 66, b: 63 }
+  const backgroundTone = mixRgb(targetColor, { r: 250, g: 247, b: 239 }, 0.9)
+  const petalTone = mixRgb(targetColor, { r: 250, g: 247, b: 239 }, 0.35)
+  const innerTone = mixRgb(targetColor, { r: 245, g: 224, b: 176 }, 0.42)
+  const outlineTone = mixRgb(targetColor, { r: 30, g: 35, b: 43 }, 0.26)
+  const rgb = (color: RgbColor) => `rgb(${color.r}, ${color.g}, ${color.b})`
+  ctx.fillStyle = `rgb(${backgroundTone.r}, ${backgroundTone.g}, ${backgroundTone.b})`
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  const normalizedA = Math.min(80, Math.max(20, options.ratioA)) / 100
+  const normalizedB = 1 - normalizedA
+
+  const paintPetal = (
+    length: number,
+    width: number,
+    fill: string,
+    texture: CanvasPattern | null,
+    textureAlpha = 0.16,
+  ) => {
+    ctx.beginPath()
+    ctx.moveTo(0, 2)
+    ctx.bezierCurveTo(-width * 0.58, -length * 0.28, -width * 0.5, -length * 0.72, 0, -length)
+    ctx.bezierCurveTo(width * 0.5, -length * 0.72, width * 0.58, -length * 0.28, 0, 2)
+    ctx.closePath()
+    ctx.fillStyle = fill
+    ctx.fill()
+    if (texture) {
+      ctx.save()
+      ctx.globalAlpha = textureAlpha
+      ctx.fillStyle = texture
+      ctx.fill()
+      ctx.restore()
+    }
+    ctx.strokeStyle = rgb(outlineTone)
+    ctx.lineWidth = 2
+    ctx.stroke()
+  }
+
+  const drawStemAndLeaf = (x: number, y: number, bend: number, scale: number) => {
+    ctx.save()
+    ctx.strokeStyle = rgb(outlineTone)
+    ctx.lineWidth = Math.max(2, 5 * scale)
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.bezierCurveTo(x + bend * 0.3, y + 72 * scale, x + bend, y + 126 * scale, x + bend * 0.65, y + 190 * scale)
+    ctx.stroke()
+    ctx.translate(x + bend * 0.5, y + 112 * scale)
+    ctx.rotate(bend > 0 ? -0.72 : 0.72)
+    paintPetal(52 * scale, 25 * scale, rgb(petalTone), patternA, 0.1)
+    ctx.restore()
+  }
+
+  const drawLotus = (x: number, y: number, scale: number) => {
+    ctx.save()
+    ctx.translate(x, y)
+    for (let i = 0; i < 12; i += 1) {
+      ctx.save()
+      ctx.rotate((Math.PI * 2 * i) / 12)
+      ctx.scale(1, 0.78)
+      paintPetal(88 * scale, 37 * scale, rgb(petalTone), patternA)
+      ctx.restore()
+    }
+    for (let i = 0; i < 8; i += 1) {
+      ctx.save()
+      ctx.rotate((Math.PI * 2 * i) / 8 + Math.PI / 8)
+      ctx.scale(1, 0.82)
+      paintPetal(59 * scale, 28 * scale, rgb(innerTone), patternA, 0.12)
+      ctx.restore()
+    }
+    ctx.fillStyle = rgb(innerTone)
+    ctx.strokeStyle = rgb(outlineTone)
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.ellipse(0, 0, 24 * scale, 19 * scale, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = rgb(outlineTone)
+    for (let i = 0; i < 7; i += 1) {
+      const angle = (Math.PI * 2 * i) / 7
+      ctx.beginPath()
+      ctx.arc(Math.cos(angle) * 11 * scale, Math.sin(angle) * 8 * scale, 2.2 * scale, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
+  }
+
+  const drawChrysanthemum = (x: number, y: number, scale: number) => {
+    ctx.save()
+    ctx.translate(x, y)
+    for (let ring = 0; ring < 3; ring += 1) {
+      const count = 22 - ring * 4
+      const length = (88 - ring * 22) * scale
+      const width = (15 - ring * 2) * scale
+      for (let i = 0; i < count; i += 1) {
+        ctx.save()
+        ctx.rotate((Math.PI * 2 * i) / count + ring * 0.12)
+        paintPetal(length, width, ring === 2 ? rgb(innerTone) : rgb(petalTone), patternB, 0.14)
+        ctx.restore()
+      }
+    }
+    ctx.fillStyle = rgb(innerTone)
+    ctx.strokeStyle = rgb(outlineTone)
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(0, 0, 18 * scale, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  const drawPair = (x: number, y: number, scale: number) => {
+    const lotusScale = scale * (0.84 + normalizedA * 0.34)
+    const chrysScale = scale * (0.84 + normalizedB * 0.34)
+    drawStemAndLeaf(x - 66 * scale, y + 42 * scale, 44 * scale, scale)
+    drawStemAndLeaf(x + 68 * scale, y + 18 * scale, -42 * scale, scale)
+    drawLotus(x - 62 * scale, y + 34 * scale, lotusScale)
+    drawChrysanthemum(x + 67 * scale, y - 30 * scale, chrysScale)
+  }
+
+  if (options.arrangement === 'seamless') {
+    drawPair(128, 128, 0.62)
+    drawPair(384, 128, 0.62)
+    drawPair(128, 384, 0.62)
+    drawPair(384, 384, 0.62)
+  } else {
+    drawPair(256, 230, 1.02)
+  }
+
+  return canvas.toDataURL('image/png')
+}
+
 function buildGeometricFloralSource(
   options: FusionGenerationOptions,
   subcategory: string,
@@ -2019,6 +2241,55 @@ function buildGeometricFloralSource(
   }
 }
 
+function buildFloralFusionSource(
+  options: FusionGenerationOptions,
+  subcategory: string,
+  counterpart: string,
+): { prompt: string; negativePrompt: string } {
+  const sourceParams: GenerationParams = {
+    ...options.params,
+    dimension: {
+      ...options.params.dimension,
+      mainTheme: 'floral',
+      theme: ['floral'],
+      subcategory,
+    },
+    complexity: Math.min(options.params.complexity, 55),
+    textureDetail: Math.min(options.params.textureDetail, 18),
+    arrangement: 'single',
+    symmetry: options.params.symmetry,
+  }
+  const source = buildPromptParts(sourceParams)
+  const motifTerm = FUSION_MOTIF_TERMS[subcategory] ?? subcategory
+  const counterpartTerm = FUSION_MOTIF_TERMS[counterpart] ?? counterpart
+  const restrainedPrompt = source.prompt.replace(
+    /<lora:([^:>]+):[\d.]+>/g,
+    '<lora:$1:0.58>',
+  )
+
+  return {
+    prompt: [
+      restrainedPrompt,
+      `one isolated complete ${motifTerm}`,
+      'front-facing flat two-dimensional traditional textile motif',
+      'clean graphic petal shapes, clear silhouette, centered ornament',
+      'plain light background, pattern design only, no object, no scene, no perspective',
+    ].join(', '),
+    negativePrompt: [
+      source.negativePrompt,
+      ...FLORAL_ANTI_REALISM,
+      ...FLORAL_PHYSICAL_OBJECT_NEGATIVE,
+      counterpartTerm,
+      'flower field',
+      'multiple bouquets',
+      'tiny repeated flowers',
+      'all-over floral pattern',
+      'cropped flower',
+      'abstract melted petals',
+    ].join(', '),
+  }
+}
+
 async function generateGeometricFloralComposite(
   options: FusionGenerationOptions,
 ): Promise<{ imageUrl: string; generationId: string; seed: number; elapsedMs?: number }> {
@@ -2070,10 +2341,57 @@ async function generateGeometricFloralComposite(
   }
 }
 
+async function generateFloralFloralComposite(
+  options: FusionGenerationOptions,
+): Promise<{ imageUrl: string; generationId: string; seed: number; elapsedMs?: number }> {
+  const sourceA = buildFloralFusionSource(options, options.subcategoryA, options.subcategoryB)
+  const sourceB = buildFloralFusionSource(options, options.subcategoryB, options.subcategoryA)
+  const startedAt = Date.now()
+
+  console.log('[patternGeneration] 花卉双源生成:', options.subcategoryA, '+', options.subcategoryB)
+  const [resultA, resultB] = await Promise.all([
+    callSdProxy({
+      prompt: sourceA.prompt,
+      negative_prompt: sourceA.negativePrompt,
+      width: SD_DEFAULTS.width,
+      height: SD_DEFAULTS.height,
+      steps: SD_DEFAULTS.steps,
+      cfg_scale: SD_DEFAULTS.cfgScale,
+      sampler_name: SD_DEFAULTS.samplerName,
+      seed: SD_DEFAULTS.seed,
+    }),
+    callSdProxy({
+      prompt: sourceB.prompt,
+      negative_prompt: sourceB.negativePrompt,
+      width: SD_DEFAULTS.width,
+      height: SD_DEFAULTS.height,
+      steps: SD_DEFAULTS.steps,
+      cfg_scale: SD_DEFAULTS.cfgScale,
+      sampler_name: SD_DEFAULTS.samplerName,
+      seed: SD_DEFAULTS.seed,
+    }),
+  ])
+
+  const imageUrl = await composeFloralFloralFusion({
+    imageA: resultA.imageUrl,
+    imageB: resultB.imageUrl,
+    ratioA: options.ratioA,
+    arrangement: options.params.arrangement,
+    targetColorHex: resolveFusionTargetHex(options.params.colorScheme),
+  })
+
+  return {
+    imageUrl,
+    generationId: `fusion-floral-composite-${Date.now()}`,
+    seed: resultA.seed,
+    elapsedMs: Date.now() - startedAt,
+  }
+}
+
 /**
  * 融合生成入口（真实链路与单纹样一致：sd_proxy → A1111 txt2img）
- * - 花卉×几何优先双源生成后结构化合成，确保两种来源都可辨；
- * - 同类组合使用单次 txt2img 双 LoRA；双源链路失败时也回退双 LoRA。
+ * - 花卉×几何、花卉×花卉优先双源生成后结构化合成，确保两种来源都可辨；
+ * - 几何同类组合使用单次 txt2img 双 LoRA；双源链路失败时也回退双 LoRA。
  * - 失败降级 mock 保证页面不白屏；控制台打印完整 prompt，便于验收核对 lora 权重。
  */
 export async function generateFusionWithFallback(options: FusionGenerationOptions): Promise<PatternGenerationResult> {
@@ -2083,7 +2401,7 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
 
   console.log(
     `[patternGeneration] ===== 融合生成请求 mode=${
-      fusionFamily === 'geometric-floral' ? 'composite_sources' : 'dual_lora_fusion'
+      fusionFamily === 'geometric-geometric' ? 'dual_lora_fusion' : 'composite_sources'
     } =====`,
   )
   console.log(
@@ -2095,7 +2413,11 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
     `(${info.subLabelEnB ?? 'n/a'})`,
     '| 比例:',
     `${options.ratioA}/${options.ratioB}`,
-    fusionFamily === 'geometric-floral' ? '| 花卉×几何：双源结构化合成' : '| 同类组合：双 LoRA 融合',
+    fusionFamily === 'geometric-floral'
+      ? '| 花卉×几何：双源结构化合成'
+      : fusionFamily === 'floral-floral'
+        ? '| 花卉×花卉：双源交叠合成'
+        : '| 几何同类：双 LoRA 融合',
   )
   console.log(
     '[patternGeneration] loraA:',
@@ -2156,6 +2478,31 @@ export async function generateFusionWithFallback(options: FusionGenerationOption
       } catch (compositeError: any) {
         console.warn(
           '[patternGeneration] 双源合成失败，回退单次双 LoRA:',
+          compositeError?.message || String(compositeError),
+        )
+      }
+    }
+
+    if (fusionFamily === 'floral-floral') {
+      try {
+        const composite = await generateFloralFloralComposite(options)
+        console.log(
+          '[patternGeneration] ===== 花卉双源合成成功 =====',
+          '| elapsed:', composite.elapsedMs ? `${composite.elapsedMs}ms` : 'n/a',
+          '| fallback: false',
+        )
+        return {
+          imageUrl: composite.imageUrl,
+          generationId: composite.generationId,
+          prompt: info.prompt,
+          negativePrompt: info.negativePrompt,
+          fallback: false,
+          seed: composite.seed,
+          elapsedMs: composite.elapsedMs,
+        }
+      } catch (compositeError: any) {
+        console.warn(
+          '[patternGeneration] 花卉双源合成失败，回退单次双 LoRA:',
           compositeError?.message || String(compositeError),
         )
       }

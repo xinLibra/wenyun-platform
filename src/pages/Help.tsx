@@ -13,7 +13,7 @@ const faqs = [
   },
   {
     question: '生成的纹样是否可以商用？',
-    answer: '本平台生成的纹样目前主要用于学习、展示与非商业用途。如需商用，请联系客服获取授权说明。我们尊重知识产权，鼓励原创设计。',
+    answer: '本平台生成的纹样目前主要用于学习、展示与非商业用途。涉及商业使用时，请先确认相关授权要求。我们尊重知识产权，鼓励原创设计。',
   },
   {
     question: '如何保存和分享我的作品？',
@@ -112,17 +112,6 @@ export default function Help() {
           </div>
         </motion.section>
 
-        <motion.section
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="mt-12 text-center"
-        >
-          <div className="inline-block bg-palace-red/5 px-8 py-6 rounded-sm border border-palace-red/20">
-            <p className="font-shufa text-lg text-deep-blue mb-2">还有其他问题？</p>
-            <p className="font-song text-deep-blue-light">请联系我们的客服团队：3684553782@qq.com</p>
-          </div>
-        </motion.section>
       </div>
     </div>
   )

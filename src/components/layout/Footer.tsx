@@ -22,12 +22,6 @@ export default function Footer() {
             <p className="font-song text-rice-paper/70 mb-4 max-w-md">
               传承千年非遗文化，用AI技术赋能创意设计。让传统纹样在现代生活中焕发新生，创造独一无二的文创产品。
             </p>
-            <div className="flex items-center space-x-2 text-rice-paper/70">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <span className="font-song text-sm">3684553782@qq.com</span>
-            </div>
           </div>
 
           <div>
@@ -45,7 +39,7 @@ export default function Footer() {
             <ul className="space-y-2 font-song text-rice-paper/70">
               <li><Link to="/platform" className="hover:text-ming-yellow transition-colors">平台介绍</Link></li>
               <li><Link to="/culture" className="hover:text-ming-yellow transition-colors">非遗文化</Link></li>
-              <li><Link to="/about" className="hover:text-ming-yellow transition-colors">联系我们</Link></li>
+              <li><Link to="/about" className="hover:text-ming-yellow transition-colors">关于我们</Link></li>
               <li><Link to="/help" className="hover:text-ming-yellow transition-colors">帮助中心</Link></li>
             </ul>
           </div>
